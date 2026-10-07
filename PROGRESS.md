@@ -7,7 +7,7 @@
 ## 已完成
 
 - 已核对课程要求，完成 [MVP Design](docs/PaperTrace_MVP_Design.md) 精简版草案。
-- Group 52 Proposal 已完成组员信息、项目目标与动机和挑战部分；TeX 编译通过，PDF 与源码内容一致。
+- Group 52 Proposal 已完成组员信息、项目目标与动机和挑战部分。
 
 ## 进行中
 
