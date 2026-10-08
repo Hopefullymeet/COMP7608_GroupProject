@@ -81,6 +81,30 @@ The proposed approach comprises the following components:
 \end{enumerate}
 
 \section{Experimental dataset description and evaluation plan}
+We will build the test library from public scientific papers that cite one another. Each paper will
+include its full text, section headings, citation contexts, and basic information about the papers
+it cites and is cited by. We will favour papers on related topics where both the citing and cited
+papers are available, which gives PaperTrace enough material to follow a citation, read the original
+source, compare two methods, and point to the evidence it used. The data will also include existing
+annotations about why a paper is cited and whether a passage supports a claim. We will add a small
+set of manually checked examples. These examples will note the claim, the relevant passage, any
+important conditions, and whether the support is full, partial, conflicting, or missing.
+
+The evaluation will cover the main things a student may ask PaperTrace to do. It will look at
+whether the system can find useful papers from a research question, answer questions about a paper,
+compare methods and experimental settings, and show where its answer comes from. It will also test
+whether the system can suggest a paper and a passage for a sentence in a draft. Finally, it will
+check whether the system can catch a citation that does not really support the sentence, or that
+leaves out an important limitation. The development and test examples will be kept separate, and
+the human reference annotations will not be shown to the system.
+
+We will compare PaperTrace with a simple retrieval and generation baseline. We will separately evaluate versions without Wiki navigation and without independent citation checking. Every version will use
+the same model and paper library. We will measure how often the system finds relevant papers, gives
+correct answers with the right evidence, and suggests citations that genuinely support the claim.
+For citation checking, we will pay special attention to cases where weak or missing evidence is
+mistakenly judged as full support. We will also record time, tool calls, and token or API cost. A
+few practical test cases, such as missing full text, tool failures, and incomplete results, will
+show whether the system can recover or clearly tell the user what evidence is still missing.
 
 \clearpage
 \begin{thebibliography}{9}
