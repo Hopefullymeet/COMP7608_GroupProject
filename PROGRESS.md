@@ -7,13 +7,14 @@
 ## 已完成
 
 - 已核对课程要求，完成 [MVP Design](docs/PaperTrace_MVP_Design.md) 精简版草案。
-- Group 52 Proposal 已完成主体部分。
+- Group 52 Proposal 已完成主体部分及章节同步性审查。
 
 ## 进行中
 
+- Group 52 Proposal：章节同步性修改。
 - MVP 设计讨论与定稿：论文关系聚焦变化、证据与成立条件；搜索接口、模型（含 Jev 候选）及演示领域待确认。
 
 ## 下一步
 
-1. Group 52 Proposal：待评审各部分同步性与关系，待与MVP PRD对照评估。
-2. 按课程要求使用 NeurIPS 2026 模板，正文不超过 4 页、不含摘要，编译并核对 PDF。
+1. Group 52 Proposal：待处理其余评审建议，待与MVP PRD对照评估。
+2. 后续修改保持 NeurIPS 2026 模板、正文不超过 4 页且不含摘要，并同步编译核对 PDF。
