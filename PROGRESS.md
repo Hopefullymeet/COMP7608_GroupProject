@@ -7,7 +7,7 @@
 ## 已完成
 
 - 已核对课程要求，完成 [MVP Design](docs/PaperTrace_MVP_Design.md) 精简版草案。
-- Group 52 Proposal 已完成主体部分撰写、章节同步性及与 MVP PRD 的对照审查，无重大矛盾。已提交。
+- Group 52 Proposal 主体撰写与章节关系对照已完成并已提交。
 
 ## 进行中
 
