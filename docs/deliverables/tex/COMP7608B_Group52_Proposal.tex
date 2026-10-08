@@ -52,6 +52,16 @@ PaperTrace will make task dependent decisions about searching, retrieving eviden
 
 \section{Motivation and challenges}
 
+Writing a research paper involves finding relevant literature, comparing prior work, and checking whether each citation supports the associated claim. Researchers often switch between their draft and several papers to check the evidence and its context. A reference can discuss the right topic without supporting the sentence that cites it. PaperTrace aims to reduce this work by helping users find papers, discuss their selected literature, add citations, and check existing citations against the original papers. Users choose the papers and write their own text, while the agent helps them connect their claims to supporting passages.
+
+For PaperTrace to provide reliable research assistance, its answers and citations must accurately reflect the source papers. The main challenges are:
+\begin{enumerate}
+    \item Finding relevant evidence. A research idea may be broad, so matching keywords is not enough to find papers that address its main questions. When extracting and searching PDF text, the system must keep source locations and surrounding context. Missing conditions or extraction errors can lead to incorrect answers.
+    \item Comparing papers fairly. One paper citing another does not mean it builds on its method or improves its results. Comparisons require checking citation context, methods, datasets, metrics, and experimental settings. Results from different settings may not be directly comparable. Claiming that a particular change caused an improvement also requires experiments that test that change.
+    \item Checking whether citations support claims. A related passage may support a claim fully, support only part of it, or contradict it. The agent must also recognize when there is not enough evidence to decide. For example, an improvement on one benchmark does not show that a method works well in all settings. If the full text is unavailable or the passage does not clearly support the claim, the citation should remain unverified.
+    \item Deciding when to search or read more. Retrieving the wrong passage can lead to incorrect answers and citation checks. The agent must decide when to revise a search, read more context, or report that it lacks enough evidence. Additional searches and model calls also increase time and cost. Unpublished drafts and workspace files should only be accessed with the user's permission.
+\end{enumerate}
+
 \section{Potential solutions}
 
 \section{Experimental dataset description and evaluation plan}
