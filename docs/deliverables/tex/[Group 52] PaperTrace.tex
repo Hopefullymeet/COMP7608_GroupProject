@@ -1,0 +1,147 @@
+\documentclass{article}
+
+\usepackage[nonanonymous]{neurips_2026}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\setcitestyle{numbers,square,comma}
+
+\makeatletter
+\renewcommand{\@noticestring}{COMP7608B Group 52 Project Proposal}
+\makeatother
+
+\title{PaperTrace}
+\author{Group 52}
+
+\begin{document}
+
+\maketitle
+\nolinenumbers
+
+\section{Group members}
+\label{sec:group-members}
+
+\begin{center}
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}lll}
+\textbf{Name} & \textbf{Student ID} & \textbf{Email Address} \\
+Gong Xiangwei & \texttt{3036791411} & \texttt{u3679141@connect.hku.hk} \\
+Hou Jiachen & \texttt{3036808044} & \texttt{u3680804@connect.hku.hk} \\
+Ning Ziyang & \texttt{3036790431} & \texttt{u3679043@connect.hku.hk} \\
+Wang Yao & \texttt{3036806785} & \texttt{u3680678@connect.hku.hk} \\
+\end{tabular*}
+\end{center}
+
+\section{Project objective}
+
+Our objective is to develop \textbf{PaperTrace}, an agentic research assistant that helps users explore research questions and develop evidence grounded academic writing through dialogue and user's paper library. The agent will work on user's workspace content and a user selected paper library, while users retain control over literature selection, writing, and the acceptance of suggestions.
+
+The system will support four connected objectives:
+\begin{enumerate}
+    \item Search for relevant papers based on a research idea or draft, adjust search queries based on the research question, and help users build a selected paper library.
+    \item Support evidence based question answering, writing discussions, and paper comparisons using the user selected paper library.
+    \item Assist users in citing their writing by suggesting relevant references and supporting passages from the library.
+    \item After users have incorporated citations into their writing, check those citations against the cited papers for support, contradiction, missing qualifications, or overstatement, and suggest revisions when problems are identified.
+\end{enumerate}
+
+Users may initiate each workflow independently using their existing paper library and draft. PaperTrace will make task dependent decisions about searching, retrieving evidence, and inspecting additional context. Evidence based answers and citation judgments will include source locations or acknowledgements of insufficient evidence.
+
+\section{Motivation and challenges}
+
+Writing a research paper involves finding relevant literature, comparing prior work, and checking whether each citation supports the associated claim. Researchers often switch between their draft and several papers to check the evidence and its context. A reference can discuss the right topic without supporting the sentence that cites it. PaperTrace aims to reduce this work by helping users find papers, discuss their selected literature, add citations, and check existing citations against the original papers. Users choose the papers and write their own text, while the agent helps them connect their claims to supporting passages.
+
+For PaperTrace to provide reliable research assistance, its answers and citations must accurately reflect the source papers. The main challenges are:
+\begin{enumerate}
+    \item Finding relevant evidence. A research idea may be broad, so matching keywords is not enough to find papers that address its main questions. When extracting and searching PDF text, the system must keep source locations and surrounding context. Missing conditions or extraction errors can lead to incorrect answers.
+    \item Comparing papers fairly. One paper citing another does not mean it builds on its method or improves its results. Comparisons require checking citation context, methods, datasets, metrics, and experimental settings. Results from different settings may not be directly comparable. Claiming that a particular change caused an improvement also requires experiments that test that change.
+    \item Checking whether citations support claims. A related passage may support a claim fully, support only part of it, or contradict it. The agent must also recognize when there is not enough evidence to decide. For example, an improvement on one benchmark does not show that a method works well in all settings. If the full text is unavailable or the passage does not clearly support the claim, the citation should remain unverified.
+    \item Deciding when to search or read more. Retrieving the wrong passage can lead to incorrect answers and citation checks. The agent must decide when to revise a search, read more context, or report that it lacks enough evidence. Additional searches and model calls also increase time and cost. Unpublished drafts and workspace files should only be accessed with the user's permission.
+\end{enumerate}
+
+\section{Potential solutions}
+
+\noindent\textbf{System architecture and user workflow.} We propose PaperTrace, a research assistant driven by one tool calling language model agent within an execution framework (agent harness) coordinating tools and task state. A local paper library maintained jointly by users and the agent will store original documents, working notes, and generated knowledge; passage indexes and a lightweight Wiki will support evidence retrieval. Independently accessible workflows will cover discovery, paper discussion and comparison, annotation, and user initiated citation audits. Users will define questions, confirm papers after agent assisted search and screening, write manuscripts, and review suggestions. Outputs will include candidate lists, evidence linked answers and comparisons, an annotated manuscript copy, and an audit report.
+
+The proposed approach comprises the following components:
+\begin{enumerate}
+\item \textbf{Planning, execution, and memory.} The agent will follow a plan--act--observe loop inspired by ReAct \cite{react}. It will break the user's request into smaller tasks, choose a tool, and use the returned result to decide what to do next. Search gaps will trigger query revision; unclear experimental conditions will trigger further reading. It will finish when the task is complete or report remaining gaps when its budget is exhausted. The executor will check tool inputs and access permissions, limit calls and retries, and save progress with evidence links. Parsing, citation formatting, and saving will use deterministic procedures. Saved task state will allow users to resume after selecting papers or revising a manuscript; source versions will be checked before reusing evidence. Paper cards will retain reusable knowledge across tasks.
+
+\item \textbf{Discovery and evidence preparation.} A search adapter will expose one validated literature search service, with Consensus or a Scholar result provider as candidates. The agent will organize queries around the user's key subquestions, revise them when results leave gaps, and present deduplicated, screened candidates with relevance explanations and subquestion coverage. Screening will consider reported methods, experimental evidence, and limitations available in the retrieved material. Citation counts and rankings will be contextual signals, rather than sufficient measures of quality. Only user selected papers will enter the library. User provided, text readable PDFs will be converted into searchable passages with stable paper identifiers, source versions, and page and section mappings. Abstract only entries will remain discovery resources. Unreliable extraction of scanned pages, tables, or equations will be flagged for manual inspection rather than used to produce precise claims.
+
+\item \textbf{Evidence retrieval, relationships, and Wiki maintenance.} The Wiki will provide paper cards linking topics, methods, and findings to original passages. Keyword and embedding retrieval will locate passages, while Wiki cards and relationship links will provide additional entry points; the agent will read original text before answering. For user selected papers, an existing language model with task specific instructions will classify citation intent and compare methods \cite{scicite,cito}. Citation contexts will distinguish background references, methodological dependencies, and result comparisons, guiding further reading. The analysis will characterize methodological modifications and assess experimental comparability across tasks, datasets, splits, metrics, baselines, and settings. Performance differences will be reported within those conditions; attribution to individual modifications will require targeted evidence such as ablations. Each comparison will retain both papers' evidence, conditions, and unresolved questions, separating author statements from system inferences. Source changes will mark dependent records stale until rechecked. A reusable academic feedback instruction set (skill) will guide attribution, comparability, and uncertainty handling.
+
+\item \textbf{Citation annotation, verification, and correction.} Annotation will identify claims requiring literature support, retrieve evidence from selected papers, and produce a manuscript copy plus claim-to-paper-to-passage mappings. Claims lacking evidence will remain unresolved. A user initiated audit will decompose compound claims and restrict retrieval to the corresponding cited papers. Following retrieval critique and citation grounding research \cite{selfrag,alce}, a separate model call will assess claims against source context and conditions, returning supported, partially supported, conflicting, insufficient evidence, or unverifiable labels with passage references. Insufficient evidence denotes unresolved support in readable sources; unverifiable denotes unavailable or unreliable source text. Missing full text will preclude a supported verdict. Labels and identified gaps will guide additional reading and reassessment within budget. Jev \cite{jev} is an optional judgment provider, subject to access and task quality validation. Supported results will include evidence and conditions; problematic cases will receive qualified revision suggestions for user review. Judgment quality will be evaluated against human annotations.
+
+\item \textbf{Implementation boundaries and trade offs.} A local MVP application will connect these workflows using lightweight persistent state and indexes and one tool calling model without fine tuning. Tools will cover search, library inspection, passage retrieval, contextual reading, citation lookup, and result persistence. Recoverable service failures will trigger bounded retries; authentication or quota failures will stop remote requests. Exhausted budgets will yield partial results when useful artifacts exist, otherwise a failed outcome with explicit gaps and stopping reasons. Original PDFs and manuscripts will be preserved, and remote calls will disclose selected content being transmitted. A single agent limits orchestration complexity, but retrieval, parsing, and judgment errors remain possible. Evaluation will compare PaperTrace with a simple RAG baseline and separately evaluate versions without Wiki navigation and without independent citation checking, measuring task quality, latency, and cost. Audit judgments will also be evaluated against human annotations.
+\end{enumerate}
+
+\section{Experimental dataset description and evaluation plan}
+We will build the test library from public scientific papers that cite one another. Each paper will
+include its full text, section headings, citation contexts, and basic information about the papers
+it cites and is cited by. We will favor papers on related topics where both the citing and cited
+papers are available, which gives PaperTrace enough material to follow a citation, read the original
+source, compare two methods, and point to the evidence it used. The data will also include existing
+annotations about why a paper is cited and whether a passage supports a claim. We will add a small
+set of manually checked examples. These examples will note the claim, the relevant passage, any
+important conditions, and one of the same five labels used by the citation audit: supported,
+partially supported, conflicting, insufficient evidence, or unverifiable. Insufficient evidence
+denotes unresolved support in readable sources; unverifiable denotes unavailable or unreliable
+source text.
+
+The evaluation will cover the main things a student may ask PaperTrace to do. It will look at
+whether the system can find useful papers from a research question, answer questions about a paper,
+compare methods and experimental settings, and show where its answer comes from. It will also test
+whether the system can suggest a paper and a passage for a sentence in a draft. Finally, it will
+check whether the system can catch a citation that does not really support the sentence, or that
+leaves out an important limitation. The development and test examples will be kept separate, and
+the human reference annotations will not be shown to the system. We will also evaluate PDF parsing quality, including text extraction and the accuracy of page and section mappings.
+
+We will compare PaperTrace with a simple RAG baseline. We will separately evaluate versions without Wiki navigation and without independent citation checking. Every version will use
+the same primary model and paper library. We will measure how often the system finds relevant papers, gives
+correct answers with the right evidence, and suggests citations that genuinely support the claim.
+For citation checking, we will pay special attention to cases where weak or missing evidence is
+mistakenly judged as full support. We will also record time, tool calls, and token or API cost. A
+few practical test cases, such as missing full text, tool failures, and incomplete results, will
+show whether the system can recover or clearly tell the user what evidence is still missing.
+
+\clearpage
+\begin{thebibliography}{9}
+
+\bibitem{react}
+Shunyu Yao et al.
+\newblock ReAct: Synergizing Reasoning and Acting in Language Models.
+\newblock ICLR, 2023. \url{https://arxiv.org/abs/2210.03629}.
+
+\bibitem{scicite}
+Arman Cohan et al.
+\newblock Structural Scaffolds for Citation Intent Classification in Scientific Publications.
+\newblock NAACL, 2019. \url{https://arxiv.org/abs/1904.01608}.
+
+\bibitem{cito}
+Silvio Peroni and David Shotton.
+\newblock FaBiO and CiTO: Ontologies for Describing Bibliographic Resources and Citations.
+\newblock Journal of Web Semantics, 2012. \url{https://www.sparontologies.net/ontologies/cito}.
+
+\bibitem{selfrag}
+Akari Asai et al.
+\newblock Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection.
+\newblock ICLR, 2024. \url{https://arxiv.org/abs/2310.11511}.
+
+\bibitem{alce}
+Tianyu Gao et al.
+\newblock Enabling Large Language Models to Generate Text with Citations.
+\newblock EMNLP, 2023. \url{https://aclanthology.org/2023.emnlp-main.398/}.
+
+\bibitem{jev}
+TypeSafe AI.
+\newblock Jev: Introduction. Official documentation, accessed October 6, 2026.
+\newblock \url{https://docs.typesafe.ai/introduction}.
+
+\end{thebibliography}
+
+\end{document}
