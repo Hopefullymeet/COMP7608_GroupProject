@@ -1,0 +1,28 @@
+\begin{center}
+\begin{minipage}{\linewidth}
+\centering
+\resizebox{0.96\linewidth}{!}{%
+\begin{tikzpicture}[>=Latex,box/.style={draw=black!65,line width=.55pt,rounded corners=1.5pt,fill=white,align=center,text width=8.2cm,minimum height=.84cm,font=\small},side/.style={box,text width=2.2cm,minimum height=.95cm,font=\footnotesize},every path/.style={line width=.55pt},every edge/.style={draw}]
+\node[box] (u) at (0,0) {用户输入：研究目标、材料与授权范围};
+\node[box] (a) at (0,-1.3) {主 Agent：理解目标、规划与选择下一步};
+\node[box] (x) at (0,-2.6) {执行器：权限、预算、状态、操作唯一标识与操作记录};
+\node[box] (t) at (0,-3.9) {工具层：搜索、解析、匹配、检索、读取、保存};
+\node[box] (e) at (0,-5.2) {证据底座：来源版本、原文锚点、判断与依赖};
+\node[box] (v) at (0,-6.5) {独立核验调用：证据、条件、关系与未确认项};
+\node[box] (o) at (0,-7.8) {观察与状态更新：结果、覆盖、缺口、错误};
+\node[box] (r) at (0,-9.1) {任务产物：报告、Wiki、比较与稿件副本};
+\node[box] (h) at (0,-10.4) {用户审阅、采纳与导出};
+\node[side] (w) at (-6,-1.3) {等待用户\\选择或消歧};
+\node[side] (d) at (6,-10.6) {依赖更新与\\失效传播};
+\draw[->] (u)--(a);\draw[->] (a)--(x);\draw[->] (x)--(t);\draw[->] (t)--(e);\draw[->] (e)--(v);\draw[->] (v)--(o);
+\draw[->] (a.east)--(5.2,-1.3)--node[right,font=\footnotesize,align=left]{结果\\交付}(5.2,-9.1)--(r.east);\draw[->] (r)--(h);
+\draw[<->] (a.west)--(w.east);
+\draw[->] (o.west)--(-5.3,-7.8)--node[left,font=\footnotesize,align=left]{补查\\修正}(-5.3,-2.1)--(-4.3,-2.1)--(-4.3,-1.3)--(a.west);
+\draw[->] (t.west)--(-4.7,-3.9)--node[right,font=\footnotesize]{工具观察}(-4.7,-7.8)--(o.west);
+\draw[->] (e.east)--(6.9,-5.2)--(6.9,-9.8)--(d.north);
+\draw[->] (h.east)--(4.8,-10.4)--(4.8,-11.5)--(6,-11.5)--(d.south);
+\draw[->,dashed] (d.east)--(7.5,-10.6)--(7.5,-2.6)--(x.east);
+\end{tikzpicture}}
+\captionof{figure}{PaperTrace 拟议的 Agentic 工作流程与反馈机制。}
+\end{minipage}
+\end{center}

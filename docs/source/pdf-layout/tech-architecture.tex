@@ -1,0 +1,22 @@
+\begin{center}
+\begin{minipage}{\linewidth}
+\centering
+\resizebox{0.96\linewidth}{!}{%
+\begin{tikzpicture}[>=Latex,box/.style={draw=black!65,line width=.55pt,rounded corners=1.5pt,fill=white,align=center,text width=8.4cm,minimum height=.92cm,font=\small},side/.style={box,text width=3.0cm,minimum height=1.05cm,font=\footnotesize},every path/.style={line width=.55pt},every edge/.style={draw}]
+\node[box] (ui) at (0,0) {React / TypeScript 界面：主题入口、左聊右读、比较、笔记与审阅（PDF.js 显示原文）};
+\node[box] (host) at (0,-1.8) {Rust 薄宿主（Tauri 2）：窗口、文件对话框、权限、系统凭据、进程监督};
+\node[box] (core) at (0,-3.65) {Python 领域服务（唯一写入者）：任务循环、解析适配、检索、证据判断、导出};
+\node[box] (data) at (0,-5.5) {SQLite：app.db 与 checkpoints.db；内容寻址文件区保存原 PDF 与稿件快照};
+\node[box] (parse) at (0,-7.25) {解析适配器：GROBID（正文结构、参考文献、坐标）· Docling（复杂版面、表格、OCR）};
+\node[side] (agent) at (7.7,-2.45) {LLM 只在规划、理解与判断节点调用};
+\node[side] (ext) at (7.7,-4.85) {外部服务：\mbox{OpenAlex} / \mbox{Crossref} / \mbox{arXiv} / 模型接口};
+\draw[<->] (ui)--node[right,font=\footnotesize,align=left]{Tauri commands / events}(host);
+\draw[<->] (host)--node[right,font=\footnotesize,align=left]{stdio NDJSON JSON-RPC 2.0}(core);
+\draw[<->] (core)--(data);
+\draw[->] (core.west) .. controls (-6.3,-4.2) and (-6.3,-7.25) .. node[left,font=\footnotesize,pos=.55]{解析调用}(parse.west);
+\draw[<->] (core.north east)--(agent.west);
+\draw[<->] (core.south east)--(ext.west);
+\end{tikzpicture}}
+\captionof{figure}{拟议的进程分层、通信协议与数据归属。}
+\end{minipage}
+\end{center}

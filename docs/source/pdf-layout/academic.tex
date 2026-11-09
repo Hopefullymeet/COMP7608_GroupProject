@@ -1,0 +1,58 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[top=23mm,bottom=24mm,left=23mm,right=23mm,headheight=15pt,headsep=9mm]{geometry}
+\usepackage{fontspec}
+$if(chinese)$
+\setmainfont{Songti SC}[BoldFont={Songti SC Bold},ItalicFont={Songti SC Regular}]
+\setsansfont{Heiti SC}
+\XeTeXlinebreaklocale "zh"
+\XeTeXlinebreakskip=0pt plus 1pt
+$else$
+\setmainfont{Times New Roman}
+\setsansfont{Arial}
+$endif$
+\setmonofont{Arial Unicode MS}[Scale=0.82]
+\usepackage{amsmath,amssymb,graphicx,booktabs,longtable,array,xcolor,calc}
+\usepackage{fancyhdr}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc}
+\usepackage[unicode,hidelinks,bookmarksopen=true,bookmarksnumbered=false]{hyperref}
+\usepackage{caption}
+$if(chinese)$\renewcommand{\figurename}{图}$endif$
+\captionsetup{font=small,labelfont=bf,labelsep=period}
+\definecolor{rulegray}{gray}{0.72}
+\setcounter{secnumdepth}{-1}
+\setcounter{tocdepth}{1}
+$if(chinese)$\linespread{1.24}$else$\linespread{1.12}$endif$
+\widowpenalty=10000
+\clubpenalty=10000
+\raggedbottom
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt plus 1pt}
+\setlength{\emergencystretch}{3em}
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.18}
+\setlength{\LTpre}{8pt}
+\setlength{\LTpost}{10pt}
+\makeatletter
+\renewcommand\section{\@startsection{section}{1}{0pt}{2.2ex plus 1ex minus .2ex}{1ex plus .2ex}{\large\bfseries}}
+\renewcommand\subsection{\@startsection{subsection}{2}{0pt}{1.8ex plus .7ex minus .2ex}{.7ex plus .2ex}{\normalsize\bfseries}}
+\renewcommand\subsubsection{\@startsection{subsubsection}{3}{0pt}{1.5ex plus .6ex minus .2ex}{.6ex plus .2ex}{\normalsize\bfseries}}
+\makeatother
+\providecommand{\tightlist}{\setlength{\itemsep}{2pt}\setlength{\parskip}{0pt}}
+\providecommand{\pandocbounded}[1]{#1}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\footnotesize PaperTrace}
+\fancyhead[R]{\footnotesize $shorttitle$}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.35pt}
+\renewcommand{\footrulewidth}{0pt}
+\hypersetup{pdftitle={$title$},pdfauthor={PaperTrace / COMP7608B Group 52},pdfsubject={Academic reading edition}}
+\begin{document}
+\begin{center}
+{\LARGE\bfseries $title$\par}
+$if(subtitle)$\vspace{7pt}{\normalsize $subtitle$\par}$endif$
+\end{center}
+\vspace{7pt}
+$body$
+\end{document}
