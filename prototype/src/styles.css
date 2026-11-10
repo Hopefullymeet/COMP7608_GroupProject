@@ -135,30 +135,36 @@ code { font: 12px/1.45 var(--mono); }
 .dropped small { color: var(--warn); font-size: 12px; }
 
 /* ---------- home ---------- */
-.home { flex: 1; overflow-y: auto; }
-.home-inner { max-width: 760px; margin: 0 auto; padding: 72px 32px 64px; }
-.home-title { font: 600 40px/1.15 var(--serif); letter-spacing: -0.02em; margin: 10px 0 10px; }
-.home-sub { color: var(--ink-2); font-size: 15.5px; margin-bottom: 28px; max-width: 560px; }
-.composer.big { padding: 16px 14px 12px 20px; }
+.home { flex: 1; display: flex; overflow-y: auto; }
+.home-inner { width: 100%; max-width: 760px; margin: auto; padding: 64px 32px 128px; }
+.home-title { display: flex; align-items: center; justify-content: center; gap: 12px; text-align: center; font: 600 40px/1.15 var(--serif); letter-spacing: -0.02em; margin: 0 0 24px; }
+.home-title > svg { flex: none; }
+.composer.big { position: relative; padding: 14px 64px 14px 20px; transition: padding 360ms cubic-bezier(0.22, 1, 0.36, 1), border-color 0.15s, box-shadow 0.15s; }
+.composer.big.has-content { padding: 20px 16px 14px 20px; }
+.composer.big > .send { position: absolute; right: 16px; bottom: 14px; }
+.home-actions { display: grid; grid-template-rows: 0fr; opacity: 0; visibility: hidden; transition: grid-template-rows 360ms cubic-bezier(0.22, 1, 0.36, 1), opacity 240ms, visibility 240ms; }
+.home-actions-inner { overflow: hidden; min-height: 0; }
+.has-content .home-actions { grid-template-rows: 1fr; opacity: 1; visibility: visible; }
+/* Animate actual height so the centered heading and suggestion move with the field. */
+.home-input { position: relative; }
+.composer.big textarea { display: block; height: 34px; min-height: 0; padding: 2px; overflow-y: auto; transition: height 360ms cubic-bezier(0.22, 1, 0.36, 1); }
+.composer.big:not(.has-content) textarea { line-height: 30px; }
+.composer.big .composer-measure { position: absolute; top: 0; left: 0; height: 0; visibility: hidden; pointer-events: none; overflow: hidden; transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .composer.big, .composer.big textarea, .home-actions { transition: none; }
+}
+.composer.big .composer-bar { margin-top: 12px; padding-right: 50px; min-height: 34px; }
 .suggestion { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 12px; padding: 10px 14px; border-radius: 10px; color: var(--ink-2); text-align: left; font-size: 13.5px; }
 .suggestion:hover { background: var(--sunk); color: var(--ink); }
-.suggestion svg:first-child { color: var(--accent); flex: none; }
-.home-grid { display: grid; gap: 36px; margin-top: 44px; }
-.list-head { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
-.list-head h2 { font-size: 13px; font-weight: 600; }
-.list-head span { font-size: 12.5px; color: var(--ink-3); }
-.topic-row, .session-row { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 14px 8px; border-bottom: 1px solid var(--line); border-radius: 0; }
-.topic-row:hover, .session-row:hover { background: rgb(255 255 255 / 0.6); }
-.topic-row strong, .session-row strong { display: block; font-weight: 500; font-size: 15px; }
-.topic-row small, .session-row small { color: var(--ink-3); font-size: 12.5px; }
-.topic-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: var(--sunk); color: var(--ink-3); flex: none; }
-.topic-mark[data-live] { background: var(--accent-soft); color: var(--accent); }
-.topic-row .meta { text-align: right; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
-.topic-row .meta small { display: block; }
-.session-row { padding: 12px 8px; color: var(--ink-3); }
-.session-row strong { color: var(--ink); font-size: 14px; }
-
+.suggestion svg { flex: none; }
+.suggestion svg:first-child { color: var(--accent); }
+.suggestion small { display: block; font-size: 11px; color: var(--ink-3); margin-bottom: 3px; }
 /* ---------- topic ---------- */
+.topic-request { align-self: flex-start; max-width: 760px; margin: 64px auto; padding: 24px 32px; }
+.topic-request h2 { font: 600 28px/1.3 var(--serif); margin: 12px 0 20px; }
+.request-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 16px; }
+.topic-request .primary { margin-top: 20px; }
+
 .topic { display: flex; flex-direction: column; height: 100%; }
 .topic-head { display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--surface); flex: none; }
 .topic-title { min-width: 0; max-width: 340px; }

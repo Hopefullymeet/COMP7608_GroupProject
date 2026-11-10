@@ -9,7 +9,7 @@
 - 已核对课程要求，完成 [MVP Design](docs/PaperTrace_MVP_Design.md) 精简版草案。
 - Group 52 Proposal 主体撰写与章节关系对照已完成并已提交。
 - 项目书 v1.5、技术书与三屏设计交接包已入库（`docs/deliverables/PaperTrace_Handoff_20261109/`）。
-- 视觉原型（`visual-prototype` 分支）：六个界面的演示主线已完成；Topic → Session 树支持展开不跳转、悬停 `+` 新建、悬停/聚焦删除与长列表折叠；删除同步首页和最近会话，侧边栏加宽至约 300px。打开 Topic 复用已有会话，不默认创建 New session；新会话以数据规模与问题来源为独立演示，保留 Why QASPER 历史会话。构建通过并在浏览器中走查；范围与边界见 [prototype/AGENTS.md](prototype/AGENTS.md)。
+- 视觉原型（`visual-prototype` 分支）：六个界面的演示主线已完成；Topic → Session 树支持展开不跳转、悬停 `+` 新建、悬停/聚焦删除与长列表折叠；删除同步侧边栏与最近会话，侧边栏加宽至约 300px。首页采用居中 Logo 与极简标题、居中问题输入与示例入口，移除日期、说明文案、主区 Topics、Continue 及输入框 Topic 标签；示例入口恢复图标、内缩与悬停底色，New topic 回到空白首页并清空问题和附件，提交后才创建主题及首个会话，自定义请求与附件名保留至刷新。空输入框为单行、提示文字垂直居中，隐藏 Add papers，发送按钮置灰禁用；输入后平滑展开并显示工具栏，随换行逐行增高、删除后收缩，长内容内部滚动，标题与示例问题随居中布局同步移动，支持减少动态效果偏好；底栏按钮左右对齐。打开 Topic 复用已有会话，不默认创建 New session；新会话以数据规模与问题来源为独立演示，保留 Why QASPER 历史会话。构建通过并在浏览器中走查；范围与边界见 [prototype/AGENTS.md](prototype/AGENTS.md)。
 
 ## 进行中
 

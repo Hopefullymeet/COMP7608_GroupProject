@@ -12,7 +12,7 @@ export function App() {
     <div className="app">
       <Sidebar />
       <main className="main">
-        {r.view === 'home' ? <Home /> : <TopicView topicId={r.topicId} tab={r.tab} />}
+        {r.view === 'home' ? <Home key={state.homeRevision} /> : <TopicView topicId={r.topicId} tab={r.tab} />}
       </main>
       <TraceDrawer />
       <EvidencePopover />

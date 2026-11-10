@@ -30,6 +30,7 @@ export interface State {
   trace: { open: boolean; focus: string | null }
   readerPaperId: string
   dropped: string[]
+  homeRevision: number
 }
 
 const baseState: State = {
@@ -52,10 +53,13 @@ const baseState: State = {
   trace: { open: false, focus: null },
   readerPaperId: 'qasper',
   dropped: [],
+  homeRevision: 0,
 }
 
 type Action =
   | { type: 'navigate'; route: Route }
+  | { type: 'home-new' }
+  | { type: 'topic-create'; topic: Topic; session: Session; message: ChatMessage }
   | { type: 'event'; event: TaskEvent }
   | { type: 'discovery-start'; question: string }
   | { type: 'decide'; candidateId: string; decision: Decision }
@@ -140,7 +144,8 @@ function reducer(s: State, a: Action): State {
     case 'topic-delete': {
       const topics = s.topics.filter((t) => t.id !== a.id)
       const sessions = s.sessions.filter((x) => x.topicId !== a.id)
-      if (a.id === DEMO_TOPIC) return { ...baseState, topics, sessions,
+      if (a.id === DEMO_TOPIC) return { ...baseState, topics, sessions, homeRevision: s.homeRevision,
+        messages: s.messages.filter((m) => sessions.some((x) => x.id === m.sessionId)),
         activeSessionId: sessions.some((x) => x.id === s.activeSessionId) ? s.activeSessionId : null,
         route: s.route.view === 'topic' && s.route.topicId !== a.id ? s.route : { view: 'home' } }
       return { ...s, topics, sessions,
@@ -149,6 +154,14 @@ function reducer(s: State, a: Action): State {
         route: s.route.view === 'topic' && s.route.topicId === a.id ? { view: 'home' } : s.route,
         activeEvidence: null }
     }
+    case 'home-new':
+      return { ...s, route: { view: 'home' }, dropped: [], homeRevision: s.homeRevision + 1,
+        activeSessionId: null, activeEvidence: null, trace: { open: false, focus: null } }
+    case 'topic-create':
+      return { ...s, topics: [a.topic, ...s.topics], sessions: [...s.sessions, a.session],
+        messages: [...s.messages, a.message], activeSessionId: a.session.id, dropped: [],
+        route: { view: 'topic', topicId: a.topic.id, tab: 'read' },
+        activeEvidence: null, trace: { open: false, focus: null } }
     case 'navigate': {
       const next = { ...s, route: a.route, activeEvidence: null }
       if (a.route.view === 'topic' && a.route.tab === 'read') {
@@ -271,10 +284,25 @@ function useActions(dispatch: React.Dispatch<Action>, getState: () => State) {
     navigate: (route: Route) => dispatch({ type: 'navigate', route }),
     openTopic: (topicId: string, tab: Tab = 'discover') => dispatch({ type: 'navigate', route: { view: 'topic', topicId, tab } }),
 
+    newTopic: () => dispatch({ type: 'home-new' }),
     startFromHome(text: string) {
+      const s = getState()
+      const question = text.trim()
+      if (!question && !s.dropped.length) return
+      const title = question || s.dropped[0].replace(/\.[^.]+$/, '')
+      const shortTitle = title.length > 48 ? `${title.slice(0, 46)}…` : title
+      const topic: Topic = { id: id('topic'), title: shortTitle, goal: question || 'Read the attached papers',
+        paperCount: s.dropped.length, updated: 'Just now', scripted: false }
+      const session: Session = { id: id('ses'), topicId: topic.id, title: shortTitle,
+        updated: 'Just now', order: maxOrder(s) + 1, attachments: [...s.dropped] }
+      dispatch({ type: 'topic-create', topic, session,
+        message: { id: id('msg'), sessionId: session.id, role: 'user',
+          segments: [{ text: question || 'Read the attached papers' }], done: true } })
+    },
+    startDemo() {
       if (!getState().topics.some((t) => t.id === DEMO_TOPIC)) return
       dispatch({ type: 'navigate', route: { view: 'topic', topicId: DEMO_TOPIC, tab: 'discover' } })
-      if (getState().discovery.status === 'idle') runDiscovery(text.trim() || DEFAULT_QUESTION)
+      if (getState().discovery.status === 'idle') runDiscovery(DEFAULT_QUESTION)
     },
     runDiscovery,
     refineDiscovery() {

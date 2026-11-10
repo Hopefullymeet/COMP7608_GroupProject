@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { hasMessages, sessionsOf, useStore } from '../data/store'
 import { Icon } from './Icon'
+import { Logo } from './Logo'
 
 const LATER = [
   { icon: 'library', label: 'Library' },
@@ -48,12 +49,7 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <button className="brand" onClick={() => act.navigate({ view: 'home' })}>
-        <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
-          <rect x="3.5" y="2.5" width="15" height="20" rx="2.5" fill="var(--surface)" stroke="var(--ink)" strokeWidth="1.4" />
-          <path d="M7 8h8M7 11.5h6" stroke="var(--ink-3)" strokeWidth="1.4" strokeLinecap="round" />
-          <path d="M7 15.5h4.5" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" />
-          <circle cx="19.5" cy="18.5" r="3.2" fill="var(--accent)" />
-        </svg>
+        <Logo />
         <span>
           <strong>PaperTrace</strong>
           <small>Research workspace</small>
@@ -66,8 +62,8 @@ export function Sidebar() {
       </label>
 
       <nav className="side-nav" aria-label="Workspace">
-        <button className="side-item muted" disabled title="Coming later">
-          <Icon name="plus" size={15} /> <span className="grow">New topic</span> <span className="later">Later</span>
+        <button className="side-item" onClick={() => { setFilter(''); act.newTopic() }}>
+          <Icon name="plus" size={15} /> <span className="grow">New topic</span>
         </button>
         {LATER.map((l) => (
           <button key={l.label} className="side-item muted" disabled title="Coming later">

@@ -16,6 +16,8 @@ export function TopicView({ topicId, tab }: { topicId: string; tab: Tab }) {
   const topic = state.topics.find((t) => t.id === topicId)
   if (!topic) return null
   const running = anyRunning(state)
+  const session = state.sessions.find((s) => s.id === state.activeSessionId && s.topicId === topicId)
+  const request = state.messages.find((m) => m.sessionId === session?.id && m.role === 'user')
 
   return (
     <div className="topic">
@@ -51,7 +53,16 @@ export function TopicView({ topicId, tab }: { topicId: string; tab: Tab }) {
 
       <div className="topic-body">
         {!topic.scripted ? (
-          <div className="empty-state">
+          request ? <section className="topic-request" aria-label="Research request">
+            <p className="eyebrow">{session?.title}</p>
+            <h2>Research request</h2>
+            <p className="request-text">{request.segments[0]?.text}</p>
+            {!!session?.attachments?.length && <div className="dropped">
+              {session.attachments.map((name, i) => <span className="chip" key={i}><Icon name="file" size={13} />{name}</span>)}
+            </div>}
+            <p className="fine">Your topic and first session are saved in this workspace until refresh. Live research and file reading are coming later.</p>
+            {state.topics.some((t) => t.id === DEMO_TOPIC) && <button className="primary" onClick={() => act.enterTopic(DEMO_TOPIC)}>Explore the scripted demo</button>}
+          </section> : <div className="empty-state">
             <Icon name="lock" size={22} />
             <h2>This topic is sample data</h2>
             <p>The prototype only scripts <strong>Evidence in scientific QA</strong>. Other topics and their sessions only show how lists behave.</p>
