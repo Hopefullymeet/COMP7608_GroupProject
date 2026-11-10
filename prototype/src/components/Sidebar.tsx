@@ -1,13 +1,13 @@
 import { useState } from 'react'
-import { hasMessages, sessionsOf, useStore } from '../data/store'
+import { hasMessages, sessionsOf, useStore, type Page } from '../data/store'
 import { Icon } from './Icon'
 import { Logo } from './Logo'
 
-const LATER = [
-  { icon: 'library', label: 'Library' },
-  { icon: 'wiki', label: 'Evidence wiki' },
-  { icon: 'shield', label: 'Citation check' },
-  { icon: 'settings', label: 'Models & services' },
+const PAGES: { page: Page; icon: string; label: string }[] = [
+  { page: 'library', icon: 'library', label: 'Library' },
+  { page: 'wiki', icon: 'wiki', label: 'Evidence wiki' },
+  { page: 'check', icon: 'shield', label: 'Citation check' },
+  { page: 'settings', icon: 'settings', label: 'Models & services' },
 ]
 
 /** Lists longer than this collapse behind a "Show more" row. */
@@ -65,9 +65,11 @@ export function Sidebar() {
         <button className="side-item" onClick={() => { setFilter(''); act.newTopic() }}>
           <Icon name="plus" size={15} /> <span className="grow">New topic</span>
         </button>
-        {LATER.map((l) => (
-          <button key={l.label} className="side-item muted" disabled title="Coming later">
-            <Icon name={l.icon} size={15} /> <span className="grow">{l.label}</span> <span className="later">Later</span>
+        {PAGES.map((l) => (
+          <button key={l.page} className={`side-item ${route.view === l.page ? 'active' : ''}`} aria-current={route.view === l.page ? 'page' : undefined}
+            onClick={() => act.navigate({ view: l.page })}>
+            <Icon name={l.icon} size={15} /> <span className="grow">{l.label}</span>
+            {l.page === 'library' && state.dupReview === 'pending' && <span className="side-badge" title="1 import needs review">1</span>}
           </button>
         ))}
       </nav>

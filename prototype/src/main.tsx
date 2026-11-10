@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { StoreProvider } from './data/store'
 import { App } from './App'
 import './styles.css'
+import './pages.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

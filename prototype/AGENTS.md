@@ -47,8 +47,10 @@ PaperTrace 视觉原型：可点击的纯前端演示，同时作为后续实现
 ## 代码结构
 
 - `src/data/`：`types.ts` 领域对象；`fixtures.ts` 论文、摘录与证据锚点；`scripts.ts` 各任务的脚本化 Agent 事件；`runtime.ts` 以 JSON-RPC 通知形态回放事件；`store.tsx` 唯一状态入口。接真实服务时替换 `runtime.ts` 与 `scripts.ts`，界面不改。
-- `src/views/`：Home、TopicView（Discover / Read & ask / Compare 三个标签）。
-- `src/components/`：Sidebar、TraceDrawer（Agent trace）、EvidencePopover（证据卡）、Icon。
+- `src/views/`：Home、TopicView（Discover / Read & ask / Compare 三个标签）；Library、Wiki、Check、Settings 四个工作区页面。
+- `src/components/`：Sidebar、TraceDrawer（Agent trace）、EvidencePopover（证据卡）、PageHead（页面头与 Dialog）、SourceChip（可点开证据卡的来源）、Icon。
+- 工作区页面数据：`data/workspace.ts`（库元数据、稿件、Wiki 种子、模型与检索源）；`data/workspaceScripts.ts`（回查与 Wiki 草稿的脚本化事件）；样式在 `src/pages.css`。Sidebar 的 Library、Evidence wiki、Citation check、Models & services 已启用，路由为 `{ view: 'library' | 'wiki' | 'check' | 'settings' }`。
+- 修改 `data/` 下模块后 Vite 热更新可能出现 “useStore outside StoreProvider”，整页刷新即可，不是代码错误。
 - 侧边栏（参照 Codex / Claude Desktop）：New topic 启用：回到空白首页并清空问题与附件，提交有效问题或附件后才创建 Topic 与首个 Session；自定义主题保存请求和附件名，不执行真实研究。Coming later 入口在 Topics 之上；点击 Topic 只展开/折叠其 Session 列表，不跳转；悬停 Topic 右侧 `+` 新建 Session 并进入 Read & ask（已有空 Session 时复用）；Topics 超过 5 个、单个 Topic 的 Session 超过 4 个时折叠，保留 Show more。标签顺序固定为 Discover / Read & ask / Compare。
 - Topic 与 Session 支持悬停或键盘聚焦显示删除图标；删除 Topic 同时移除其 Session，所有入口同步更新，刷新恢复示例数据。只有 Evidence in scientific QA 提供研究任务回放；其余 Topic 与 Session 支持列表与删除操作。
 - 滚动只用 `components/util.ts` 的 `scrollWithin`，不要用 `scrollIntoView`（会带动 `overflow: hidden` 的外层整体移位）。

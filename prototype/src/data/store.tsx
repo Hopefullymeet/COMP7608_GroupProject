@@ -2,12 +2,25 @@ import { createContext, useContext, useMemo, useReducer, useRef, type ReactNode 
 import { runTask, type ScriptItem } from './runtime'
 import { compareScript, discoveryScript, questionScript, QUESTIONS, SEED_QUESTION, refineScript } from './scripts'
 import { DEFAULT_QUESTION, DEMO_TOPIC, EVIDENCE, PAPERS, SEED_SESSION, SESSIONS, TOPICS } from './fixtures'
+import { checkScript, recheckScript, wikiScript } from './workspaceScripts'
+import { DRAFT, LIBRARY_SEED, SAMPLE_MEMBERSHIP, WIKI_SEED } from './workspace'
 import type {
-  AgentRun, Candidate, ChatMessage, ComparisonRow, Coverage, Decision, SearchAngle, Session, TaskEvent, Topic,
+  AgentRun, Candidate, ChatMessage, ComparisonRow, Coverage, Decision, DraftSentence, Finding, SearchAngle, Session,
+  TaskEvent, Topic, TrashItem, WikiPage, WikiProposal,
 } from './types'
 
 export type Tab = 'discover' | 'read' | 'compare'
-export type Route = { view: 'home' } | { view: 'topic'; topicId: string; tab: Tab }
+export type Page = 'library' | 'wiki' | 'check' | 'settings'
+export type Route = { view: 'home' } | { view: 'topic'; topicId: string; tab: Tab } | { view: Page }
+
+export interface Settings {
+  model: string
+  tested: boolean
+  budget: { calls: number; tokens: number; minutes: number; cost: number }
+  askBeyond: boolean
+  sources: Record<string, boolean>
+  external: boolean
+}
 type TaskState = 'idle' | 'running' | 'done'
 
 export interface State {
@@ -31,6 +44,14 @@ export interface State {
   readerPaperId: string
   dropped: string[]
   homeRevision: number
+  library: string[]
+  trash: TrashItem[]
+  /** paperId:topicId pairs removed from sample topics. */
+  unlinked: string[]
+  dupReview: 'pending' | 'merged' | 'separate'
+  check: { status: TaskState; version: number; sentences: DraftSentence[]; findings: Record<string, Finding>; reviewed: string[]; recheck: Record<string, string> }
+  wiki: { status: TaskState; pages: WikiPage[]; proposal: WikiProposal | null; active: string; discarded: boolean }
+  settings: Settings
 }
 
 const baseState: State = {
@@ -54,6 +75,16 @@ const baseState: State = {
   readerPaperId: 'qasper',
   dropped: [],
   homeRevision: 0,
+  library: LIBRARY_SEED,
+  trash: [],
+  unlinked: [],
+  dupReview: 'pending',
+  check: { status: 'idle', version: 1, sentences: DRAFT, findings: {}, reviewed: [], recheck: {} },
+  wiki: { status: 'idle', pages: WIKI_SEED, proposal: null, active: WIKI_SEED[0].id, discarded: false },
+  settings: {
+    model: 'anthropic', tested: false, budget: { calls: 40, tokens: 200000, minutes: 10, cost: 2 }, askBeyond: true,
+    sources: { openalex: true, s2: true, arxiv: false }, external: false,
+  },
 }
 
 type Action =
@@ -75,6 +106,19 @@ type Action =
   | { type: 'session-open'; id: string }
   | { type: 'session-delete'; id: string }
   | { type: 'topic-delete'; id: string }
+  | { type: 'lib-delete'; paperId: string; clear: boolean }
+  | { type: 'lib-restore'; paperId: string }
+  | { type: 'lib-empty' }
+  | { type: 'lib-unlink'; paperId: string; topicId: string }
+  | { type: 'lib-dup'; choice: 'merged' | 'separate' }
+  | { type: 'check-start' }
+  | { type: 'check-edit'; sentenceId: string; text: string; cites: string[]; evidenceId: string }
+  | { type: 'check-review'; sentenceId: string }
+  | { type: 'wiki-start' }
+  | { type: 'wiki-accept' }
+  | { type: 'wiki-discard' }
+  | { type: 'wiki-open'; id: string }
+  | { type: 'settings'; patch: Partial<Settings> }
 
 const upsert = <T extends { id: string }>(list: T[], item: T) =>
   list.some((x) => x.id === item.id) ? list.map((x) => (x.id === item.id ? item : x)) : [...list, item]
@@ -110,11 +154,20 @@ function applyEvent(s: State, e: TaskEvent): State {
       }
     case 'row':
       return { ...s, comparison: { ...s.comparison, rows: upsert(s.comparison.rows, e.row) } }
+    case 'finding': {
+      const recheck = { ...s.check.recheck }
+      delete recheck[e.finding.sentenceId]
+      return { ...s, check: { ...s.check, recheck, findings: { ...s.check.findings, [e.finding.sentenceId]: e.finding } } }
+    }
+    case 'wiki-proposal':
+      return { ...s, wiki: { ...s.wiki, proposal: e.proposal } }
     case 'done': {
       const run = s.runs[e.runId]
       if (!run) return s
       const next: State = { ...s, runs: { ...s.runs, [run.id]: { ...run, status: e.status, summary: e.summary } } }
       if (run.task === 'Discovery') next.discovery = { ...s.discovery, status: 'done', coverage: e.coverage, summary: e.summary }
+      if (run.task === 'Citation check') next.check = { ...s.check, status: 'done' }
+      if (run.task === 'Wiki draft') next.wiki = { ...s.wiki, status: 'done' }
       if (run.task === 'Comparison') next.comparison = { ...s.comparison, status: 'done', verdict: e.verdict, summary: e.summary }
       if (run.task === 'Question') {
         next.qaRunning = false
@@ -145,6 +198,8 @@ function reducer(s: State, a: Action): State {
       const topics = s.topics.filter((t) => t.id !== a.id)
       const sessions = s.sessions.filter((x) => x.topicId !== a.id)
       if (a.id === DEMO_TOPIC) return { ...baseState, topics, sessions, homeRevision: s.homeRevision,
+        library: s.library, trash: s.trash.map((t) => ({ ...t, topics: t.topics.filter((x) => x !== a.id) })), unlinked: s.unlinked,
+        dupReview: s.dupReview, check: s.check, wiki: s.wiki, settings: s.settings,
         messages: s.messages.filter((m) => sessions.some((x) => x.id === m.sessionId)),
         activeSessionId: sessions.some((x) => x.id === s.activeSessionId) ? s.activeSessionId : null,
         route: s.route.view === 'topic' && s.route.topicId !== a.id ? s.route : { view: 'home' } }
@@ -190,6 +245,7 @@ function reducer(s: State, a: Action): State {
         ...s,
         candidates: s.candidates.map((x) => (x.id === c.id ? { ...x, decision: a.decision } : x)),
         topicPaperIds: a.decision === 'added' ? [...without, c.paperId] : without,
+        library: a.decision === 'added' && !s.library.includes(c.paperId) ? [...s.library, c.paperId] : s.library,
       }
     }
     case 'user-message': {
@@ -218,6 +274,66 @@ function reducer(s: State, a: Action): State {
       return { ...s, readerPaperId: a.paperId, activeEvidence: null }
     case 'drop':
       return { ...s, dropped: [...s.dropped, ...a.names] }
+    case 'lib-delete': {
+      const ev = new Set(Object.values(EVIDENCE).filter((e) => e.paperId === a.paperId).map((e) => e.id))
+      const item: TrashItem = { paperId: a.paperId, topics: topicsOfPaper(s, a.paperId), clearExcerpts: a.clear, when: 'Just now' }
+      return { ...s, library: s.library.filter((id) => id !== a.paperId), trash: [item, ...s.trash],
+        topicPaperIds: s.topicPaperIds.filter((id) => id !== a.paperId),
+        candidates: s.candidates.map((c) => (c.paperId === a.paperId && c.decision === 'added' && !c.note ? { ...c, decision: 'pending' } : c)),
+        noted: a.clear ? s.noted.filter((id) => !ev.has(id)) : s.noted,
+        cited: a.clear ? s.cited.filter((id) => !ev.has(id)) : s.cited }
+    }
+    case 'lib-restore': {
+      const item = s.trash.find((t) => t.paperId === a.paperId)
+      if (!item) return s
+      const inDemo = item.topics.includes(DEMO_TOPIC) && s.topics.some((t) => t.id === DEMO_TOPIC)
+      return { ...s, trash: s.trash.filter((t) => t !== item), library: [...s.library, a.paperId],
+        topicPaperIds: inDemo && !s.topicPaperIds.includes(a.paperId) ? [...s.topicPaperIds, a.paperId] : s.topicPaperIds }
+    }
+    case 'lib-empty':
+      return { ...s, trash: [] }
+    case 'lib-unlink':
+      return a.topicId === DEMO_TOPIC
+        ? { ...s, topicPaperIds: s.topicPaperIds.filter((id) => id !== a.paperId),
+            candidates: s.candidates.map((c) => (c.paperId === a.paperId && c.decision === 'added' && !c.note ? { ...c, decision: 'pending' } : c)) }
+        : { ...s, unlinked: [...s.unlinked, a.paperId + ':' + a.topicId] }
+    case 'lib-dup':
+      return { ...s, dupReview: a.choice }
+    case 'check-start':
+      return { ...s, check: { ...s.check, status: 'running', findings: {}, reviewed: [], recheck: {} } }
+    case 'check-edit': {
+      const f = s.check.findings[a.sentenceId]
+      const pending: Finding | undefined = f && { sentenceId: a.sentenceId,
+        claims: [{ text: a.text, status: 'pending', note: 'The sentence changed, so its earlier result no longer applies. Re-check needed.' }] }
+      return { ...s, check: { ...s.check, version: s.check.version + 1,
+        sentences: s.check.sentences.map((x) => (x.id === a.sentenceId ? { ...x, text: a.text, cites: a.cites } : x)),
+        findings: pending ? { ...s.check.findings, [a.sentenceId]: pending } : s.check.findings,
+        reviewed: s.check.reviewed.filter((id) => id !== a.sentenceId),
+        recheck: { ...s.check.recheck, [a.sentenceId]: a.evidenceId } } }
+    }
+    case 'check-review': {
+      const r = s.check.reviewed
+      return { ...s, check: { ...s.check, reviewed: r.includes(a.sentenceId) ? r.filter((x) => x !== a.sentenceId) : [...r, a.sentenceId] } }
+    }
+    case 'wiki-start':
+      return { ...s, wiki: { ...s.wiki, status: 'running', proposal: null, discarded: false } }
+    case 'wiki-accept': {
+      const p = s.wiki.proposal
+      if (!p) return s
+      const pages = s.wiki.pages.map((pg) => {
+        const edit = p.edits.find((e) => e.pageId === pg.id)
+        return edit ? { ...pg, relations: [...pg.relations, ...edit.relations],
+          revisions: [{ when: 'Just now', who: 'You', what: 'Accepted 1 relation from the agent draft' }, ...pg.revisions] } : pg
+      })
+      const page = { ...p.page, revisions: [{ when: 'Just now', who: 'You', what: 'Accepted the agent draft' }, ...p.page.revisions] }
+      return { ...s, wiki: { ...s.wiki, status: 'idle', proposal: null, active: p.page.id, pages: [...pages, page] } }
+    }
+    case 'wiki-discard':
+      return { ...s, wiki: { ...s.wiki, status: 'idle', proposal: null, discarded: true } }
+    case 'wiki-open':
+      return { ...s, wiki: { ...s.wiki, active: a.id } }
+    case 'settings':
+      return { ...s, settings: { ...s.settings, ...a.patch } }
   }
 }
 
@@ -225,6 +341,11 @@ export const NEW_SESSION = 'New session'
 const maxOrder = (s: State) => Math.max(0, ...s.sessions.map((x) => x.order))
 export const sessionsOf = (s: State, topicId: string) =>
   s.sessions.filter((x) => x.topicId === topicId).sort((a, b) => b.order - a.order)
+/** Topics a library paper belongs to (demo topic from state, sample topics from fixtures). */
+export const topicsOfPaper = (s: State, paperId: string) => [
+  ...(s.topicPaperIds.includes(paperId) && s.topics.some((t) => t.id === DEMO_TOPIC) ? [DEMO_TOPIC] : []),
+  ...(SAMPLE_MEMBERSHIP[paperId] ?? []).filter((t) => s.topics.some((x) => x.id === t) && !s.unlinked.includes(paperId + ':' + t)),
+]
 export const hasMessages = (s: State, sessionId: string) => s.messages.some((m) => m.sessionId === sessionId)
 
 /** Start with the seed session already answered, by replaying its scripted events once. */
@@ -334,6 +455,43 @@ function useActions(dispatch: React.Dispatch<Action>, getState: () => State) {
     showTrace: (open: boolean, focus?: string | null) => dispatch({ type: 'trace', open, focus }),
     setReader: (paperId: string) => dispatch({ type: 'reader', paperId }),
     drop: (names: string[]) => dispatch({ type: 'drop', names }),
+
+    deletePaper: (paperId: string, clear: boolean) => dispatch({ type: 'lib-delete', paperId, clear }),
+    restorePaper: (paperId: string) => dispatch({ type: 'lib-restore', paperId }),
+    emptyTrash: () => dispatch({ type: 'lib-empty' }),
+    unlinkPaper: (paperId: string, topicId: string) => dispatch({ type: 'lib-unlink', paperId, topicId }),
+    resolveDuplicate: (choice: 'merged' | 'separate') => dispatch({ type: 'lib-dup', choice }),
+
+    runCheck() {
+      dispatch({ type: 'check-start' })
+      const runId = id('run')
+      start(runId, checkScript(runId, getState().check.sentences.map((x) => x.id)))
+    },
+    reviseSentence: (sentenceId: string, text: string, cites: string[], evidenceId: string) =>
+      dispatch({ type: 'check-edit', sentenceId, text, cites, evidenceId }),
+    recheck(sentenceId: string) {
+      const s = getState()
+      const sentence = s.check.sentences.find((x) => x.id === sentenceId)
+      const evidenceId = s.check.recheck[sentenceId]
+      if (!sentence || !evidenceId) return
+      const runId = id('run')
+      start(runId, recheckScript(runId, sentenceId, sentence.text, evidenceId))
+    },
+    toggleReviewed: (sentenceId: string) => dispatch({ type: 'check-review', sentenceId }),
+
+    runWikiDraft() {
+      const s = getState()
+      const plural = (n: number, w: string) => n + ' ' + w + (n === 1 ? '' : 's')
+      const inputs = [plural(s.noted.length, 'saved note'),
+        s.comparison.status === 'done' ? '1 comparison' : 'topic abstracts', plural(s.wiki.pages.length, 'existing page')]
+      dispatch({ type: 'wiki-start' })
+      const runId = id('run')
+      start(runId, wikiScript(runId, inputs))
+    },
+    acceptWiki: () => dispatch({ type: 'wiki-accept' }),
+    discardWiki: () => dispatch({ type: 'wiki-discard' }),
+    openWikiPage: (pageId: string) => dispatch({ type: 'wiki-open', id: pageId }),
+    updateSettings: (patch: Partial<Settings>) => dispatch({ type: 'settings', patch }),
     }
   }, [])
 }

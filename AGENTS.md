@@ -20,3 +20,4 @@
 
 - `pnpm --dir prototype build`（含 `tsc --noEmit` 类型检查）必须通过。
 - 浏览器内走完主线：侧边栏展开 Topic、悬停 `+` 新建 Session；Home → Discover（加入 PubMedQA、排除后 Refine）→ Read & ask（两个建议问题、点引用看证据卡）→ Compare；控制台无错误。
+- 工作区页面：Library（删除 → 回收站 → 恢复、重复导入复核）；Evidence wiki（生成草稿 → 差异预览 → 接受）；Citation check（运行回查 → 采纳改写或补引用 → 重查变为 Supported）；Models & services（切换模型、测试连接、开关）。

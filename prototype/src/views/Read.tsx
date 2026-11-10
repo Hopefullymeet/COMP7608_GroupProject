@@ -141,7 +141,7 @@ function PassageText({ p, highlight }: { p: Passage; highlight: Set<string> }) {
 function Reader() {
   const { state, act } = useStore()
   const papers = state.topicPaperIds.map((id) => PAPERS[id])
-  const paper = PAPERS[state.readerPaperId] ?? papers[0]
+  const paper = state.topicPaperIds.includes(state.readerPaperId) ? PAPERS[state.readerPaperId] : papers[0]
 
   const used = new Set<string>()
   state.messages.filter((m) => m.sessionId === state.activeSessionId)
