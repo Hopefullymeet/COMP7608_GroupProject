@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useLayoutEffect, useRef, type ReactNode } from 'react'
 import { anyRunning, useStore } from '../data/store'
 import { Icon, Spinner } from './Icon'
 
@@ -25,15 +25,30 @@ export function PageHead({ icon, title, sub, children, trace = false }: {
 }
 
 export function Dialog({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null)
+  useLayoutEffect(() => {
+    const dialog = ref.current
+    if (!dialog) return
+    const previous = document.activeElement
+    dialog.showModal()
+    return () => {
+      dialog.close()
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus()
+      else document.querySelector<HTMLElement>('.library-page .trash-toggle')?.focus()
+    }
+  }, [])
+
   return (
-    <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-label={title}>
+    <dialog ref={ref} className="dialog-backdrop" aria-label={title}
+      onCancel={(e) => { e.preventDefault(); onClose() }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="dialog">
         <div className="dialog-head">
           <h2>{title}</h2>
           <button className="icon-btn sm" onClick={onClose} aria-label="Close"><Icon name="x" size={14} /></button>
         </div>
         {children}
       </div>
-    </div>
+    </dialog>
   )
 }

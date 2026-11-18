@@ -1,4 +1,4 @@
-import { useStore } from '../data/store'
+import { sourceStatus, useStore } from '../data/store'
 import { EVIDENCE, PAPERS } from '../data/fixtures'
 import { Icon } from './Icon'
 
@@ -7,12 +7,13 @@ export function SourceChip({ evidenceId, anchor }: { evidenceId: string; anchor:
   const { state, act } = useStore()
   const ev = EVIDENCE[evidenceId]
   if (!ev) return null
-  const trashed = state.trash.some((t) => t.paperId === ev.paperId)
+  const status = sourceStatus(state, ev.paperId)
+  const page = PAPERS[ev.paperId].passages.find((p) => p.id === ev.passageId)?.page
   return (
-    <button className={`src-btn ${trashed ? 'gone' : ''}`} data-ev-anchor={anchor}
+    <button className={`src-btn ${status !== 'available' ? 'gone' : ''}`} data-ev-anchor={anchor}
       onClick={() => act.openEvidence(evidenceId, anchor, false)}
-      title={trashed ? 'Source paper is in the trash; the excerpt is kept as history' : 'Show the source sentence'}>
-      <Icon name="quote" size={12} /> {PAPERS[ev.paperId].short} · p. 1{trashed ? ' · in trash' : ''}
+      title={status === 'available' ? 'Show the source sentence' : 'Show historical source status'}>
+      <Icon name="quote" size={12} /> {PAPERS[ev.paperId].short}{page && <> · p. {page}</>}{status !== 'available' && <> · {status}</>}
     </button>
   )
 }

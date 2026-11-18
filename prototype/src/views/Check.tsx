@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useStore } from '../data/store'
+import { currentFinding, evidenceAvailable, useStore } from '../data/store'
 import { PAPERS } from '../data/fixtures'
 import { CITE_KEYS, DRAFT_NAME } from '../data/workspace'
 import { Icon, Spinner } from '../components/Icon'
@@ -26,7 +26,7 @@ const COUNT_ORDER: ClaimStatus[] = ['supported', 'conflict', 'not-established', 
 /** A sentence counts as supported only when every sub-claim is. */
 function statusOf(f: Finding | undefined, recheck: boolean): SentenceStatus {
   if (!f) return 'unchecked'
-  if (recheck) return 'recheck'
+  if (recheck && !f.claims.some((c) => c.status === 'blocked')) return 'recheck'
   const st = f.claims.map((c) => c.status)
   for (const s of ['conflict', 'pending', 'blocked', 'not-established'] as const) if (st.includes(s)) return s
   return 'supported'
@@ -40,9 +40,10 @@ export function Check() {
   const [focus, setFocus] = useState<string | null>(null)
   const run = state.runOrder.map((id) => state.runs[id]).find((r) => r.task === 'Citation check')
   const lastStep = run?.steps[run.steps.length - 1]
-  const findings = Object.values(c.findings)
+  const shown = Object.fromEntries(c.sentences.map((s) => [s.id, currentFinding(state, s)]))
+  const findings = Object.values(shown).filter((f) => f !== undefined)
   const counts = COUNT_ORDER.map((s) => [s, findings.flatMap((f) => f.claims).filter((x) => x.status === s).length] as const)
-  const fullySupported = c.sentences.filter((s) => statusOf(c.findings[s.id], !!c.recheck[s.id]) === 'supported').length
+  const fullySupported = c.sentences.filter((s) => statusOf(shown[s.id], !!c.recheck[s.id]) === 'supported').length
   const rechecking = (id: string) => !!run && run.status === 'running' && run.label.endsWith(id.slice(1))
 
   return (
@@ -80,7 +81,7 @@ export function Check() {
             <h3>Draft</h3>
             <p className="draft-text">
               {c.sentences.map((s) => {
-                const st = statusOf(c.findings[s.id], !!c.recheck[s.id])
+                const st = statusOf(shown[s.id], !!c.recheck[s.id])
                 return (
                   <span key={s.id} className={`draft-s ${st} ${focus === s.id ? 'focus' : ''}`} onClick={() => setFocus(s.id)}
                     onMouseEnter={() => setFocus(s.id)}>
@@ -100,7 +101,7 @@ export function Check() {
               </div>
             )}
             {c.sentences.map((s, i) => {
-              const f = c.findings[s.id]
+              const f = shown[s.id]
               if (!f) return c.status === 'running' ? <div key={s.id} className="skeleton" /> : null
               const st = statusOf(f, !!c.recheck[s.id])
               const reviewed = c.reviewed.includes(s.id)
@@ -116,7 +117,7 @@ export function Check() {
                   </div>
                   <ul className="claims">
                     {f.claims.map((cl, j) => (
-                      <li key={j} className={c.recheck[s.id] ? 'recheck' : cl.status}>
+                      <li key={j} className={st === 'recheck' ? 'recheck' : cl.status}>
                         <span className="claim-dot" />
                         <div>
                           <strong>{cl.text}</strong>
@@ -149,7 +150,7 @@ export function Check() {
                     <p className="hint">Options: qualify the sentence, or look for a paper that tests this directly. More citations alone would not make it supported.</p>
                   )}
                   {c.recheck[s.id] && (
-                    <button className="primary sm" disabled={rechecking(s.id)} onClick={() => act.recheck(s.id)}>
+                    <button className="primary sm" disabled={rechecking(s.id) || !evidenceAvailable(state, c.recheck[s.id])} onClick={() => act.recheck(s.id)}>
                       {rechecking(s.id) ? <Spinner /> : <Icon name="shield" size={13} />} Re-check this sentence
                     </button>
                   )}

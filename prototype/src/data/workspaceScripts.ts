@@ -1,5 +1,5 @@
 import type { ScriptItem } from './runtime'
-import type { AgentStep, Finding, StepKind, TaskEvent, WikiPage, WikiProposal } from './types'
+import type { AgentStep, DraftSentence, Finding, StepKind, TaskEvent, WikiPage, WikiProposal } from './types'
 
 // Scripted agent runs for the Citation check and Evidence wiki pages.
 
@@ -51,29 +51,31 @@ const FINDINGS: Record<string, Finding> = {
   },
 }
 
-export function checkScript(runId: string, sentenceIds: string[]): ScriptItem[] {
+export function checkScript(runId: string, sentences: DraftSentence[], checkSources: (sentence: DraftSentence, f: Finding) => Finding): ScriptItem[] {
   const out: ScriptItem[] = [
     at(0, { type: 'run', run: { id: runId, task: 'Citation check', label: 'related-work.md, draft v1', status: 'running', steps: [] } }),
     at(500, step(runId, 'plan', 'Split the draft into checkable claims', {
       detail: '6 sentences, 8 claims. Sentences that join two judgements are split so each part is checked on its own.', tokens: 820, ms: 1600,
     })),
     at(300, step(runId, 'tool', 'Match citation keys to library papers', { call: 'match_citations(keys=["dasigi2021", "jin2019", "wadden2020"])', ms: 200 })),
-    at(500, step(runId, 'observe', 'All 3 keys resolve; 1 sentence has no citation', { tokens: 300, ms: 400 })),
+    at(500, step(runId, 'observe', 'Check which matched sources are available', { tokens: 300, ms: 400 })),
   ]
-  sentenceIds.forEach((id) => {
-    const f = FINDINGS[id]
-    if (!f) return
-    out.push(at(350, step(runId, 'tool', `Read sources for sentence ${id.slice(1)}`, {
-      call: `read_passages(sentence="${id}", sources=${f.suggestion ? '"topic papers"' : '"cited"'})`, ms: 300, tokens: 600,
+  sentences.forEach((sentence) => {
+    const original = FINDINGS[sentence.id]
+    if (!original) return
+    const f = checkSources(sentence, original)
+    const blocked = f.claims.every((claim) => claim.status === 'blocked')
+    out.push(at(350, step(runId, blocked ? 'observe' : 'tool', `${blocked ? 'Missing material for' : 'Check available sources for'} sentence ${sentence.id.slice(1)}`, {
+      call: blocked ? undefined : `read_passages(sentence="${sentence.id}", sources=${f.suggestion ? '"topic papers"' : '"cited"'})`, ms: 300, tokens: 600,
     })))
     out.push(at(450, finding(f)))
   })
   out.push(
-    at(400, step(runId, 'decide', 'Leave 1 claim blocked instead of guessing', {
-      detail: 'Split sizes are only in the full text. Without it, that sentence stays incomplete.', tokens: 360, ms: 900,
+    at(400, step(runId, 'decide', 'Leave claims blocked where material is missing', {
+      detail: 'Unavailable sources and missing full text prevent a complete check.', tokens: 360, ms: 900,
     })),
     at(300, step(runId, 'stop', 'Deliver findings; wording changes wait for your decision', { tokens: 540, ms: 1200 })),
-    at(300, { type: 'done', runId, status: 'partial', summary: '8 claims: 3 supported, 2 conflict, 1 not established, 1 blocked, 1 awaiting your choice.' }),
+    at(300, { type: 'done', runId, status: 'partial', summary: 'Findings use the available evidence. Some claims need more material or your decision.' }),
   )
   return out
 }

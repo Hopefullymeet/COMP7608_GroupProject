@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useStore } from '../data/store'
+import { sourceStatus, useStore } from '../data/store'
 import { EVIDENCE, PAPERS } from '../data/fixtures'
 import { Icon } from './Icon'
 import { scrollWithin } from './util'
@@ -56,6 +56,8 @@ export function EvidencePopover() {
   const passage = paper.passages.find((p) => p.id === ev.passageId)
   const cited = state.cited.includes(ev.id)
   const noted = state.noted.includes(ev.id)
+  const status = sourceStatus(state, paper.id)
+  const cleared = state.purgedPapers[paper.id]?.clearExcerpts
 
   return (
     <div ref={ref} className="evidence" role="dialog" aria-label="Evidence"
@@ -64,9 +66,12 @@ export function EvidencePopover() {
         <span>{paper.short} · {passage?.section} · PDF p. {passage?.page}</span>
         <button className="icon-btn sm" onClick={() => act.closeEvidence()} aria-label="Close"><Icon name="x" size={14} /></button>
       </div>
-      <blockquote>“{ev.quote}”</blockquote>
-      <p className="ev-scope"><Icon name="eye" size={13} /> {ev.scope}</p>
-      <div className="ev-actions">
+      {!cleared && <blockquote>“{ev.quote}”</blockquote>}
+      <p className="ev-scope"><Icon name="eye" size={13} /> {status === 'available' ? ev.scope
+        : cleared ? 'Source permanently deleted. Its excerpt was cleared.'
+        : status === 'in trash' ? 'Source in trash. This excerpt is available for historical reference.'
+        : 'Source permanently deleted. This excerpt is available for historical reference.'}</p>
+      {status === 'available' && <><div className="ev-actions">
         <button className={cited ? 'toggle on' : 'toggle'} onClick={() => act.toggleCite(ev.id)}>
           <Icon name={cited ? 'check' : 'quote'} size={14} /> {cited ? 'Citation picked' : 'Use as citation'}
         </button>
@@ -74,7 +79,7 @@ export function EvidencePopover() {
           <Icon name={noted ? 'check' : 'note'} size={14} /> {noted ? 'Saved to notes' : 'Save as note'}
         </button>
       </div>
-      <p className="ev-fine">Your choice is stored apart from the agent’s result. A picked citation is checked again against your draft before use.</p>
+      <p className="ev-fine">Your choice is stored apart from the agent’s result. A picked citation is checked again against your draft before use.</p></>}
     </div>
   )
 }

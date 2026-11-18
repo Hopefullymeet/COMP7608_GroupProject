@@ -3,15 +3,16 @@ import { runTask, type ScriptItem } from './runtime'
 import { compareScript, discoveryScript, questionScript, QUESTIONS, SEED_QUESTION, refineScript } from './scripts'
 import { DEFAULT_QUESTION, DEMO_TOPIC, EVIDENCE, PAPERS, SEED_SESSION, SESSIONS, TOPICS } from './fixtures'
 import { checkScript, recheckScript, wikiScript } from './workspaceScripts'
-import { DRAFT, LIBRARY_SEED, SAMPLE_MEMBERSHIP, WIKI_SEED } from './workspace'
+import { CITE_KEYS, DRAFT, DUPLICATE_REVIEW, LIBRARY_META, LIBRARY_SEED, SAMPLE_MEMBERSHIP, WIKI_SEED } from './workspace'
 import type {
-  AgentRun, Candidate, ChatMessage, ComparisonRow, Coverage, Decision, DraftSentence, Finding, SearchAngle, Session,
+  AgentRun, Candidate, ChatMessage, ComparisonRow, Coverage, Decision, DraftSentence, FileVersion, Finding, SearchAngle, Session,
   TaskEvent, Topic, TrashItem, WikiPage, WikiProposal,
 } from './types'
 
 export type Tab = 'discover' | 'read' | 'compare'
 export type Page = 'library' | 'wiki' | 'check' | 'settings'
-export type Route = { view: 'home' } | { view: 'topic'; topicId: string; tab: Tab } | { view: Page }
+export type Route = { view: 'home' } | { view: 'topic'; topicId: string; tab: Tab }
+  | { view: 'library'; paperId?: string } | { view: Exclude<Page, 'library'> }
 
 export interface Settings {
   model: string
@@ -26,7 +27,7 @@ type TaskState = 'idle' | 'running' | 'done'
 export interface State {
   topics: Topic[]
   route: Route
-  topicPaperIds: string[]
+  paperTopics: Record<string, string[]>
   discovery: { status: TaskState; question: string; round: number; coverage?: Coverage; summary?: string }
   angles: SearchAngle[]
   candidates: Candidate[]
@@ -46,8 +47,7 @@ export interface State {
   homeRevision: number
   library: string[]
   trash: TrashItem[]
-  /** paperId:topicId pairs removed from sample topics. */
-  unlinked: string[]
+  purgedPapers: Record<string, { clearExcerpts: boolean }>
   dupReview: 'pending' | 'merged' | 'separate'
   check: { status: TaskState; version: number; sentences: DraftSentence[]; findings: Record<string, Finding>; reviewed: string[]; recheck: Record<string, string> }
   wiki: { status: TaskState; pages: WikiPage[]; proposal: WikiProposal | null; active: string; discarded: boolean }
@@ -57,7 +57,7 @@ export interface State {
 const baseState: State = {
   topics: TOPICS,
   route: { view: 'home' },
-  topicPaperIds: ['qasper'],
+  paperTopics: { ...SAMPLE_MEMBERSHIP, qasper: [DEMO_TOPIC, ...SAMPLE_MEMBERSHIP.qasper] },
   discovery: { status: 'idle', question: DEFAULT_QUESTION, round: 0 },
   angles: [],
   candidates: [],
@@ -77,7 +77,7 @@ const baseState: State = {
   homeRevision: 0,
   library: LIBRARY_SEED,
   trash: [],
-  unlinked: [],
+  purgedPapers: {},
   dupReview: 'pending',
   check: { status: 'idle', version: 1, sentences: DRAFT, findings: {}, reviewed: [], recheck: {} },
   wiki: { status: 'idle', pages: WIKI_SEED, proposal: null, active: WIKI_SEED[0].id, discarded: false },
@@ -106,9 +106,10 @@ type Action =
   | { type: 'session-open'; id: string }
   | { type: 'session-delete'; id: string }
   | { type: 'topic-delete'; id: string }
-  | { type: 'lib-delete'; paperId: string; clear: boolean }
+  | { type: 'lib-delete'; paperId: string }
   | { type: 'lib-restore'; paperId: string }
-  | { type: 'lib-empty' }
+  | { type: 'lib-empty'; clearExcerpts: boolean }
+  | { type: 'lib-link'; paperId: string; topicId: string }
   | { type: 'lib-unlink'; paperId: string; topicId: string }
   | { type: 'lib-dup'; choice: 'merged' | 'separate' }
   | { type: 'check-start' }
@@ -123,6 +124,74 @@ type Action =
 const upsert = <T extends { id: string }>(list: T[], item: T) =>
   list.some((x) => x.id === item.id) ? list.map((x) => (x.id === item.id ? item : x)) : [...list, item]
 
+export function sourceStatus(s: State, paperId: string) {
+  if (s.purgedPapers[paperId]) return 'deleted'
+  if (s.trash.some((item) => item.paperId === paperId)) return 'in trash'
+  return 'available'
+}
+
+export const evidenceAvailable = (s: State, id: string) =>
+  !!EVIDENCE[id] && sourceStatus(s, EVIDENCE[id].paperId) === 'available'
+
+function checkFindingSources(s: State, sentence: DraftSentence, f: Finding): Finding {
+  const missingCitation = sentence.cites.some((key) => CITE_KEYS[key] && sourceStatus(s, CITE_KEYS[key]) !== 'available')
+  const missingSuggestion = f.suggestion?.evidenceIds.some((id) => !evidenceAvailable(s, id))
+  const claims = f.claims.map((c) => missingCitation || (c.evidenceId && !evidenceAvailable(s, c.evidenceId)) || (missingSuggestion && c.status === 'pending')
+    ? { ...c, status: 'blocked' as const, note: 'A source used for this check is unavailable.' }
+    : c)
+  return {
+    ...f, claims,
+    suggestion: missingSuggestion || missingCitation ? undefined : f.suggestion,
+    rewrite: claims.some((c) => c.status === 'blocked') ? undefined : f.rewrite,
+  }
+}
+
+export function currentFinding(s: State, sentence: DraftSentence): Finding | undefined {
+  const f = s.check.findings[sentence.id]
+  return f && checkFindingSources(s, sentence, f)
+}
+
+function availableWikiProposal(s: State, proposal: WikiProposal): WikiProposal {
+  const available = (item: { evidenceIds: string[] }) => item.evidenceIds.every((id) => evidenceAvailable(s, id))
+  return {
+    ...proposal,
+    page: {
+      ...proposal.page,
+      statements: proposal.page.statements.filter(available),
+      relations: proposal.page.relations.filter(available),
+      disputes: proposal.page.disputes.filter((d) => d.sides.every((side) => evidenceAvailable(s, side.evidenceId))),
+    },
+    edits: proposal.edits.map((edit) => ({ ...edit, relations: edit.relations.filter(available) })).filter((edit) => edit.relations.length),
+  }
+}
+
+export function libraryFiles(s: State, paperId: string): FileVersion[] {
+  const files = LIBRARY_META[paperId].files
+  return paperId === DUPLICATE_REVIEW.paperId && s.dupReview === 'merged' ? [...files, DUPLICATE_REVIEW.version] : files
+}
+
+const addUnique = (ids: string[], id: string) => ids.includes(id) ? ids : [...ids, id]
+
+function setPaperTopics(s: State, paperId: string, topics: string[]): State {
+  const inDemo = topics.includes(DEMO_TOPIC)
+  return {
+    ...s,
+    paperTopics: { ...s.paperTopics, [paperId]: topics },
+    candidates: s.candidates.map((c) => c.paperId !== paperId ? c : {
+      ...c, decision: inDemo ? 'added' : c.decision === 'added' ? 'pending' : c.decision,
+    }),
+  }
+}
+
+function restorePaper(s: State, paperId: string, extraTopic?: string): State {
+  const item = s.trash.find((t) => t.paperId === paperId)
+  if (!item) return s
+  const existing = item.topics.filter((id) => s.topics.some((t) => t.id === id))
+  return setPaperTopics({
+    ...s, library: addUnique(s.library, paperId), trash: s.trash.filter((t) => t.paperId !== paperId),
+  }, paperId, extraTopic ? addUnique(existing, extraTopic) : existing)
+}
+
 function applyEvent(s: State, e: TaskEvent): State {
   switch (e.type) {
     case 'run':
@@ -134,7 +203,11 @@ function applyEvent(s: State, e: TaskEvent): State {
     case 'angle':
       return { ...s, angles: upsert(s.angles, e.angle) }
     case 'candidate': {
-      const candidates = upsert(s.candidates, e.candidate)
+      const c = e.candidate
+      const previous = s.candidates.find((item) => item.id === c.id)
+      const decision: Decision = topicsOfPaper(s, c.paperId).includes(DEMO_TOPIC) ? 'added'
+        : previous?.decision === 'held' || previous?.decision === 'excluded' ? previous.decision : 'pending'
+      const candidates = upsert(s.candidates, { ...c, decision })
       return { ...s, candidates }
     }
     case 'message':
@@ -160,7 +233,7 @@ function applyEvent(s: State, e: TaskEvent): State {
       return { ...s, check: { ...s.check, recheck, findings: { ...s.check.findings, [e.finding.sentenceId]: e.finding } } }
     }
     case 'wiki-proposal':
-      return { ...s, wiki: { ...s.wiki, proposal: e.proposal } }
+      return { ...s, wiki: { ...s.wiki, proposal: availableWikiProposal(s, e.proposal) } }
     case 'done': {
       const run = s.runs[e.runId]
       if (!run) return s
@@ -197,13 +270,15 @@ function reducer(s: State, a: Action): State {
     case 'topic-delete': {
       const topics = s.topics.filter((t) => t.id !== a.id)
       const sessions = s.sessions.filter((x) => x.topicId !== a.id)
+      const paperTopics = Object.fromEntries(Object.entries(s.paperTopics).map(([id, ids]) => [id, ids.filter((topicId) => topicId !== a.id)]))
+      const trash = s.trash.map((t) => ({ ...t, topics: t.topics.filter((id) => id !== a.id) }))
       if (a.id === DEMO_TOPIC) return { ...baseState, topics, sessions, homeRevision: s.homeRevision,
-        library: s.library, trash: s.trash.map((t) => ({ ...t, topics: t.topics.filter((x) => x !== a.id) })), unlinked: s.unlinked,
+        library: s.library, trash, paperTopics, purgedPapers: s.purgedPapers, cited: s.cited, noted: s.noted,
         dupReview: s.dupReview, check: s.check, wiki: s.wiki, settings: s.settings,
         messages: s.messages.filter((m) => sessions.some((x) => x.id === m.sessionId)),
         activeSessionId: sessions.some((x) => x.id === s.activeSessionId) ? s.activeSessionId : null,
         route: s.route.view === 'topic' && s.route.topicId !== a.id ? s.route : { view: 'home' } }
-      return { ...s, topics, sessions,
+      return { ...s, topics, sessions, paperTopics, trash,
         activeSessionId: sessions.some((x) => x.id === s.activeSessionId) ? s.activeSessionId : null,
         messages: s.messages.filter((m) => sessions.some((x) => x.id === m.sessionId)),
         route: s.route.view === 'topic' && s.route.topicId === a.id ? { view: 'home' } : s.route,
@@ -240,12 +315,14 @@ function reducer(s: State, a: Action): State {
     case 'decide': {
       const c = s.candidates.find((x) => x.id === a.candidateId)
       if (!c) return s
-      const without = s.topicPaperIds.filter((id) => id !== c.paperId)
+      if (a.decision === 'added') {
+        if (sourceStatus(s, c.paperId) === 'deleted') return s
+        if (sourceStatus(s, c.paperId) === 'in trash') return restorePaper(s, c.paperId, DEMO_TOPIC)
+        return setPaperTopics({ ...s, library: addUnique(s.library, c.paperId) }, c.paperId, addUnique(topicsOfPaper(s, c.paperId), DEMO_TOPIC))
+      }
+      const next = setPaperTopics(s, c.paperId, topicsOfPaper(s, c.paperId).filter((id) => id !== DEMO_TOPIC))
       return {
-        ...s,
-        candidates: s.candidates.map((x) => (x.id === c.id ? { ...x, decision: a.decision } : x)),
-        topicPaperIds: a.decision === 'added' ? [...without, c.paperId] : without,
-        library: a.decision === 'added' && !s.library.includes(c.paperId) ? [...s.library, c.paperId] : s.library,
+        ...next, candidates: next.candidates.map((x) => x.id === c.id ? { ...x, decision: a.decision } : x),
       }
     }
     case 'user-message': {
@@ -260,12 +337,15 @@ function reducer(s: State, a: Action): State {
       return { ...s, comparison: { status: 'running', rows: [] } }
     case 'evidence-open': {
       const ev = EVIDENCE[a.id]
-      return { ...s, activeEvidence: { id: a.id, anchor: a.anchor, scroll: a.scroll }, readerPaperId: a.scroll && ev ? ev.paperId : s.readerPaperId }
+      if (!ev) return s
+      const scroll = a.scroll && evidenceAvailable(s, a.id)
+      return { ...s, activeEvidence: { id: a.id, anchor: a.anchor, scroll }, readerPaperId: scroll ? ev.paperId : s.readerPaperId }
     }
     case 'evidence-close':
       return { ...s, activeEvidence: null }
     case 'toggle': {
       const list = s[a.list]
+      if (!list.includes(a.id) && !evidenceAvailable(s, a.id)) return s
       return { ...s, [a.list]: list.includes(a.id) ? list.filter((x) => x !== a.id) : [...list, a.id] }
     }
     case 'trace':
@@ -275,33 +355,35 @@ function reducer(s: State, a: Action): State {
     case 'drop':
       return { ...s, dropped: [...s.dropped, ...a.names] }
     case 'lib-delete': {
-      const ev = new Set(Object.values(EVIDENCE).filter((e) => e.paperId === a.paperId).map((e) => e.id))
-      const item: TrashItem = { paperId: a.paperId, topics: topicsOfPaper(s, a.paperId), clearExcerpts: a.clear, when: 'Just now' }
-      return { ...s, library: s.library.filter((id) => id !== a.paperId), trash: [item, ...s.trash],
-        topicPaperIds: s.topicPaperIds.filter((id) => id !== a.paperId),
-        candidates: s.candidates.map((c) => (c.paperId === a.paperId && c.decision === 'added' && !c.note ? { ...c, decision: 'pending' } : c)),
-        noted: a.clear ? s.noted.filter((id) => !ev.has(id)) : s.noted,
-        cited: a.clear ? s.cited.filter((id) => !ev.has(id)) : s.cited }
+      if (!s.library.includes(a.paperId)) return s
+      const item: TrashItem = { paperId: a.paperId, topics: topicsOfPaper(s, a.paperId), when: 'Just now' }
+      const next = setPaperTopics({
+        ...s, library: s.library.filter((id) => id !== a.paperId), trash: [item, ...s.trash], activeEvidence: null,
+      }, a.paperId, [])
+      if (s.wiki.proposal) next.wiki = { ...s.wiki, proposal: availableWikiProposal(next, s.wiki.proposal) }
+      return next
     }
-    case 'lib-restore': {
-      const item = s.trash.find((t) => t.paperId === a.paperId)
-      if (!item) return s
-      const inDemo = item.topics.includes(DEMO_TOPIC) && s.topics.some((t) => t.id === DEMO_TOPIC)
-      return { ...s, trash: s.trash.filter((t) => t !== item), library: [...s.library, a.paperId],
-        topicPaperIds: inDemo && !s.topicPaperIds.includes(a.paperId) ? [...s.topicPaperIds, a.paperId] : s.topicPaperIds }
+    case 'lib-restore':
+      return restorePaper(s, a.paperId)
+    case 'lib-empty': {
+      const purgedPapers = { ...s.purgedPapers }
+      for (const item of s.trash) purgedPapers[item.paperId] = { clearExcerpts: a.clearExcerpts }
+      const keep = (id: string) => !purgedPapers[EVIDENCE[id]?.paperId]?.clearExcerpts
+      return { ...s, trash: [], purgedPapers, cited: s.cited.filter(keep), noted: s.noted.filter(keep), activeEvidence: null }
     }
-    case 'lib-empty':
-      return { ...s, trash: [] }
+    case 'lib-link':
+      return s.library.includes(a.paperId) && s.topics.some((t) => t.id === a.topicId)
+        ? setPaperTopics(s, a.paperId, addUnique(topicsOfPaper(s, a.paperId), a.topicId))
+        : s
     case 'lib-unlink':
-      return a.topicId === DEMO_TOPIC
-        ? { ...s, topicPaperIds: s.topicPaperIds.filter((id) => id !== a.paperId),
-            candidates: s.candidates.map((c) => (c.paperId === a.paperId && c.decision === 'added' && !c.note ? { ...c, decision: 'pending' } : c)) }
-        : { ...s, unlinked: [...s.unlinked, a.paperId + ':' + a.topicId] }
+      return setPaperTopics(s, a.paperId, topicsOfPaper(s, a.paperId).filter((id) => id !== a.topicId))
     case 'lib-dup':
-      return { ...s, dupReview: a.choice }
+      if (s.dupReview !== 'pending' || (a.choice === 'merged' && !s.library.includes(DUPLICATE_REVIEW.paperId))) return s
+      return { ...s, dupReview: a.choice, library: a.choice === 'separate' ? addUnique(s.library, DUPLICATE_REVIEW.separateId) : s.library }
     case 'check-start':
       return { ...s, check: { ...s.check, status: 'running', findings: {}, reviewed: [], recheck: {} } }
     case 'check-edit': {
+      if (!evidenceAvailable(s, a.evidenceId) || a.cites.some((key) => CITE_KEYS[key] && sourceStatus(s, CITE_KEYS[key]) !== 'available')) return s
       const f = s.check.findings[a.sentenceId]
       const pending: Finding | undefined = f && { sentenceId: a.sentenceId,
         claims: [{ text: a.text, status: 'pending', note: 'The sentence changed, so its earlier result no longer applies. Re-check needed.' }] }
@@ -341,11 +423,8 @@ export const NEW_SESSION = 'New session'
 const maxOrder = (s: State) => Math.max(0, ...s.sessions.map((x) => x.order))
 export const sessionsOf = (s: State, topicId: string) =>
   s.sessions.filter((x) => x.topicId === topicId).sort((a, b) => b.order - a.order)
-/** Topics a library paper belongs to (demo topic from state, sample topics from fixtures). */
-export const topicsOfPaper = (s: State, paperId: string) => [
-  ...(s.topicPaperIds.includes(paperId) && s.topics.some((t) => t.id === DEMO_TOPIC) ? [DEMO_TOPIC] : []),
-  ...(SAMPLE_MEMBERSHIP[paperId] ?? []).filter((t) => s.topics.some((x) => x.id === t) && !s.unlinked.includes(paperId + ':' + t)),
-]
+export const topicsOfPaper = (s: State, paperId: string) => s.paperTopics[paperId] ?? []
+export const papersOfTopic = (s: State, topicId: string) => s.library.filter((id) => topicsOfPaper(s, id).includes(topicId))
 export const hasMessages = (s: State, sessionId: string) => s.messages.some((m) => m.sessionId === sessionId)
 
 /** Start with the seed session already answered, by replaying its scripted events once. */
@@ -436,11 +515,15 @@ function useActions(dispatch: React.Dispatch<Action>, getState: () => State) {
     decide: (candidateId: string, decision: Decision) => dispatch({ type: 'decide', candidateId, decision }),
 
     ask(text: string) {
+      const s = getState()
+      const papers = papersOfTopic(s, DEMO_TOPIC)
+      const script = [...QUESTIONS, SEED_QUESTION].find((q) => q.text === text)
+      if (!papers.length || (script?.requires && !papers.includes(script.requires))) return
+      if (script && !papers.includes('qasper')) return
       const sessionId = getState().activeSessionId ?? newSession(DEMO_TOPIC)
-      const known = [...QUESTIONS, SEED_QUESTION].find((q) => q.text === text)
       dispatch({ type: 'user-message', message: { id: id('msg'), sessionId, role: 'user', segments: [{ text }], done: true } })
       const runId = id('run')
-      start(runId, questionScript(known?.id ?? 'free', text, runId, id('msg'), sessionId), sessionId)
+      start(runId, questionScript(script?.id ?? 'free', text, runId, id('msg'), sessionId), sessionId)
     },
     runComparison() {
       dispatch({ type: 'compare-start' })
@@ -456,16 +539,18 @@ function useActions(dispatch: React.Dispatch<Action>, getState: () => State) {
     setReader: (paperId: string) => dispatch({ type: 'reader', paperId }),
     drop: (names: string[]) => dispatch({ type: 'drop', names }),
 
-    deletePaper: (paperId: string, clear: boolean) => dispatch({ type: 'lib-delete', paperId, clear }),
+    deletePaper: (paperId: string) => dispatch({ type: 'lib-delete', paperId }),
     restorePaper: (paperId: string) => dispatch({ type: 'lib-restore', paperId }),
-    emptyTrash: () => dispatch({ type: 'lib-empty' }),
+    emptyTrash: (clearExcerpts: boolean) => dispatch({ type: 'lib-empty', clearExcerpts }),
+    linkPaper: (paperId: string, topicId: string) => dispatch({ type: 'lib-link', paperId, topicId }),
     unlinkPaper: (paperId: string, topicId: string) => dispatch({ type: 'lib-unlink', paperId, topicId }),
     resolveDuplicate: (choice: 'merged' | 'separate') => dispatch({ type: 'lib-dup', choice }),
 
     runCheck() {
+      const s = getState()
       dispatch({ type: 'check-start' })
       const runId = id('run')
-      start(runId, checkScript(runId, getState().check.sentences.map((x) => x.id)))
+      start(runId, checkScript(runId, s.check.sentences, (sentence, finding) => checkFindingSources(s, sentence, finding)))
     },
     reviseSentence: (sentenceId: string, text: string, cites: string[], evidenceId: string) =>
       dispatch({ type: 'check-edit', sentenceId, text, cites, evidenceId }),
@@ -473,7 +558,7 @@ function useActions(dispatch: React.Dispatch<Action>, getState: () => State) {
       const s = getState()
       const sentence = s.check.sentences.find((x) => x.id === sentenceId)
       const evidenceId = s.check.recheck[sentenceId]
-      if (!sentence || !evidenceId) return
+      if (!sentence || !evidenceId || !evidenceAvailable(s, evidenceId)) return
       const runId = id('run')
       start(runId, recheckScript(runId, sentenceId, sentence.text, evidenceId))
     },
@@ -482,8 +567,9 @@ function useActions(dispatch: React.Dispatch<Action>, getState: () => State) {
     runWikiDraft() {
       const s = getState()
       const plural = (n: number, w: string) => n + ' ' + w + (n === 1 ? '' : 's')
-      const inputs = [plural(s.noted.length, 'saved note'),
-        s.comparison.status === 'done' ? '1 comparison' : 'topic abstracts', plural(s.wiki.pages.length, 'existing page')]
+      const inputs = [plural(s.noted.filter((id) => evidenceAvailable(s, id)).length, 'saved note'),
+        s.comparison.status === 'done' && papersOfTopic(s, DEMO_TOPIC).includes('qasper') && papersOfTopic(s, DEMO_TOPIC).includes('pubmedqa')
+          ? '1 comparison' : 'topic abstracts', plural(s.wiki.pages.length, 'existing page')]
       dispatch({ type: 'wiki-start' })
       const runId = id('run')
       start(runId, wikiScript(runId, inputs))

@@ -1,17 +1,18 @@
-import { useStore } from '../data/store'
+import { papersOfTopic, useStore } from '../data/store'
 import { DEMO_TOPIC, PAPERS } from '../data/fixtures'
 import { Icon, Spinner } from '../components/Icon'
+import { SourceChip } from '../components/SourceChip'
 
 const PAIR = ['qasper', 'pubmedqa'] as const
 
 export function Compare() {
   const { state, act } = useStore()
   const cmp = state.comparison
-  const ready = PAIR.every((id) => state.topicPaperIds.includes(id))
+  const ready = PAIR.every((id) => papersOfTopic(state, DEMO_TOPIC).includes(id))
   const run = state.runOrder.map((id) => state.runs[id]).find((r) => r.task === 'Comparison')
   const lastStep = run?.steps[run.steps.length - 1]
 
-  if (!ready) {
+  if (!ready && cmp.status === 'idle') {
     return (
       <div className="empty-state">
         <Icon name="columns" size={22} />
@@ -37,6 +38,7 @@ export function Compare() {
         </div>
       </section>
 
+      {!ready && <p className="hint">Past comparison · one or more sources are no longer in this topic.</p>}
       {cmp.verdict && (
         <div className="verdict">
           <Icon name="flag" size={16} />
@@ -71,10 +73,7 @@ export function Compare() {
                       ? <span className="missing-text"><Icon name="alert" size={13} /> {c.value}</span>
                       : <>
                           <span>{c.value}</span>
-                          <button className="src-btn" data-ev-anchor={`cmp-${r.id}-${i}`}
-                            onClick={() => act.openEvidence(c.evidenceId!, `cmp-${r.id}-${i}`, false)}>
-                            <Icon name="quote" size={12} /> Abstract · p. 1
-                          </button>
+                          {c.evidenceId && <SourceChip evidenceId={c.evidenceId} anchor={`cmp-${r.id}-${i}`} />}
                         </>}
                   </td>
                 ))}

@@ -1,4 +1,4 @@
-import { useStore } from '../data/store'
+import { papersOfTopic, sourceStatus, useStore } from '../data/store'
 import { DEMO_TOPIC, PAPERS } from '../data/fixtures'
 import { Icon, Spinner } from '../components/Icon'
 import type { AngleStatus, Candidate, Decision } from '../data/types'
@@ -7,8 +7,9 @@ const ANGLE_LABEL: Record<AngleStatus, string> = { queued: 'Queued', searching: 
 const DECISION_LABEL: Record<Exclude<Decision, 'pending'>, string> = { added: 'Added to topic', held: 'On hold', excluded: 'Not relevant' }
 
 function CandidateCard({ c }: { c: Candidate }) {
-  const { act } = useStore()
+  const { state, act } = useStore()
   const p = PAPERS[c.paperId]
+  const availability = sourceStatus(state, c.paperId)
   return (
     <article className={`cand ${c.decision}`} data-testid={`cand-${c.paperId}`}>
       <div className="cand-main">
@@ -24,11 +25,15 @@ function CandidateCard({ c }: { c: Candidate }) {
         <p className="reason"><Icon name="compass" size={13} /> {c.reason}</p>
       </div>
       <div className="cand-actions">
-        {c.note ? (
+        {availability === 'deleted' ? (
+          <span className="decided">Deleted from library</span>
+        ) : c.note && c.decision === 'added' ? (
           <span className="decided added"><Icon name="check" size={14} /> {c.note}</span>
         ) : c.decision === 'pending' ? (
           <>
-            <button className="ghost-btn sm accent" onClick={() => act.decide(c.id, 'added')}><Icon name="plus" size={14} /> Add to topic</button>
+            <button className="ghost-btn sm accent" onClick={() => act.decide(c.id, 'added')}>
+              <Icon name={availability === 'in trash' ? 'undo' : 'plus'} size={14} /> {availability === 'in trash' ? 'Restore and add to topic' : 'Add to topic'}
+            </button>
             <button className="ghost-btn sm" onClick={() => act.decide(c.id, 'held')}><Icon name="clock" size={14} /> Hold</button>
             <button className="ghost-btn sm" onClick={() => act.decide(c.id, 'excluded')}><Icon name="x" size={14} /> Not relevant</button>
           </>
@@ -138,10 +143,10 @@ export function Discover() {
           <div className="card">
             <h3>In this topic</h3>
             <ul className="in-topic">
-              {state.topicPaperIds.map((id) => (
+              {papersOfTopic(state, DEMO_TOPIC).map((id) => (
                 <li key={id}>
                   <span>{PAPERS[id].short}</span>
-                  {PAPERS[id].stored === 'abstract'
+                  {PAPERS[id].stored !== 'metadata'
                     ? <button className="link-btn" onClick={() => { act.setReader(id); act.openTopic(DEMO_TOPIC, 'read') }}>Read <Icon name="arrowRight" size={12} /></button>
                     : <small>metadata only</small>}
                 </li>

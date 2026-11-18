@@ -16,6 +16,7 @@ export const PAPERS: Record<string, Paper> = {
     year: 2021,
     venueSource: 'Imported PDF + OpenAlex',
     externalId: 'arXiv:2105.03011',
+    doi: '10.18653/v1/2021.naacl-main.365',
     stored: 'abstract',
     passages: abstract('qasper', [
       'Readers of academic research papers often read with the goal of answering specific questions.',
@@ -96,6 +97,17 @@ export const PAPERS: Record<string, Paper> = {
     stored: 'metadata',
     passages: [],
   },
+}
+
+PAPERS['qasper-import'] = {
+  ...PAPERS.qasper,
+  id: 'qasper-import',
+  short: 'QASPER (separate import)',
+  venueSource: 'Import metadata',
+  externalId: undefined,
+  doi: undefined,
+  stored: 'metadata',
+  passages: [],
 }
 
 const ABSTRACT_ONLY = 'Abstract only. The full text is not parsed in this library.'

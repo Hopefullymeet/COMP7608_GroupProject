@@ -1,5 +1,5 @@
-import { useStore, anyRunning, type Tab } from '../data/store'
-import { DEMO_TOPIC } from '../data/fixtures'
+import { useStore, anyRunning, papersOfTopic, type Tab } from '../data/store'
+import { DEMO_TOPIC, PAPERS } from '../data/fixtures'
 import { Icon, Spinner } from '../components/Icon'
 import { Discover } from './Discover'
 import { Read } from './Read'
@@ -18,6 +18,7 @@ export function TopicView({ topicId, tab }: { topicId: string; tab: Tab }) {
   const running = anyRunning(state)
   const session = state.sessions.find((s) => s.id === state.activeSessionId && s.topicId === topicId)
   const request = state.messages.find((m) => m.sessionId === session?.id && m.role === 'user')
+  const papers = papersOfTopic(state, topicId)
 
   return (
     <div className="topic">
@@ -40,7 +41,7 @@ export function TopicView({ topicId, tab }: { topicId: string; tab: Tab }) {
         <div className="head-meta">
           {topic.scripted && (
             <>
-              <span title="Papers in this topic"><Icon name="file" size={14} /> {state.topicPaperIds.length}</span>
+              <span title="Papers in this topic"><Icon name="file" size={14} /> {papers.length}</span>
               <span title="Saved notes"><Icon name="note" size={14} /> {state.noted.length}</span>
               <span title="Citations picked"><Icon name="quote" size={14} /> {state.cited.length}</span>
             </>
@@ -53,14 +54,22 @@ export function TopicView({ topicId, tab }: { topicId: string; tab: Tab }) {
 
       <div className="topic-body">
         {!topic.scripted ? (
-          request ? <section className="topic-request" aria-label="Research request">
+          request || papers.length > 0 ? <section className="topic-request" aria-label={request ? 'Research request' : 'Topic materials'}>
+            {request && <>
             <p className="eyebrow">{session?.title}</p>
             <h2>Research request</h2>
             <p className="request-text">{request.segments[0]?.text}</p>
             {!!session?.attachments?.length && <div className="dropped">
               {session.attachments.map((name, i) => <span className="chip" key={i}><Icon name="file" size={13} />{name}</span>)}
             </div>}
-            <p className="fine">Your topic and first session are saved in this workspace until refresh. Live research and file reading are coming later.</p>
+            <p className="fine">Your research request and attachments are available until refresh.</p>
+            </>}
+            {papers.length > 0 && <>
+              <h2>Papers in this topic</h2>
+              <ul className="topic-links">
+                {papers.map((id) => <li key={id}><button className="link-btn" onClick={() => act.navigate({ view: 'library', paperId: id })}>{PAPERS[id].title}</button></li>)}
+              </ul>
+            </>}
             {state.topics.some((t) => t.id === DEMO_TOPIC) && <button className="primary" onClick={() => act.enterTopic(DEMO_TOPIC)}>Explore the scripted demo</button>}
           </section> : <div className="empty-state">
             <Icon name="lock" size={22} />

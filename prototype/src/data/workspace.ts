@@ -9,10 +9,16 @@ export const LIBRARY_META: Record<string, LibraryMeta> = {
   qasper: {
     paperId: 'qasper', added: 'Nov 2', origin: 'Imported PDF', identity: 'arXiv:2105.03011 · matched by arXiv id',
     files: [
-      { name: 'dasigi-2021-qasper.pdf', role: 'Published version', detail: 'NAACL 2021 · used for evidence in this workspace' },
-      { name: 'arXiv:2105.03011', role: 'Preprint', detail: 'Linked as an earlier version, not stored as a file' },
+      { name: 'dasigi-2021-qasper.pdf', role: 'Published version', detail: 'NAACL 2021 · only the abstract is available to read here', href: 'https://aclanthology.org/2021.naacl-main.365.pdf' },
+      { name: 'arXiv:2105.03011', role: 'Preprint', detail: 'Linked as an earlier version, not stored as a file', href: 'https://arxiv.org/abs/2105.03011' },
     ],
     tags: ['dataset', 'full-text QA'], annotations: 3,
+  },
+  'qasper-import': {
+    paperId: 'qasper-import', added: 'Just now', origin: 'Imported PDF',
+    identity: 'Separate record · identifier unverified',
+    files: [{ name: 'QASPER paper (1).pdf', role: 'Imported version', detail: 'Text has not been reviewed' }],
+    tags: [], annotations: 0,
   },
   pubmedqa: {
     paperId: 'pubmedqa', added: 'Today', origin: 'Added from search', identity: 'arXiv:1909.06146 · matched by arXiv id',
@@ -49,7 +55,10 @@ export const SAMPLE_MEMBERSHIP: Record<string, string[]> = {
 export const DUPLICATE_REVIEW = {
   file: 'QASPER paper (1).pdf',
   paperId: 'qasper',
-  reason: 'Same title, authors and year as QASPER, but a different file hash. A hash match would prove the same file, not the same paper, and a mismatch does not prove a different one.',
+  separateId: 'qasper-import',
+  match: 'Title, authors and year match',
+  reason: 'The hashes differ. A hash identifies file contents; paper identity needs a separate decision.',
+  version: { name: 'QASPER paper (1).pdf', role: 'Imported version', detail: 'Linked during import review · text has not been reviewed' } satisfies LibraryMeta['files'][number],
 }
 
 // ---------- Citation check ----------

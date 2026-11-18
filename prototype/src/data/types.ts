@@ -17,8 +17,9 @@ export interface Paper {
   year: number
   venueSource: string
   externalId?: string
+  doi?: string
   /** What the prototype library holds for this paper. */
-  stored: 'abstract' | 'metadata'
+  stored: 'full-text' | 'abstract' | 'metadata'
   passages: Passage[]
 }
 
@@ -156,8 +157,9 @@ export type TaskEvent =
 
 export interface FileVersion {
   name: string
-  role: 'Published version' | 'Preprint' | 'Abstract only' | 'Metadata only'
+  role: 'Published version' | 'Preprint' | 'Imported version' | 'Abstract only' | 'Metadata only'
   detail: string
+  href?: string
 }
 
 export interface LibraryMeta {
@@ -173,7 +175,6 @@ export interface LibraryMeta {
 export interface TrashItem {
   paperId: string
   topics: string[]
-  clearExcerpts: boolean
   when: string
 }
 

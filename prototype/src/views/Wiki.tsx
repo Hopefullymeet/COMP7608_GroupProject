@@ -1,4 +1,4 @@
-import { useStore } from '../data/store'
+import { sourceStatus, useStore } from '../data/store'
 import { EVIDENCE, PAPERS } from '../data/fixtures'
 import { Icon, Spinner } from '../components/Icon'
 import { PageHead } from '../components/PageHead'
@@ -125,7 +125,7 @@ export function Wiki() {
             : notes.map((e) => (
               <div key={e.id} className="note-item">
                 <p>“{e.quote}”</p>
-                <small>{PAPERS[e.paperId].short} · p. 1</small>
+                <small>{PAPERS[e.paperId].short} · p. 1{sourceStatus(state, e.paperId) !== 'available' && ' · historical note'}</small>
               </div>
             ))}
         </nav>
