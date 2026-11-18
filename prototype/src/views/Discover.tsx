@@ -1,5 +1,6 @@
 import { papersOfTopic, sourceStatus, useStore } from '../data/store'
 import { DEMO_TOPIC, PAPERS } from '../data/fixtures'
+import { enabledSources, SOURCE_NAMES } from '../data/serviceSettings'
 import { Icon, Spinner } from '../components/Icon'
 import type { AngleStatus, Candidate, Decision } from '../data/types'
 
@@ -10,6 +11,8 @@ function CandidateCard({ c }: { c: Candidate }) {
   const { state, act } = useStore()
   const p = PAPERS[c.paperId]
   const availability = sourceStatus(state, c.paperId)
+  const latest = state.runOrder.map((id) => state.runs[id]).find((run) => run.task === 'Discovery')
+  const previousSource = latest?.configuration && !latest.configuration.sources.some((id) => SOURCE_NAMES[id] === c.source)
   return (
     <article className={`cand ${c.decision}`} data-testid={`cand-${c.paperId}`}>
       <div className="cand-main">
@@ -17,6 +20,7 @@ function CandidateCard({ c }: { c: Candidate }) {
           {c.round > 1 && <span className="tag accent">New in round {c.round}</span>}
           <span className="tag">{c.readLevel}</span>
           <span className="tag quiet">via {c.source}</span>
+          {previousSource && <span className="tag quiet">Earlier search</span>}
         </div>
         <h3>{p.title}</h3>
         <p className="byline">
@@ -57,7 +61,8 @@ export function Discover() {
   const latest = discoveryRuns[0]
   const lastStep = latest?.steps[latest.steps.length - 1]
   const feedback = state.candidates.filter((c) => c.decision === 'excluded').length
-  const canRefine = d.status === 'done' && d.round < 2
+  const sourceChanged = latest?.configuration?.sources.join(',') !== enabledSources(state.settings).join(',')
+  const canRefine = d.status === 'done' && d.round < 2 && !d.interrupted && !sourceChanged
 
   return (
     <div className="discover scroll">
@@ -74,6 +79,9 @@ export function Discover() {
         </div>
         <div className="disc-actions">
           {d.status === 'idle' && <button className="primary" onClick={() => act.runDiscovery(d.question)}><Icon name="compass" size={15} /> Find papers</button>}
+          {d.status === 'done' && (d.interrupted || sourceChanged) && (
+            <button className="primary" onClick={() => act.runDiscovery(d.question)}><Icon name="compass" size={15} /> Search again</button>
+          )}
           {canRefine && (
             <button className="primary" disabled={feedback === 0} onClick={() => act.refineDiscovery()}
               title={feedback === 0 ? 'Mark at least one candidate as Not relevant first' : undefined}>
@@ -102,7 +110,7 @@ export function Discover() {
                 </div>
                 {items.map((c) => <CandidateCard key={c.id} c={c} />)}
                 {a.status === 'gap' && (
-                  <div className="gap-note"><Icon name="alert" size={15} /> No candidate passed screening for this angle. It is reported as a gap rather than filled with weak matches.</div>
+                  <div className="gap-note"><Icon name="alert" size={15} /> {a.gapReason ?? 'No candidate passed screening for this angle.'}</div>
                 )}
                 {a.status === 'queued' && <div className="skeleton" />}
               </div>
@@ -143,14 +151,19 @@ export function Discover() {
           <div className="card">
             <h3>In this topic</h3>
             <ul className="in-topic">
-              {papersOfTopic(state, DEMO_TOPIC).map((id) => (
-                <li key={id}>
-                  <span>{PAPERS[id].short}</span>
-                  {PAPERS[id].stored !== 'metadata'
-                    ? <button className="link-btn" onClick={() => { act.setReader(id); act.openTopic(DEMO_TOPIC, 'read') }}>Read <Icon name="arrowRight" size={12} /></button>
-                    : <small>metadata only</small>}
+              {papersOfTopic(state, DEMO_TOPIC).map((id) => {
+                const paper = PAPERS[id]
+                const wikiPage = state.wiki.pages.find((p) => p.paperId === id)
+                return <li key={id}>
+                  <span>{paper.title}</span>
+                  <div className="in-topic-actions">
+                    {paper.stored !== 'metadata'
+                      ? <button className="link-btn" aria-label={'Read ' + paper.title} onClick={() => { act.setReader(id); act.openTopic(DEMO_TOPIC, 'read') }}>Read <Icon name="arrowRight" size={12} /></button>
+                      : <small>Metadata only</small>}
+                    {wikiPage && <button className="link-btn quiet" aria-label={'Open Wiki page for ' + paper.title} onClick={() => act.openWikiPage(wikiPage.id)}>Wiki</button>}
+                  </div>
                 </li>
-              ))}
+              })}
             </ul>
           </div>
         </aside>

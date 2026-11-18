@@ -9,6 +9,8 @@
   --ink-4: #b9ada3;
   --line: #e6dcd2;
   --line-2: #d8cbbf;
+  --scroll-thumb: rgb(105 93 83 / 22%);
+  --scroll-thumb-hover: rgb(105 93 83 / 40%);
   --accent: #a8432b;
   --accent-hover: #933a25;
   --accent-soft: #f5e0d7;
@@ -27,7 +29,15 @@
   --r: 10px;
 }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+@supports selector(::-webkit-scrollbar) {
+  * { scrollbar-width: auto; scrollbar-color: auto; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border: 1px solid transparent; border-radius: 999px; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:active { background-color: var(--scroll-thumb-hover); }
+  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-button { display: none; }
+}
 html, body, #root { height: 100%; margin: 0; }
 body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
@@ -235,7 +245,8 @@ code { font: 12px/1.45 var(--mono); }
 .coverage .ok { color: var(--ok); }
 .coverage .gap { color: var(--warn); }
 .in-topic { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13.5px; }
-.in-topic li { display: flex; justify-content: space-between; align-items: center; }
+.in-topic li { display: grid; gap: 3px; }
+.in-topic-actions { display: flex; align-items: center; gap: 10px; }
 .in-topic small { color: var(--ink-3); font-size: 12px; }
 
 /* ---------- read ---------- */

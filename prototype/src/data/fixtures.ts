@@ -1,7 +1,7 @@
 import type { EvidenceAnchor, Paper, Passage, Session, Topic } from './types'
 
-// Abstract sentences are transcribed from the published abstracts. Metadata-only
-// papers carry no text. Everything else (counts, timings, tokens) is mock data.
+// Passages are excerpts from the linked publications or preprints. Metadata-only
+// papers carry no text. Workspace activity and task timings are mock data.
 
 const abstract = (paperId: string, texts: string[]): Passage[] =>
   texts.map((text, i) => ({ id: `${paperId}-p${i + 1}`, section: 'Abstract', page: 1, text }))
@@ -57,12 +57,56 @@ export const PAPERS: Record<string, Paper> = {
     year: 2020,
     venueSource: 'Semantic Scholar',
     externalId: 'arXiv:2004.14974',
+    doi: '10.18653/v1/2020.emnlp-main.609',
     stored: 'abstract',
     passages: abstract('scifact', [
       'We introduce scientific claim verification, a new task to select abstracts from the research literature containing evidence that SUPPORTS or REFUTES a given scientific claim, and to identify rationales justifying each decision.',
       'To study this task, we construct SciFact, a dataset of 1.4K expert-written scientific claims paired with evidence-containing abstracts annotated with labels and rationales.',
       'We develop baseline models for SciFact, and demonstrate that simple domain adaptation techniques substantially improve performance compared to models trained on Wikipedia or political news.',
     ]),
+  },
+  multivers: {
+    id: 'multivers',
+    short: 'MultiVerS',
+    title: 'MultiVerS: Improving scientific claim verification with weak supervision and full-document context',
+    authors: ['David Wadden', 'Kyle Lo', 'Lucy Lu Wang', 'Arman Cohan', 'Iz Beltagy', 'Hannaneh Hajishirzi'],
+    venue: 'Findings of NAACL',
+    year: 2022,
+    venueSource: 'ACL Anthology',
+    doi: '10.18653/v1/2022.findings-naacl.6',
+    stored: 'excerpt',
+    passages: [
+      { id: 'multivers-p1', section: 'Abstract', page: 1, text: 'based on a shared encoding of the claim and full document context' },
+      { id: 'multivers-p3', section: '2.2 Scientific claim verification datasets', page: 3, text: 'We therefore perform experiments on the COVIDFact, HealthVer, and SCIFACT datasets.' },
+    ],
+  },
+  'rag-lewis': {
+    id: 'rag-lewis',
+    short: 'Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks',
+    title: 'Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks',
+    authors: ['Patrick Lewis', 'Ethan Perez', 'Aleksandra Piktus', 'Fabio Petroni', 'Vladimir Karpukhin', 'Naman Goyal', 'Heinrich Küttler', 'Mike Lewis', 'Wen-tau Yih', 'Tim Rocktäschel', 'Sebastian Riedel', 'Douwe Kiela'],
+    venue: 'NeurIPS',
+    year: 2020,
+    venueSource: 'NeurIPS Proceedings',
+    externalId: 'arXiv:2005.11401',
+    stored: 'excerpt',
+    passages: [
+      { id: 'rag-lewis-p1', section: 'Abstract', page: 1, text: 'a dense vector index of Wikipedia' },
+      { id: 'rag-lewis-p3', section: '2.2 Retriever', page: 3, text: 'a pre-trained bi-encoder from DPR to initialize our retriever' },
+    ],
+  },
+  dpr: {
+    id: 'dpr',
+    short: 'Dense Passage Retrieval for Open-Domain Question Answering',
+    title: 'Dense Passage Retrieval for Open-Domain Question Answering',
+    authors: ['Vladimir Karpukhin', 'Barlas Oğuz', 'Sewon Min', 'Patrick Lewis', 'Ledell Wu', 'Sergey Edunov', 'Danqi Chen', 'Wen-tau Yih'],
+    venue: 'EMNLP',
+    year: 2020,
+    venueSource: 'ACL Anthology',
+    externalId: 'arXiv:2004.04906',
+    doi: '10.18653/v1/2020.emnlp-main.550',
+    stored: 'abstract',
+    passages: abstract('dpr', ['embeddings are learned from a small number of questions and passages by a simple dual-encoder framework']),
   },
   s2orc: {
     id: 's2orc',
@@ -111,6 +155,7 @@ PAPERS['qasper-import'] = {
 }
 
 const ABSTRACT_ONLY = 'Abstract only. The full text is not parsed in this library.'
+const EXCERPT_ONLY = 'Selected excerpt. The full text is not parsed in this library.'
 
 export const EVIDENCE: Record<string, EvidenceAnchor> = {
   'qasper-scale': { id: 'qasper-scale', paperId: 'qasper', passageId: 'qasper-p5', quote: '5,049 questions over 1,585 Natural Language Processing papers', scope: ABSTRACT_ONLY },
@@ -123,14 +168,19 @@ export const EVIDENCE: Record<string, EvidenceAnchor> = {
   'pubmed-long': { id: 'pubmed-long', paperId: 'pubmedqa', passageId: 'pubmedqa-p4', quote: 'a long answer, which is the conclusion of the abstract', scope: ABSTRACT_ONLY },
   'pubmed-result': { id: 'pubmed-result', paperId: 'pubmedqa', passageId: 'pubmedqa-p6', quote: 'achieves 68.1% accuracy, compared to single human performance of 78.0% accuracy', scope: ABSTRACT_ONLY },
   'scifact-task': { id: 'scifact-task', paperId: 'scifact', passageId: 'scifact-p1', quote: 'SUPPORTS or REFUTES a given scientific claim, and to identify rationales justifying each decision', scope: ABSTRACT_ONLY },
+  'multivers-context': { id: 'multivers-context', paperId: 'multivers', passageId: 'multivers-p1', quote: PAPERS.multivers.passages[0].text, scope: EXCERPT_ONLY },
+  'multivers-datasets': { id: 'multivers-datasets', paperId: 'multivers', passageId: 'multivers-p3', quote: PAPERS.multivers.passages[1].text, scope: EXCERPT_ONLY },
+  'rag-index': { id: 'rag-index', paperId: 'rag-lewis', passageId: 'rag-lewis-p1', quote: PAPERS['rag-lewis'].passages[0].text, scope: EXCERPT_ONLY },
+  'rag-retriever': { id: 'rag-retriever', paperId: 'rag-lewis', passageId: 'rag-lewis-p3', quote: PAPERS['rag-lewis'].passages[1].text, scope: EXCERPT_ONLY },
+  'dpr-encoders': { id: 'dpr-encoders', paperId: 'dpr', passageId: 'dpr-p1', quote: PAPERS.dpr.passages[0].text, scope: ABSTRACT_ONLY },
 }
 
 export const DEMO_TOPIC = 't-evidence'
 
 // Only DEMO_TOPIC is scripted; the rest are sample rows that show how lists behave.
 export const TOPICS: Topic[] = [
-  { id: DEMO_TOPIC, title: 'Evidence in scientific QA', goal: 'Which datasets test QA over research papers, and how do they handle evidence?', paperCount: 1, updated: '2 hours ago', scripted: true },
-  { id: 't-rag', title: 'Retrieval-augmented generation', goal: 'Compare retrieval strategies for long documents.', paperCount: 5, updated: 'Yesterday', scripted: false },
+  { id: DEMO_TOPIC, title: 'Evidence in scientific QA', goal: 'Which datasets test QA over research papers, and how do they handle evidence?', paperCount: 3, updated: '2 hours ago', scripted: true },
+  { id: 't-rag', title: 'Retrieval-augmented generation', goal: 'How does passage retrieval support generation in open-domain question answering?', paperCount: 2, updated: 'Yesterday', scripted: false },
   { id: 't-agents', title: 'Multi-agent collaboration', goal: 'How do agent teams split research tasks?', paperCount: 2, updated: 'Nov 5', scripted: false },
   { id: 't-long', title: 'Long-context evaluation', goal: 'What do long-context benchmarks actually measure?', paperCount: 4, updated: 'Oct 30', scripted: false },
   { id: 't-cite', title: 'Citation recommendation', goal: 'How are citation suggestions checked against a draft?', paperCount: 3, updated: 'Oct 28', scripted: false },

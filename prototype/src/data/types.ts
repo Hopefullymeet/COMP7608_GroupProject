@@ -1,3 +1,5 @@
+import type { RunConfiguration, Usage } from './serviceSettings'
+
 // Domain objects, named after the Technical Book (Topic, Session, Paper, Candidate,
 // EvidenceAnchor, Comparison, AgentStep). The UI only reads these through the store.
 
@@ -19,7 +21,7 @@ export interface Paper {
   externalId?: string
   doi?: string
   /** What the prototype library holds for this paper. */
-  stored: 'full-text' | 'abstract' | 'metadata'
+  stored: 'full-text' | 'abstract' | 'excerpt' | 'metadata'
   passages: Passage[]
 }
 
@@ -59,6 +61,7 @@ export interface SearchAngle {
   query: string
   status: AngleStatus
   found: number
+  gapReason?: string
 }
 
 export type Decision = 'pending' | 'added' | 'held' | 'excluded'
@@ -91,11 +94,16 @@ export type RunStatus = 'running' | 'done' | 'partial'
 
 export interface AgentRun {
   id: string
+  manuscriptId?: string
   task: 'Discovery' | 'Question' | 'Comparison' | 'Citation check' | 'Wiki draft'
   label: string
   status: RunStatus
   steps: AgentStep[]
   summary?: string
+  configuration?: RunConfiguration
+  estimate?: Usage
+  usage?: Usage
+  limit?: string
 }
 
 export interface AnswerSegment {
@@ -141,8 +149,8 @@ export type TaskEvent =
   | { type: 'message'; message: ChatMessage }
   | { type: 'text'; messageId: string; index: number; chunk: string; evidenceId?: string; tone?: 'scope' }
   | { type: 'row'; row: ComparisonRow }
-  | { type: 'finding'; finding: Finding }
-  | { type: 'wiki-proposal'; proposal: WikiProposal }
+  | { type: 'finding'; runId: string; finding: Finding }
+  | { type: 'wiki-proposal'; runId: string; proposal: WikiProposal }
   | {
       type: 'done'
       runId: string
@@ -151,6 +159,7 @@ export type TaskEvent =
       coverage?: Coverage
       verdict?: string
       messageId?: string
+      interrupted?: boolean
     }
 
 // ---------- Library ----------
@@ -187,6 +196,7 @@ export interface SubClaim {
   text: string
   status: ClaimStatus
   evidenceId?: string
+  cite?: string
   note: string
 }
 
@@ -201,8 +211,25 @@ export interface Finding {
   sentenceId: string
   claims: SubClaim[]
   /** Citation suggestion for an uncited sentence: found in source, awaiting the user's choice. */
-  suggestion?: { evidenceIds: string[]; cite: string; scope: string }
+  suggestions?: CitationSuggestion[]
+  sources?: { cite: string; evidenceId: string; note: string }[]
   rewrite?: { text: string; cites: string[] }
+}
+
+export interface CitationSuggestion {
+  evidenceId: string
+  cite: string
+  scope: string
+}
+
+export type FindingDecision = 'accepted' | 'rejected' | 'deferred'
+
+export interface DraftSnapshot {
+  version: number
+  sentences: DraftSentence[]
+  findings: Record<string, Finding>
+  recheck: string[]
+  reviewed: Partial<Record<string, { decision: FindingDecision; finding: Finding }>>
 }
 
 // ---------- Evidence wiki ----------
@@ -212,25 +239,35 @@ export interface WikiStatement {
   text: string
   evidenceIds: string[]
   author: 'You' | 'Agent draft' | 'Saved answer'
+  excerpt?: true
 }
 
 export interface WikiRelation {
   id: string
-  from: string
+  fromPaperId: string
   type: 'extends' | 'contrasts with' | 'uses' | 'not comparable with'
-  to: string
+  toPaperId: string
   evidenceIds: string[]
   status: 'verified' | 'unverified' | 'disputed'
+}
+
+export interface WikiQuestion {
+  id: string
+  kind: 'disagreement' | 'comparison-gap'
+  claim: string
+  sides: { text: string; evidenceId: string }[]
+  question: string
 }
 
 export interface WikiPage {
   id: string
   title: string
-  kind: 'Concept' | 'Dataset'
+  kind: 'Concept' | 'Dataset' | 'Paper'
+  paperId?: string
   summary: string
   statements: WikiStatement[]
   relations: WikiRelation[]
-  disputes: { claim: string; sides: { text: string; evidenceId: string }[]; question: string }[]
+  questions: WikiQuestion[]
   revisions: { when: string; who: string; what: string }[]
 }
 
@@ -238,5 +275,5 @@ export interface WikiProposal {
   page: WikiPage
   /** Additions the draft also makes to existing pages. */
   edits: { pageId: string; relations: WikiRelation[] }[]
-  inputs: string[]
+  inputs: { noteIds: string[]; comparisonEvidenceIds: string[] }
 }

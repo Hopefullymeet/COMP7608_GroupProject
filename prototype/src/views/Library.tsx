@@ -1,15 +1,19 @@
-import { useCallback, useId, useRef, useState } from 'react'
+import { useState } from 'react'
 import { libraryFiles, topicsOfPaper, useStore, type State } from '../data/store'
 import { DEMO_TOPIC, EVIDENCE, PAPERS } from '../data/fixtures'
-import { CITE_KEYS, DUPLICATE_REVIEW, LIBRARY_META } from '../data/workspace'
+import { MANUSCRIPTS, DUPLICATE_REVIEW, LIBRARY_META } from '../data/workspace'
 import type { Paper } from '../data/types'
 import { Icon } from '../components/Icon'
 import { Dialog, PageHead } from '../components/PageHead'
-import { plural, scrollWithin } from '../components/util'
+import { TopicPicker } from '../components/TopicPicker'
+import { plural } from '../components/util'
 
 const MEMBERSHIP_FILTERS = [['all', 'All'], ['in-topic', 'In a topic'], ['unfiled', 'Unfiled']] as const
 const TEXT_LABEL: Record<Paper['stored'], string> = {
-  'full-text': 'Full text', abstract: 'Abstract only', metadata: 'Metadata only',
+  'full-text': 'Full text', abstract: 'Abstract only', excerpt: 'Selected excerpts', metadata: 'Metadata only',
+}
+const READING_LABEL: Record<Exclude<Paper['stored'], 'metadata'>, string> = {
+  'full-text': 'full text', abstract: 'abstract', excerpt: 'excerpts',
 }
 
 function impactOf(s: State, paperId: string) {
@@ -20,7 +24,8 @@ function impactOf(s: State, paperId: string) {
     citations: s.cited.filter(uses),
     comparison: s.comparison.rows.filter((r) => r.cells.some((c) => c.evidenceId && uses(c.evidenceId))),
     wiki: s.wiki.pages.flatMap((page) => page.statements.filter((st) => st.evidenceIds.some(uses)).map((statement) => ({ page, statement }))),
-    draft: s.check.sentences.flatMap((sentence, index) => sentence.cites.some((key) => CITE_KEYS[key] === paperId) ? [{ sentence, index }] : []),
+    draft: MANUSCRIPTS.flatMap(({ id, name, citeKeys }) => s.check.manuscripts[id].sentences.flatMap((sentence, index) =>
+      sentence.cites.some((key) => citeKeys[key] === paperId) ? [{ sentence, index, name }] : [])),
   }
 }
 
@@ -33,7 +38,7 @@ function Impact({ paperId }: { paperId: string }) {
     { label: 'Picked citations', entries: records.citations.map((id) => EVIDENCE[id].quote) },
     { label: 'Comparison rows', entries: records.comparison.map((r) => r.dimension) },
     { label: 'Wiki statements', entries: records.wiki.map(({ page, statement }) => page.title + ' · ' + statement.text) },
-    { label: 'Draft sentences', entries: records.draft.map(({ sentence, index }) => (index + 1) + '. ' + sentence.text) },
+    { label: 'Draft sentences', entries: records.draft.map(({ sentence, index, name }) => name + ' · ' + (index + 1) + '. ' + sentence.text) },
   ]
   return (
     <div className="impact">
@@ -98,31 +103,12 @@ function Detail({ paperId, onRead, onDelete, onUnlink }: {
   paperId: string; onRead: () => void; onDelete: () => void; onUnlink: (topicId: string) => void
 }) {
   const { state, act } = useStore()
-  const [topicQuery, setTopicQuery] = useState('')
-  const [topicsOpen, setTopicsOpen] = useState(false)
-  const pickerId = useId()
-  const pickerButton = useRef<HTMLButtonElement>(null)
-  const focusTopicSearch = useCallback((input: HTMLInputElement | null) => {
-    if (!input) return
-    input.focus({ preventScroll: true })
-    const body = input.closest('.page-body')
-    if (body && input.getBoundingClientRect().bottom > body.getBoundingClientRect().bottom) {
-      scrollWithin(input, '.page-body', 'center')
-    }
-  }, [])
   const p = PAPERS[paperId]
   const meta = LIBRARY_META[paperId]
   const files = libraryFiles(state, paperId)
   const topics = state.topics.filter((t) => topicsOfPaper(state, paperId).includes(t.id))
   const choices = state.topics.filter((t) => !topicsOfPaper(state, paperId).includes(t.id))
-  const matchingTopics = choices.filter((t) => t.title.toLowerCase().includes(topicQuery.trim().toLowerCase()))
   const i = impactOf(state, paperId)
-
-  function closePicker() {
-    setTopicsOpen(false)
-    setTopicQuery('')
-    pickerButton.current?.focus({ preventScroll: true })
-  }
 
   return (
     <aside className="lib-detail card">
@@ -131,7 +117,7 @@ function Detail({ paperId, onRead, onDelete, onUnlink }: {
       <p className="byline">{p.authors.join(', ')}</p>
       <div className="lib-reading-actions">
         <span className="tag">{TEXT_LABEL[p.stored]}</span>
-        {p.stored !== 'metadata' && <button className="link-btn" onClick={onRead}><Icon name="book" size={14} /> Read {p.stored === 'abstract' ? 'abstract' : 'full text'}</button>}
+        {p.stored !== 'metadata' && <button className="link-btn" onClick={onRead}><Icon name="book" size={14} /> Read {READING_LABEL[p.stored]}</button>}
       </div>
 
       <h3>Identity</h3>
@@ -162,33 +148,7 @@ function Detail({ paperId, onRead, onDelete, onUnlink }: {
           ))}
         </ul>
       )}
-      {choices.length > 0 && <button ref={pickerButton} className="link-btn lib-start"
-        aria-expanded={topicsOpen} aria-controls={topicsOpen ? pickerId : undefined}
-        onClick={() => { if (topicsOpen) closePicker(); else setTopicsOpen(true) }}>
-        <Icon name="plus" size={14} /> Add to topic
-      </button>}
-      {choices.length > 0 && topicsOpen && (
-        <div className="topic-picker" id={pickerId} onKeyDown={(e) => {
-          if (e.key === 'Escape') { e.stopPropagation(); closePicker() }
-        }}>
-          <label className="field-search">
-            <Icon name="search" size={15} />
-            <input ref={focusTopicSearch} value={topicQuery} onChange={(e) => setTopicQuery(e.target.value)}
-              placeholder="Search topics…" aria-label="Search topics to add" />
-          </label>
-          {matchingTopics.length ? (
-            <ul className="topic-picker-results" aria-label="Matching topics">
-              {matchingTopics.map((t) => (
-                <li key={t.id}>
-                  <button aria-label={'Add to ' + t.title} onClick={() => { act.linkPaper(paperId, t.id); closePicker() }}>
-                    <span>{t.title}</span><Icon name="plus" size={14} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : <p className="topic-picker-empty" role="status">No matching topics.</p>}
-        </div>
-      )}
+      {choices.length > 0 && <TopicPicker topics={choices} onSelect={(topicId) => act.linkPaper(paperId, topicId)} />}
 
       <h3>Used in</h3>
       <div className="usage-grid">
@@ -353,8 +313,13 @@ export function Library() {
       }} />}
       {dialog === 'reading' && paper && <Dialog title={paper.title} onClose={() => setDialog(null)}>
         <p className="byline">{paper.authors.join(', ')}</p>
-        <h3>{paper.stored === 'abstract' ? 'Abstract' : 'Full text'}</h3>
-        <div className="lib-abstract">{paper.passages.map((passage) => <p key={passage.id}>{passage.text}</p>)}</div>
+        <h3>{paper.stored === 'abstract' ? 'Abstract' : TEXT_LABEL[paper.stored]}</h3>
+        <div className="lib-abstract">{paper.passages.map((passage) => (
+          <div key={passage.id}>
+            {paper.stored === 'excerpt' && <b>{passage.section} · PDF p. {passage.page}</b>}
+            <p>{passage.text}</p>
+          </div>
+        ))}</div>
         {topicsOfPaper(state, paper.id).includes(DEMO_TOPIC) && <div className="dialog-actions">
           <button className="ghost-btn" onClick={() => { act.setReader(paper.id); act.enterTopic(DEMO_TOPIC) }}>Open in Read &amp; ask</button>
         </div>}

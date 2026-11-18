@@ -1,5 +1,6 @@
 import type { ScriptItem } from './runtime'
 import type { AgentStep, AnswerSegment, Candidate, SearchAngle, StepKind, TaskEvent } from './types'
+import { SOURCE_NAMES, type SearchSourceId } from './serviceSettings'
 
 // Scripted agent behaviour for the demo topic. Each script is what a live
 // agent run would emit: plan, tool calls, observations, decisions, output.
@@ -32,7 +33,7 @@ export const ANGLES = {
   claims: { id: 'a-claims', label: 'Scientific claim verification', query: 'scientific claim verification dataset' },
 }
 
-export function discoveryScript(runId: string, question: string): ScriptItem[] {
+function initialDiscovery(runId: string, question: string): ScriptItem[] {
   const { fulltext, evidence, claims } = ANGLES
   return [
     at(0, { type: 'run', run: { id: runId, task: 'Discovery', label: question, status: 'running', steps: [] } }),
@@ -87,7 +88,7 @@ export function discoveryScript(runId: string, question: string): ScriptItem[] {
   ]
 }
 
-export function refineScript(runId: string, feedback: string[]): ScriptItem[] {
+function refineDiscovery(runId: string, feedback: string[]): ScriptItem[] {
   const { fulltext, evidence, claims } = ANGLES
   const named = feedback.length ? feedback.join(' and ') : 'some candidates'
   return [
@@ -113,6 +114,69 @@ export function refineScript(runId: string, feedback: string[]): ScriptItem[] {
     at(400, { type: 'done', runId, status: 'done', summary: '1 new candidate. All three angles now have a match.',
       coverage: { covered: [fulltext.label, evidence.label, claims.label], gaps: ['Not searched: cross-document QA over many papers'] } }),
   ]
+}
+
+const ARXIV_MATCH: Record<string, { paperId: string; reason: string }> = {
+  [ANGLES.fulltext.id]: { paperId: 'qasper', reason: 'This benchmark uses information-seeking questions over research papers.' },
+  [ANGLES.evidence.id]: { paperId: 'pubmedqa', reason: 'Each answer has a long-form justification drawn from an abstract.' },
+  [ANGLES.claims.id]: { paperId: 'scifact', reason: 'This benchmark pairs scientific claims with supporting or refuting rationales.' },
+}
+
+export function discoveryScript(
+  runId: string, question: string, sources: SearchSourceId[], refinement?: { feedback: string[]; angles: SearchAngle[] },
+): ScriptItem[] {
+  const script = refinement ? refineDiscovery(runId, refinement.feedback) : initialDiscovery(runId, question)
+  const originalSources: SearchSourceId[] = refinement ? ['s2'] : ['openalex', 's2', 'openalex']
+  if (originalSources.every((id) => sources.includes(id))
+    && (!refinement || [ANGLES.fulltext, ANGLES.evidence].every((a) => refinement.angles.some((prior) => prior.id === a.id && prior.status === 'covered')))) return script
+
+  const adjusted: ScriptItem[] = []
+  const results = new Map((refinement?.angles ?? []).map((a) => [a.id, a]))
+  let sourceIndex = 0
+  let skipAngle = false
+  for (const item of script) {
+    const event = item.event
+    if (event.type === 'angle' && event.angle.status === 'searching') {
+      const source = originalSources[sourceIndex++]
+      skipAngle = !sources.includes(source)
+      if (skipAngle) {
+        const a = event.angle
+        if (sources.includes('arxiv')) {
+          const match = ARXIV_MATCH[a.id]
+          adjusted.push(item, at(200, step(runId, 'tool', `Search arXiv: ${a.label}`, { call: `search.arxiv(query="${a.query}")`, ms: 900 })))
+          adjusted.push(at(600, candidate({ id: 'c-' + match.paperId, ...match, angleId: a.id,
+            round: refinement ? 2 : 1, decision: 'pending', readLevel: 'Abstract read', source: 'arXiv' })))
+          const result: SearchAngle = { ...a, status: 'covered', found: 1 }
+          adjusted.push(at(200, angle(result)))
+          results.set(a.id, result)
+        } else {
+          const reason = SOURCE_NAMES[source] + ' is disabled for this run.'
+          const result: SearchAngle = { ...a, status: 'gap', gapReason: reason }
+          adjusted.push(at(200, step(runId, 'observe', `Skipped ${a.label}`, { detail: reason })), at(0, angle(result)))
+          results.set(a.id, result)
+        }
+        continue
+      }
+    }
+    if (event.type === 'angle' && (event.angle.status === 'covered' || event.angle.status === 'gap')) {
+      if (skipAngle) {
+        skipAngle = false
+        continue
+      }
+      results.set(event.angle.id, event.angle)
+    }
+    if (skipAngle || (event.type === 'step' && event.step.kind === 'decide')) continue
+    if (event.type === 'done') {
+      const angles = [...results.values()]
+      const covered = angles.filter((a) => a.status === 'covered').map((a) => a.label)
+      const gaps = angles.filter((a) => a.status !== 'covered').map((a) => a.label + ' · ' + (a.gapReason ?? 'No candidate passed screening.'))
+      adjusted.push(at(item.delay, { ...event, status: gaps.length ? 'partial' : 'done',
+        summary: `Search covered ${covered.length} of 3 angles using the enabled sources.`, coverage: { covered, gaps } }))
+    } else {
+      adjusted.push(item)
+    }
+  }
+  return adjusted
 }
 
 export interface ScriptedQuestion {

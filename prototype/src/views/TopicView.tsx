@@ -67,7 +67,13 @@ export function TopicView({ topicId, tab }: { topicId: string; tab: Tab }) {
             {papers.length > 0 && <>
               <h2>Papers in this topic</h2>
               <ul className="topic-links">
-                {papers.map((id) => <li key={id}><button className="link-btn" onClick={() => act.navigate({ view: 'library', paperId: id })}>{PAPERS[id].title}</button></li>)}
+                {papers.map((id) => {
+                  const wikiPage = state.wiki.pages.find((p) => p.paperId === id)
+                  return <li key={id}>
+                    <button className="link-btn" onClick={() => act.navigate({ view: 'library', paperId: id })}>{PAPERS[id].title}</button>
+                    {wikiPage && <button className="link-btn quiet" aria-label={'Open Wiki page for ' + PAPERS[id].title} onClick={() => act.openWikiPage(wikiPage.id)}>Wiki</button>}
+                  </li>
+                })}
               </ul>
             </>}
             {state.topics.some((t) => t.id === DEMO_TOPIC) && <button className="primary" onClick={() => act.enterTopic(DEMO_TOPIC)}>Explore the scripted demo</button>}

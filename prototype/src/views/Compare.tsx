@@ -32,13 +32,15 @@ export function Compare() {
           <p className="muted-text">How do the two datasets set up evidence-grounded QA, and can their results be compared?</p>
         </div>
         <div className="disc-actions">
-          {cmp.status === 'idle' && <button className="primary" onClick={() => act.runComparison()}><Icon name="columns" size={15} /> Compare papers</button>}
+          {ready && (cmp.status === 'idle' || (cmp.status === 'done' && !cmp.verdict)) &&
+            <button className="primary" onClick={() => act.runComparison()}><Icon name="columns" size={15} /> {cmp.status === 'idle' ? 'Compare papers' : 'Run comparison again'}</button>}
           {cmp.status === 'running' && <span className="status-line"><Spinner /> {lastStep?.title ?? 'Planning…'}</span>}
           {run && <button className="link-btn" onClick={() => act.showTrace(true, run.id)}>{run.steps.length} steps · view trace</button>}
         </div>
       </section>
 
       {!ready && <p className="hint">Past comparison · one or more sources are no longer in this topic.</p>}
+      {!cmp.verdict && cmp.summary && <p className="hint">{cmp.summary}</p>}
       {cmp.verdict && (
         <div className="verdict">
           <Icon name="flag" size={16} />

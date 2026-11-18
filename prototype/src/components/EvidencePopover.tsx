@@ -63,7 +63,7 @@ export function EvidencePopover() {
     <div ref={ref} className="evidence" role="dialog" aria-label="Evidence"
       style={{ width: W, top: pos?.top ?? -9999, left: pos?.left ?? -9999, visibility: pos ? 'visible' : 'hidden' }}>
       <div className="ev-head">
-        <span>{paper.short} · {passage?.section} · PDF p. {passage?.page}</span>
+        <span>{state.route.view === 'wiki' ? paper.title : paper.short} · {passage?.section} · PDF p. {passage?.page}</span>
         <button className="icon-btn sm" onClick={() => act.closeEvidence()} aria-label="Close"><Icon name="x" size={14} /></button>
       </div>
       {!cleared && <blockquote>“{ev.quote}”</blockquote>}

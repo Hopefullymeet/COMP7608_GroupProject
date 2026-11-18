@@ -65,7 +65,7 @@ function Chat() {
 
   const send = (t: string) => {
     if (!t.trim() || state.qaRunning) return
-    act.ask(t.trim())
+    if (act.ask(t.trim()) === false) return
     setText('')
   }
 
@@ -179,19 +179,27 @@ function Reader() {
           <h1>{paper.title}</h1>
           <p className="paper-authors">{paper.authors.join(' · ')}</p>
           <div className="paper-meta">
-            <span><Icon name="file" size={13} /> {paper.stored === 'full-text' ? 'Full text' : paper.stored === 'abstract' ? 'Abstract stored · PDF p. 1' : 'Metadata only'}</span>
+            <span><Icon name="file" size={13} /> {paper.stored === 'full-text' ? 'Full text'
+              : paper.stored === 'excerpt' ? 'Selected excerpts' : paper.stored === 'abstract' ? 'Abstract stored · PDF p. 1' : 'Metadata only'}</span>
             <span>Venue from {paper.venueSource}</span>
           </div>
 
           {paper.stored !== 'metadata' ? (
             <>
-              <h2>{paper.stored === 'abstract' ? 'Abstract' : 'Full text'}</h2>
-              <p className="abstract">{paper.passages.map((p) => <PassageText key={p.id} p={p} highlight={used} />)}</p>
-              {paper.stored === 'abstract' && <div className="fulltext-note">
+              {paper.stored === 'excerpt' ? paper.passages.map((p) => (
+                <section key={p.id}>
+                  <h2>{p.section} · PDF p. {p.page}</h2>
+                  <p className="abstract"><PassageText p={p} highlight={used} /></p>
+                </section>
+              )) : <>
+                <h2>{paper.stored === 'abstract' ? 'Abstract' : 'Full text'}</h2>
+                <p className="abstract">{paper.passages.map((p) => <PassageText key={p.id} p={p} highlight={used} />)}</p>
+              </>}
+              {paper.stored !== 'full-text' && <div className="fulltext-note">
                 <Icon name="lock" size={15} />
                 <div>
                   <strong>Full text not loaded</strong>
-                  <p>The prototype library stores abstracts only. In the full app, the parsed paper appears here with page mapping, and the agent can read sections such as Experiments.</p>
+                  <p>This prototype shows the available passages. The full app will show the parsed paper with page mapping.</p>
                 </div>
               </div>}
             </>
