@@ -18,6 +18,8 @@ type Report={report_id:Id,kind:'citation_audit'|'citation_suggest',complete:bool
 type Finding={finding_id:Id,sentence_id:Id,claims:{text:string,source_version_id?:Id,status:'supported'|'conflict'|'evidence_not_established'|'blocked',anchor_ids:Id[],limit:string}[],decision?:'accept'|'reject'|'defer',proposal?:{text:string,cites:string[],bibliography:string[],anchor_ids:Id[],scope:string}}
 ~~~~
 
+Snapshot 可含受版本影响的结果 stale_sentence_ids:Id[]；来源换版或重新解析使定位失效时标为待重查，原报告保留。找到映射但需要确认时，稿件的 warnings 中列出句子和引用键；选择要检查的目标版本后启动独立回查。导出的 Word 位置报告和 LaTeX 补丁均标明原文件版本、引用键及目标跨度；是否开放写回由宿主实测能力决定。
+
 versions 新到旧；reports 新到旧。每句的所有子论述在其全部目标范围得到支持才展示 Supported。任务交付、模型评估、人工审阅和稿件修改各自保存。缺材料时使用 partial 加可读报告。回查不能为缺少的目标自动换来源。变动跨度或证据版本不能验证复用时须重查；仅改变书目显示不改变模型判断。
 
 示例：t1 的 related.md 稿本 v1 句 s1 引用 PubMedQA p1，但句中还含全文推论。审计任务 a1 的序号 1..3 为 identify/read/assess，4 为 completed；s1 的摘要论述 supported(a1-anchor)，全文推论 evidence_not_established。用户 accept 意见后原句保持 v1；预览限缩措辞、引文、书目和锚点后选择 wording 得到 v2，需独立重查。若旧版本已变化，apply 返回 -32020 STALE_REVISION；引用缺失时提示另开 citation_suggest。Word 插件字段无法安全写回时返回 positions 报告，LaTeX 导出位置补丁并保留键，Markdown 导出副本及书目，原文件保持可恢复。

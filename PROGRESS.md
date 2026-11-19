@@ -4,6 +4,7 @@
 
 ## 已完成
 
+- 已补充会话阅读位置、候选变化和来源换版后待重查状态。
 - 已补充工作区任务历史、步骤和用量的共用读接口。
 - 已定义[服务、只读授权、持续检索与备份契约](docs/contracts/services-workspace.md)。桌面接口索引已补齐。
 - 已定义[稿件、独立回查与成果导出接口](docs/contracts/citation-export.md)。
