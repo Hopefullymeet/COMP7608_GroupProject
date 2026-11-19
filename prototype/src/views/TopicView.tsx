@@ -12,7 +12,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'compare', label: 'Compare', icon: 'columns' },
 ]
 
-export function TopicView({ topicId, tab, windowControls }: { topicId: string; tab: Tab; windowControls?: ReactNode }) {
+export function TopicView({ topicId, tab, windowControls, comparison }: { topicId: string; tab: Tab; windowControls?: ReactNode; comparison?:ReactNode }) {
   const { state, act } = useStore()
   const topic = state.topics.find((t) => t.id === topicId)
   if (!topic) return null
@@ -32,7 +32,7 @@ export function TopicView({ topicId, tab, windowControls }: { topicId: string; t
         </div>
         {topic.scripted && (
           <nav className="tabs" role="tablist">
-            {TABS.filter((t) => !state.mainline || t.id !== 'compare').map((t) => (
+            {TABS.filter((t) => !state.mainline || !!comparison || t.id !== 'compare').map((t) => (
               <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'on' : ''}
                 onClick={() => act.openTopic(topicId, t.id)}>
                 <Icon name={t.icon} size={15} /> {t.label}
@@ -88,7 +88,7 @@ export function TopicView({ topicId, tab, windowControls }: { topicId: string; t
             <p>The prototype only scripts <strong>Evidence in scientific QA</strong>. Other topics and their sessions only show how lists behave.</p>
             {state.topics.some((t) => t.id === DEMO_TOPIC) && <button className="primary" onClick={() => act.enterTopic(DEMO_TOPIC)}>Open the scripted topic</button>}
           </div>
-        ) : tab === 'discover' ? <Discover /> : tab === 'read' ? <Read /> : <Compare />}
+        ) : tab === 'discover' ? <Discover /> : tab === 'read' ? <Read /> : (comparison ?? <Compare />)}
       </div>
     </div>
   )

@@ -146,6 +146,7 @@ export function useTask(api: Client, onFinished: (task: string, result: Finished
       setStatus('')
       setConnectionError('')
     },
+    clearNotice: () => { setError(''); setConnectionError(''); setStatus('') },
     dismiss: () => { if (!pending.current) setConfirmation(undefined) },
     reconnect: () => reconnect((value) => value + 1) }
 }

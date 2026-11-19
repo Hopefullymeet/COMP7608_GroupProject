@@ -1,3 +1,4 @@
+import type { ImportTask, ImportResult, LibraryMethods, Located } from './library'
 export type Id = string
 export type NonEmpty<T> = [T, ...T[]]
 export type Scope = 'abstract' | 'full_text'
@@ -34,14 +35,16 @@ export type Reading = {
   )>
 }
 export type Turn = { task_id: Id; question: string; answer: Reading }
-export type TaskInput = { topic_id: Id } & (
+export type MainTask = { topic_id: Id } & (
   { kind: 'discovery'; input: { query: string; filters?: { year_from?: number; year_to?: number } } | { previous_search_id: Id } } |
-  { kind: 'reading_qa'; session_id: Id; input: { question: string; sources: NonEmpty<Source> } }
+  { kind: 'reading_qa'; session_id: Id; input: { question: string; selection?: { source_version_id: Id; passage_id: Id; quote:string }; sources: NonEmpty<Source> } }
 )
+export type WorkspaceTask = ImportTask
+export type TaskInput = MainTask | WorkspaceTask
 export type Transfer = { endpoint: string; purpose: string; data_categories: NonEmpty<string> }
 export type Issue = { reason: string; retryable: boolean; next_action: string; details?: Record<string, unknown> }
 export type Start = { task_id: Id; run_id: Id; status: 'queued'; scope_id?: Id }
-type Result = Discovery | Reading
+type Result = Discovery | Reading | ImportResult
 export type Finished =
   | { status: 'completed'; result: Result }
   | { status: 'partial'; result: Result; issue: Issue }
@@ -61,7 +64,7 @@ type InTopic = { topic_id: Id }
 type InSession = InTopic & { session_id: Id }
 type ForTask = { task_id: Id }
 type InSearch = InTopic & { search_id: Id }
-export type Methods = {
+export type Methods = LibraryMethods & {
   'protocol.version': [Record<string, never>, { major: number; minor: number }]
   'topic.list': [Record<string, never>, { items: Topic[] }]
   'topic.create': [Write & { title: string }, InTopic]
@@ -77,7 +80,7 @@ export type Methods = {
   )]
   'library.list': [{ topic_id?: Id }, { items: LibraryItem[] }]
   'source.read_abstract': [InTopic & { source_version_id: Id }, Abstract]
-  'evidence.locate': [InTopic & { message_id: Id; anchor_id: Id }, Evidence]
+  'evidence.locate': [InTopic & { message_id: Id; anchor_id: Id }, Evidence | Located]
   'task.prepare': [Write & TaskInput, { confirmation_id: Id; transfers: Transfer[] }]
   'task.start': [Write & TaskInput & { confirmation_id: Id }, Start]
   'task.get': [ForTask, Snapshot]

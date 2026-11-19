@@ -2,8 +2,12 @@ import fixture from './pubmedqa.json'
 import { RpcError } from './contract'
 import type { Abstract, Candidate, Client, Discovery, EventBody, Evidence, Finished, LibraryItem, Method, Methods, Reading, Rpc, Session, Step, TaskEvent, TaskInput, Topic, Turn } from './contract'
 
+import { emptyLibrary, type LibraryFixture } from './library'
+import { libraryFixture } from './libraryFixture'
+
 type Run = { input: TaskInput; run_id: string; events: TaskEvent[]; script: EventBody[] }
 type State = {
+  shelf:LibraryFixture
   topics: Topic[]
   sessions: Record<string, Session[]>
   turns: Record<string, Turn[]>
@@ -24,8 +28,10 @@ function fail(reason: string, message: string, next_action = 'refresh_data', det
 }
 
 export function createMock(): Client {
-  const initial: State = { topics: [], sessions: {}, turns: {}, searches: {}, latest: {}, library: [], runs: {}, writes: {}, confirmations: {} }
+  const initial: State = { shelf:emptyLibrary(), topics: [], sessions: {}, turns: {}, searches: {}, latest: {}, library: [], runs: {}, writes: {}, confirmations: {} }
   const state: State = JSON.parse(localStorage.getItem(key) ?? 'null') ?? initial
+  state.shelf ??= emptyLibrary()
+  const shelf=libraryFixture(state,evidence)
   const listeners = new Map<string, Set<(event: TaskEvent) => void>>()
   const active = (run: Run) => run.events.at(-1)?.type !== 'task.finished'
   const save = () => localStorage.setItem(key, JSON.stringify(state))
@@ -34,6 +40,9 @@ export function createMock(): Client {
   function emit(task: string, body: EventBody) {
     const run = state.runs[task]
     if (!active(run)) return
+    if(body.type==='task.finished' && body.payload.status==='completed' && run.input.kind==='paper_import') {
+      body={type:'task.finished',payload:{status:'completed',result:shelf.importPapers(run.input)}}
+    }
     const event = { task_id: task, run_id: run.run_id, event_seq: run.events.length + 1, ...body }
     run.events.push(event)
     if (event.type === 'task.finished' && event.payload.status === 'completed') {
@@ -62,6 +71,10 @@ export function createMock(): Client {
   Object.entries(state.runs).forEach(([task, run]) => { if (active(run)) schedule(task) })
 
   function taskScript(input: TaskInput, task: string): EventBody[] {
+    if (input.kind==='paper_import') return [
+      ...['inspect','match','commit'].map((stage):EventBody=>({type:'task.progress',payload:{stage,message:stage+' · selected materials'}})),
+      {type:'task.finished',payload:{status:'completed',result:{paper_ids:[],review_ids:[]}}}
+    ]
     if (input.kind === 'reading_qa') {
       const supported = /context|conclusion|abstract|上下文|结论|摘要/i.test(input.input.question)
       const answer: Reading = {
@@ -69,6 +82,13 @@ export function createMock(): Client {
         message_id: task,
         scope_id: task,
         sentences: supported ? exampleAnswer.sentences : [{ text: 'The abstract does not establish an answer to this question.', assessment: 'evidence_not_established', anchor_ids: [] }],
+      }
+      const source=input.input.sources[0]
+      if(source.source_version_id!=='v1') {
+        const doc=state.shelf.documents[source.source_version_id]
+        const p=doc?.passages.find(p=>p.passage_id===input.input.selection?.passage_id)??doc?.passages[0]
+        answer.read_sources=[{source_version_id:source.source_version_id,read_scope:p?source.requested_scope:'none'}]
+        answer.sentences=p?[{text:p.text,assessment:'supported',anchor_ids:[doc.source_version_id+'/'+p.passage_id]}]:[{text:'Material unavailable.',assessment:'evidence_not_established',anchor_ids:[]}]
       }
       const sentence = answer.sentences[0].text
       return [
@@ -110,14 +130,15 @@ export function createMock(): Client {
   }
 
   const handlers: { [M in Method]: (params: Methods[M][0]) => Methods[M][1] } = {
+    ...shelf.handlers,
     'protocol.version': () => ({ major: 0, minor: 4 }),
-    'topic.list': () => ({ items: state.topics }),
+    'topic.list': () => ({ items: state.topics.filter(t=>!state.shelf.archive.some(a=>a.id===t.topic_id)) }),
     'topic.create': ({ title }) => {
       const topic_id = id()
       state.topics.unshift({ topic_id, title })
       return { topic_id }
     },
-    'session.list': ({ topic_id }) => ({ items: state.sessions[topic_id] ?? [] }),
+    'session.list': ({ topic_id }) => ({ items: (state.sessions[topic_id] ?? []).filter(s=>!state.shelf.archive.some(a=>a.id===s.session_id)) }),
     'session.create': ({ topic_id }) => {
       const session_id = id()
       const sessions = state.sessions[topic_id] ??= []
@@ -172,21 +193,24 @@ export function createMock(): Client {
       return { candidate_id, decision }
     },
     'library.list': ({ topic_id }) => ({ items: state.library.filter((item) => !topic_id || item.topic_ids.includes(topic_id)) }),
-    'source.read_abstract': ({ topic_id, source_version_id }): Abstract =>
-      source_version_id === 'v1' && state.library.some((item) => item.topic_ids.includes(topic_id))
-        ? evidence.source : fail('SOURCE_UNAVAILABLE', 'The abstract is unavailable.', 'restore_source'),
+    'source.read_abstract': ({ topic_id, source_version_id }): Abstract => {
+      const doc=shelf.handlers['source.read']({topic_id,source_version_id})
+      const [first,...rest]=doc.passages
+      if(!first) return fail('SOURCE_UNAVAILABLE','The source has no readable abstract.')
+      return {...doc,passages:[first,...rest]}
+    },
     'evidence.locate': ({ topic_id, message_id, anchor_id }) => {
       const exists = state.sessions[topic_id]?.some(({ session_id }) => state.turns[session_id]?.some(({ answer }) =>
         answer.message_id === message_id && answer.sentences.some((sentence) =>
           sentence.assessment === 'supported' && sentence.anchor_ids.includes(anchor_id))))
-      return exists ? evidence : fail('SOURCE_UNAVAILABLE', 'The original abstract is unavailable.', 'restore_source')
+      return exists ? (anchor_id==='a1' && shelf.lookup(anchor_id) ? evidence : shelf.lookup(anchor_id)) : fail('SOURCE_UNAVAILABLE', 'The original abstract is unavailable.', 'restore_source')
     },
     'task.prepare': ({ operation_id: _, ...input }) => {
       const confirmation_id = id()
       state.confirmations[confirmation_id] = input
       return {
         confirmation_id,
-        transfers: input.kind === 'discovery'
+        transfers: input.kind === 'paper_import' ? [] : input.kind === 'discovery'
           ? [{ endpoint: 'https://search.example.org', purpose: 'Find relevant papers', data_categories: ['Research question and search terms'] },
              { endpoint: 'https://model.example.org', purpose: 'Assess coverage and relevance', data_categories: ['Research question', 'Candidate metadata and abstracts'] }]
           : [{ endpoint: 'https://model.example.org', purpose: 'Answer the question', data_categories: ['Question and recent conversation', 'Selected abstracts'] }],
@@ -197,8 +221,8 @@ export function createMock(): Client {
         fail('CONFIRMATION_REQUIRED', 'The transfer confirmation has changed.', 'confirm_task')
       }
       const running = Object.entries(state.runs).find(([, run]) =>
-        active(run) && run.input.topic_id === input.topic_id && run.input.kind === input.kind
-        && (input.kind === 'discovery' || (run.input.kind === 'reading_qa' && run.input.session_id === input.session_id)))
+        active(run) && 'topic_id' in run.input && 'topic_id' in input && run.input.topic_id === input.topic_id && run.input.kind === input.kind
+        && (input.kind === 'discovery' || (input.kind==='reading_qa' && run.input.kind === 'reading_qa' && run.input.session_id === input.session_id)))
       if (running) fail('TASK_IN_PROGRESS', 'A task is already running.', 'open_task', { task_id: running[0] })
       const task_id = id()
       const run_id = id()

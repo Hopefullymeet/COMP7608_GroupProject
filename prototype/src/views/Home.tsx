@@ -31,7 +31,7 @@ export function Home() {
   const canSubmit = !!text.trim() || state.dropped.length > 0
   const submit = () => { if (canSubmit) act.startFromHome(text) }
   const addFiles = (files: FileList | null) => {
-    if (state.mainline) return
+    if (state.mainline) { state.mainline.attachFiles?.(Array.from(files??[]));return }
     const names = Array.from(files ?? []).map((f) => f.name)
     if (names.length) act.drop(names)
   }
@@ -62,13 +62,13 @@ export function Home() {
           {state.dropped.length > 0 && (
             <div className="dropped">
               {state.dropped.map((n, i) => <span key={i} className="chip"><Icon name="file" size={13} />{n}</span>)}
-              <small>Files are listed but not read in this prototype.</small>
+              <small>{state.mainline?'Review the import scope after creating the topic.':'Files are listed but not read in this prototype.'}</small>
             </div>
           )}
-          {!state.mainline && <div className="home-actions">
+          {<div className="home-actions">
             <div className="home-actions-inner">
               <div className="composer-bar">
-                <button className="ghost-btn" disabled={!expanded} onClick={() => fileRef.current?.click()}>
+                <button className="ghost-btn" disabled={!expanded && !state.mainline} onClick={() => state.mainline ? state.mainline.attachFiles?.() : fileRef.current?.click()}>
                   <Icon name="paperclip" size={15} /> Add papers
                 </button>
               </div>
@@ -78,6 +78,7 @@ export function Home() {
           <button className="send" disabled={!canSubmit} onClick={submit} aria-label="Start research"><Icon name="arrowUp" size={17} /></button>
         </div>
 
+        {state.mainline && !expanded && <button className="link-btn" onClick={()=>state.mainline?.attachFiles?.()}>Add papers</button>}
         {(!state.mainline || state.mainline.demo) && <button className="suggestion" disabled={!canDemo} title={canDemo ? undefined : "Refresh to restore the demo topic"} onClick={() => act.startDemo()}>
           <Icon name="compass" size={15} />
           <span><small>Try the demo</small>{state.mainline ? 'Which scientific QA datasets use paper abstracts?' : DEFAULT_QUESTION}</span>

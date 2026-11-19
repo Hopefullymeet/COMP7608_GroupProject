@@ -61,6 +61,12 @@
   .year-panel { animation: none; }
   .year-chevron { transition: none; }
 }
+.paper-choice { background: transparent; text-align: left; border: 0; color: inherit; flex: 1; min-width: 0; }
+.page textarea, .dialog textarea { width: 100%; padding: 10px; font: inherit; resize: vertical; }
+.page input:not([type=checkbox]), .page select, .dialog input:not([type=checkbox]), .dialog select {
+  font: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; background: var(--bg); color: var(--ink);
+}
+.page .field-search input { background: transparent; border: none; }
 .paper .located-passage {
   background: var(--accent-soft);
   border-radius: 4px;

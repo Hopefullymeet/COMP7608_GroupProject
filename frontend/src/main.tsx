@@ -1,3 +1,5 @@
+import { WorkspaceProvider } from './data/Workspace'
+import { LibraryPage } from './views/LibraryPage'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from '../../prototype/src/App'
@@ -14,11 +16,11 @@ const desktop = isTauri()
 const useRpc = desktop && import.meta.env.VITE_PAPERTRACE_TRANSPORT === 'rpc'
 const demo = desktop ? !useRpc : new URLSearchParams(window.location.search).get('mode') === 'contract'
 const api = useRpc ? createDesktop() : demo ? createMock() : null
-const app = <App windowControls={desktop ? <WindowControls /> : undefined} />
+const app = <App pages={api ? { library:<LibraryPage/> } : undefined} windowControls={desktop ? <WindowControls /> : undefined} />
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <StoreProvider>
-      {api ? <MainlineProvider api={api} demo={demo}>{app}</MainlineProvider> : app}
+      {api ? <WorkspaceProvider api={api} demo={demo}><MainlineProvider api={api} demo={demo}>{app}</MainlineProvider></WorkspaceProvider> : app}
     </StoreProvider>
   </StrictMode>,
 )

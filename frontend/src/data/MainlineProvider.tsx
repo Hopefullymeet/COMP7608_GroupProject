@@ -5,6 +5,8 @@ import type { Route, State, Tab } from '../../../prototype/src/data/store'
 import type { AgentRun, ChatMessage, Decision, EvidenceAnchor, Paper, SearchAngle, Session } from '../../../prototype/src/data/types'
 import { errorText } from '../api/contract'
 import type { Client, Discovery, Finished, Step, TaskInput, Turn, Abstract } from '../api/contract'
+import { asLocated, type DocumentView, type Origin, type Picked } from '../api/library'
+import { useWorkspace } from './Workspace'
 import { operation, retryWrite, useTask } from './useTask'
 
 type Request = { message_id: string; anchor_id: string }
@@ -40,17 +42,20 @@ function traceSteps(steps: Step[]): AgentRun['steps'] {
       title: step.action === 'stop' ? 'Stop searching' : 'Search again', detail: step.reason })
 }
 
-function paperFromAbstract(source: Abstract, paper?: Paper): Paper {
+function paperFromAbstract(source: Abstract | DocumentView, paper?: Paper): Paper {
   return {
     id: source.source_version_id, short: paper?.short ?? 'Source abstract', title: paper?.title ?? 'Source abstract',
     authors: paper?.authors ?? [], venue: paper?.venue ?? '', venueSource: paper?.venueSource ?? '', year: paper?.year ?? 0,
-    stored: 'abstract', passages: source.passages.map((p, i) => ({
-      id: p.passage_id, section: `Abstract · Paragraph ${i + 1}`, page: 0, text: p.text,
+    stored: source.passages.some(p=>'page' in p && typeof p.page==='number' && p.page>0)?'full-text':'abstract', passages: source.passages.map((p, i) => ({
+      id: p.passage_id, section: 'section' in p ? p.section : 'Abstract · Paragraph '+(i+1), page: 'page' in p ? p.page : 0, text: p.text + ('warning' in p && p.warning ? ' ['+p.warning+']' : ''),
     })),
   }
 }
 
 export function MainlineProvider({ api, demo, children }: { api: Client; demo: boolean; children: React.ReactNode }) {
+  const workspace=useWorkspace()
+  const [files,setFiles]=useState<Picked[]>([])
+  const selection=useRef<{source_version_id:string;passage_id:string;quote:string}>()
   const { act: prototypeActions } = useStore()
   const [view, setView] = useState<State>(defaultView)
   const [papers, setPapers] = useState<Record<string, Paper>>({})
@@ -100,7 +105,7 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
     const list = items.flatMap((item) => item.source_versions.map((version): Paper => ({
       id: version.source_version_id, short: item.source_versions.length > 1 ? `${item.title} · ${version.source_version_id}` : item.title,
       title: item.title, authors: [], venue: '', venueSource: '', year: 0, passages: [],
-      stored: version.available_scope === 'metadata' ? 'metadata' : 'abstract',
+      stored: version.available_scope === 'full_text' ? 'full-text' : version.available_scope,
     })))
     setPapers((existing) => ({
       ...existing,
@@ -165,7 +170,7 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
     } catch (cause) { if (request === connectionRequest.current) reveal(cause) }
     finally { if (request === connectionRequest.current) setInitializing(false) }
   }
-  useEffect(() => { void initialize() }, [api])
+  useEffect(() => { void initialize() }, [api,workspace.tick])
 
   useEffect(() => {
     if (!topic) return
@@ -181,7 +186,7 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
       refreshLibrary(topic),
     ]).catch((cause) => { if (active) reveal(cause) }).finally(() => { if (active) setLoadingSearch(false) })
     return () => { active = false }
-  }, [api, topic])
+  }, [api, topic,workspace.tick])
 
   useEffect(() => {
     if (!session || !topic) return
@@ -246,7 +251,7 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
   }
 
   function create(text: string) {
-    const title = text.trim()
+    const title = text.trim() || files[0]?.name
     if (!title || !ready) return
     void status(async () => {
       if (creation.current?.title !== title) creation.current = { title, topicKey: operation(), sessionKey: operation() }
@@ -261,6 +266,7 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
       creation.current = undefined
       rememberSession(topicId, session_id)
       openTopic(topicId, 'discover', session_id, title)
+      if(files.length) { await workspace.prepare({kind:'paper_import',input:{topic_id:topicId,files:files.map(f=>f.file_id)}});setFiles([]) }
     })
   }
 
@@ -268,8 +274,14 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
     const topic_id = selected.current.topic
     const token = ++readerRequest.current
     setView((state) => ({ ...state, readerPaperId: id, activeEvidence: null }))
+    if(id) void api.call('reader.position',{topic_id,source_version_id:id}).then(({passage_id})=>{
+      if(!passage_id||token!==readerRequest.current)return
+      requestAnimationFrame(()=>{const el=document.querySelector<HTMLElement>('[data-passage-id="'+CSS.escape(passage_id)+'"]')
+        const parent=el?.closest('.reader-scroll');if(el&&parent)parent.scrollTop+=el.getBoundingClientRect().top-parent.getBoundingClientRect().top})
+    }).catch(reveal)
     if (!id || papers[id]?.stored === 'metadata' || papers[id]?.passages.length) return
-    void api.call('source.read_abstract', { topic_id, source_version_id: id }).then((source) => {
+    selection.current=undefined
+    void (papers[id]?.stored==='full-text'? api.call('source.read',{topic_id,source_version_id:id}) : api.call('source.read_abstract', { topic_id, source_version_id: id })).then((source) => {
       if (token === readerRequest.current) setPapers((state) => ({ ...state, [id]: paperFromAbstract(source, state[id]) }))
     }).catch((cause) => { if (token === readerRequest.current) reveal(cause) })
   }
@@ -285,15 +297,16 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
     const token = ++readerRequest.current
     const [message_id, anchor_id] = JSON.parse(id) as [Request['message_id'], Request['anchor_id']]
     setView((state) => ({ ...state, activeEvidence: null }))
-    void api.call('evidence.locate', { topic_id, message_id, anchor_id }).then(({ source, anchor }) => {
+    void api.call('evidence.locate', { topic_id, message_id, anchor_id }).then((result) => {
+      const located='anchor' in result ? asLocated(result) : result
+      const {source}=located
       if (token !== readerRequest.current) return
-      if (anchor.source_version_id !== source.source_version_id || anchor.paper_id !== source.paper_id ||
-          !source.passages.some((passage) => passage.passage_id === anchor.location.passage_id)) {
+      if (!source.passages.some((passage) => passage.passage_id === located.passage_id)) {
         throw new Error('The original abstract passage could not be located.')
       }
       const version = source.source_version_id
       setPapers((state) => ({ ...state, [version]: paperFromAbstract(source, state[version]) }))
-      setEvidence((state) => ({ ...state, [id]: { id, paperId: version, passageId: anchor.location.passage_id, quote: anchor.quote, scope: 'Abstract evidence · paragraph location' } }))
+      setEvidence((state) => ({ ...state, [id]: { id, paperId: version, passageId: located.passage_id, quote: located.quote, scope: located.read_scope.replace('_',' ')+' evidence' } }))
       setView((state) => ({ ...state, readerPaperId: version, activeEvidence: { id, anchor: 'active-abstract-passage', scroll: true } }))
     }).catch((cause) => { if (token === readerRequest.current) reveal(cause) })
   }
@@ -328,7 +341,7 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
       if (!paper) throw new Error('This abstract is no longer available in the topic.')
       setDraft(text)
       await reading.prepare({ topic_id: topic, session_id: session, kind: 'reading_qa',
-        input: { question: text, sources: [{ paper_id: paper.paper_id, source_version_id: version, requested_scope: 'abstract' }] } })
+        input: { question: text, ...(selection.current?.source_version_id===version && {selection:selection.current}), sources: [{ paper_id: paper.paper_id, source_version_id: version, requested_scope: papers[version]?.stored==='full-text'?'full_text':'abstract' }] } })
     })
   }
 
@@ -361,8 +374,29 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
     { id: 'pending-answer', sessionId: session, role: 'agent' as const, done: false, runId: reading.task, segments: [{ text: reading.preview.text }] },
   ] : view.messages
 
+  async function saveNote(text:string,anchor_ids:string[],origin:Origin) {
+    await workspace.write('note.save',{topic_id:topic,session_id:session??undefined,text,anchor_ids,origin})
+  }
+  function saveEvidence(id:string,origin:'citation'|'answer') {
+    const [,anchor]=JSON.parse(id) as [string,string]
+    void status(async()=>{await saveNote(evidence[id].quote,[anchor],origin)
+      setView(s=>origin==='citation'?{...s,cited:[...s.cited,id]}:{...s,noted:[...s.noted,id]})})
+  }
+  function archive(kind:'topic'|'session',id:string) {
+    if(!window.confirm('Archive this '+kind+'? You can restore it from Library.')) return
+    void status(async()=>{await workspace.write('workspace.archive',{kind,id});if(id===topic||id===session)goHome()})
+  }
   const state: State = {
-    ...view, mainline: { demo, papers: { ...papers, ...candidatePapers }, evidence,
+    ...view,dropped:files.map(f=>f.name),mainline: { demo,pages:['library'],
+      attachFiles:incoming=>{void status(async()=>{
+        const selected=demo&&incoming?.length?incoming.map(f=>({file_id:f.name,name:f.name})):(await api.call('file.pick',{purpose:'papers'})).files
+        setFiles(old=>[...old,...selected.filter(f=>!old.some(o=>o.file_id===f.file_id))])
+      })},
+      original:id=>void api.call('source.original',{source_version_id:id}).catch(reveal),
+      bookmark:(id,passage_id)=>void workspace.write('reader.bookmark',{topic_id:topic,source_version_id:id,passage_id}).catch(reveal),
+      selectQuote:(source_version_id,passage_id,quote)=>{selection.current={source_version_id,passage_id,quote}},
+      saveAnswer:m=>void status(async()=>{await saveNote(m.segments.filter(s=>s.tone!=='scope').map(s=>s.text).join('').trim(),
+        m.segments.flatMap(s=>(s.evidenceIds??[]).map(id=>(JSON.parse(id) as string[])[1])),'answer');setError('Answer saved to the topic’s research notes.')}), papers: { ...papers, ...candidatePapers }, evidence,
       search: (query, filters) => discover(query, false, filters), searchBusy: busy || loadingSearch },
     discovery: {
       question: searchQuestion, round, status: discovering.task ? 'running' : search ? 'done' : 'idle',
@@ -382,8 +416,11 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
 
   const act = {
     ...prototypeActions,
-    navigate: (route: Route) => { if (route.view === 'home') goHome(); else if (route.view === 'topic') openTopic(route.topicId, route.tab) },
-    newTopic: () => goHome(true),
+    navigate: (route: Route) => { if (route.view === 'home') goHome(); else if (route.view === 'topic') openTopic(route.topicId, route.tab); else if (!busy){goHome();setView(s=>({...s,route}))} },
+    newTopic: () => {setFiles([]);goHome(true)},
+    toggleNote:(id:string)=>{if(!view.noted.includes(id)) saveEvidence(id,'answer')},
+    toggleCite:(id:string)=>{if(!view.cited.includes(id)) saveEvidence(id,'citation')},
+    deleteTopic:(id:string)=>archive('topic',id), deleteSession:(id:string)=>archive('session',id),
     startFromHome: create,
     startDemo: () => create('Which scientific QA datasets use paper abstracts?'),
     enterTopic: openTopic,

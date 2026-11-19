@@ -24,6 +24,12 @@ export interface State {
   mainline?: {
     demo: boolean; papers: Record<string, Paper>; evidence: Record<string, EvidenceAnchor>
     search: (query: string, filters?: { year_from?: number; year_to?: number }) => void
+    pages?:Page[]
+    original?:(version:string)=>void
+    bookmark?:(version:string,passage:string)=>void
+    selectQuote?:(version:string,passage:string,quote:string)=>void
+    saveAnswer?:(message:ChatMessage)=>void
+    attachFiles?:(files?:File[])=>void
     searchBusy: boolean
   }
   topics: Topic[]

@@ -45,6 +45,7 @@ function AgentMessage({ m }: { m: ChatMessage }) {
           })}
         </p>
       )}
+      {m.done && state.mainline?.saveAnswer && <button className="link-btn" onClick={()=>state.mainline?.saveAnswer?.(m)}>Save answer as note</button>}
       {m.done && run && (
         <div className="msg-foot">
           <span className={`run-chip ${run.status}`}>{run.status === 'partial' ? 'Partial' : 'Done'}</span>
@@ -76,7 +77,7 @@ function Chat() {
   const readable = papers.filter((id) => paperFor(state, id).stored !== 'metadata')
   const selected = readable.includes(state.readerPaperId) ? state.readerPaperId : readable[0]
   const suggestions = (state.mainline
-    ? state.mainline.demo ? [{ id: 'pubmedqa', text: 'What context does PubMedQA provide to the model?', requires: undefined }] : []
+    ? state.mainline.demo ? [{ id: 'pubmedqa', text: 'What context does PubMedQA provide to the model?', requires: undefined },{id:'limits',text:'What does the abstract establish about the conclusions?',requires:undefined}] : []
     : QUESTIONS).filter((q) => !asked.has(q.text))
 
   return (
@@ -178,7 +179,7 @@ function Reader() {
         </div>
         <div className="view-toggle">
           <button className="on">Reading view</button>
-          <button disabled title="PDF.js view comes later">Original PDF <Icon name="lock" size={11} /></button>
+          <button disabled={!state.mainline?.original} onClick={()=>state.mainline?.original?.(paper.id)}>Original PDF</button>
         </div>
       </div>
 
@@ -205,8 +206,8 @@ function Reader() {
                 <h2>{paper.stored === 'abstract' ? 'Abstract' : 'Full text'}</h2>
                 {state.mainline ? paper.passages.map((p) => {
                   const active = state.activeEvidence && evidenceFor(state, state.activeEvidence.id)?.passageId === p.id
-                  return <p className={`abstract${active ? ' located-passage' : ''}`} key={p.id}
-                    data-ev-anchor={active ? state.activeEvidence?.anchor : undefined}>{p.text}</p>
+                  return <section key={p.id} data-passage-id={p.id}>{p.page>0&&<h3>{p.section} · p. {p.page}</h3>}<p onMouseUp={()=>{const text=window.getSelection()?.toString().trim();if(text&&p.text.includes(text))state.mainline?.selectQuote?.(paper.id,p.id,text)}} className={`abstract${active ? ' located-passage' : ''}`} key={p.id}
+                    data-ev-anchor={active ? state.activeEvidence?.anchor : undefined}>{p.text}</p><button className="link-btn quiet" onClick={()=>state.mainline?.bookmark?.(paper.id,p.id)}>Bookmark passage</button></section>
                 }) : <p className="abstract">{paper.passages.map((p) => <PassageText key={p.id} p={p} highlight={used} />)}</p>}
               </>}
               {!state.mainline && paper.stored !== 'full-text' && <div className="fulltext-note">

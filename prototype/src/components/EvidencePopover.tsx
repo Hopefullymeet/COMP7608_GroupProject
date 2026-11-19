@@ -62,7 +62,7 @@ export function EvidencePopover() {
     <div ref={ref} className="evidence" role="dialog" aria-label="Evidence"
       style={{ width: W, top: pos?.top ?? -9999, left: pos?.left ?? -9999, visibility: pos ? 'visible' : 'hidden' }}>
       <div className="ev-head">
-        <span>{state.route.view === 'wiki' ? paper.title : paper.short} · {passage?.section}{!state.mainline && <> · PDF p. {passage?.page}</>}</span>
+        <span>{state.route.view === 'wiki' ? paper.title : paper.short} · {passage?.section}{(passage?.page??0)>0 && <> · PDF p. {passage?.page}</>}</span>
         <button className="icon-btn sm" onClick={() => act.closeEvidence()} aria-label="Close"><Icon name="x" size={14} /></button>
       </div>
       {!cleared && <blockquote>“{ev.quote}”</blockquote>}
@@ -70,7 +70,7 @@ export function EvidencePopover() {
         : cleared ? 'Source permanently deleted. Its excerpt was cleared.'
         : status === 'in trash' ? 'Source in trash. This excerpt is available for historical reference.'
         : 'Source permanently deleted. This excerpt is available for historical reference.'}</p>
-      {!state.mainline && status === 'available' && <><div className="ev-actions">
+      {status === 'available' && <><div className="ev-actions">
         <button className={cited ? 'toggle on' : 'toggle'} onClick={() => act.toggleCite(ev.id)}>
           <Icon name={cited ? 'check' : 'quote'} size={14} /> {cited ? 'Citation picked' : 'Use as citation'}
         </button>
