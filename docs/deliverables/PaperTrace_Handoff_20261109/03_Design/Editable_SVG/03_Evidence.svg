@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="960" viewBox="0 0 1440 960" fill="none" role="img" aria-labelledby="03-evidence-title">
+<title id="03-evidence-title">PaperTrace desktop design — 03-evidence</title>
+<!-- Icon geometry adapted from Lucide (https://lucide.dev), ISC License. Stroke normalised to 1.5 px. Typography: Inter (with Figma CJK fallback) and Source Serif 4. -->
+<g id="03-evidence">
+<rect x="0" y="0" width="1440" height="960" fill="#FBF6F1"/>
+<rect x="0" y="0" width="1440" height="40" fill="#F4EAE1"/>
+<line x1="0" y1="40" x2="1440" y2="40" stroke="#E2D3C7" stroke-width="1"/>
+<circle cx="16" cy="20" r="3" fill="#C7B5A7"/>
+<circle cx="30" cy="20" r="3" fill="#C7B5A7"/>
+<circle cx="44" cy="20" r="3" fill="#C7B5A7"/>
+<text x="720" y="24.5" font-family="Source Serif 4" font-size="13.5" font-weight="500" fill="#665850" xml:space="preserve" text-anchor="middle" letter-spacing="0.3">PaperTrace</text>
+<rect x="0" y="40" width="1440" height="56" fill="#FBF6F1"/>
+<line x1="0" y1="96" x2="1440" y2="96" stroke="#E2D3C7" stroke-width="1"/>
+<g data-icon="arrow-left" transform="translate(24 59) scale(0.75)" fill="none" stroke="#665850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></g>
+<text x="56" y="72.5" font-family="Inter" font-size="15" font-weight="600" fill="#2B211D" xml:space="preserve">学术问答与证据</text>
+<line x1="188" y1="58" x2="188" y2="78" stroke="#E2D3C7" stroke-width="1"/>
+<text x="204" y="72.5" font-family="Inter" font-size="13" font-weight="400" fill="#665850" xml:space="preserve">回答为什么需要证据</text>
+<text x="1388" y="72.5" font-family="Inter" font-size="12" font-weight="400" fill="#665850" xml:space="preserve" text-anchor="end">3 篇论文</text>
+<g data-icon="more-horizontal" transform="translate(1404 59) scale(0.75)" fill="none" stroke="#665850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></g>
+<rect x="0" y="96" width="56" height="864" fill="#F4EAE1"/>
+<line x1="56" y1="96" x2="56" y2="960" stroke="#E2D3C7" stroke-width="1"/>
+<g data-icon="panel-left" transform="translate(19 124) scale(0.75)" fill="none" stroke="#665850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></g>
+<g data-icon="arrow-left" transform="translate(19 901) scale(0.75)" fill="none" stroke="#665850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></g>
+<rect x="56" y="96" width="460" height="864" fill="#FBF6F1"/>
+<line x1="516" y1="96" x2="516" y2="960" stroke="#E2D3C7" stroke-width="1"/>
+<rect x="236.49" y="236" width="139" height="24" fill="#F3DCD2" rx="4"/>
+<rect x="232" y="128" width="256" height="42" fill="#F4EAE1" rx="12"/>
+<text x="248" y="155" font-family="Inter" font-size="14.5" font-weight="400" fill="#2B211D" xml:space="preserve"><tspan font-family="Inter" font-weight="600">QASPER</tspan><tspan> 的回答为什么需要证据？</tspan></text>
+<text x="84" y="196" font-family="Inter" font-size="11.5" font-weight="500" fill="#665850" xml:space="preserve" letter-spacing="0.2">PaperTrace</text>
+<text x="84" y="226" font-family="Inter" font-size="15" font-weight="400" fill="#2B211D" xml:space="preserve">答案之外，还要看支持它的原文。</text>
+<text x="84" y="252" font-family="Inter" font-size="15" font-weight="400" fill="#2B211D" xml:space="preserve"><tspan font-family="Inter" font-weight="600">QASPER</tspan><tspan> 的摘要说明，回答会附带支持证据。</tspan></text>
+<text x="84" y="288" font-family="Inter" font-size="15" font-weight="400" fill="#2B211D" xml:space="preserve">这说明数据集保留了答案的依据；</text>
+<text x="84" y="314" font-family="Inter" font-size="15" font-weight="400" fill="#2B211D" xml:space="preserve">系统表现如何，仍需查看实验。</text>
+<rect x="84" y="336" width="128" height="30" fill="#F3DCD2" rx="6"/>
+<g data-icon="file-text" transform="translate(96 344) scale(0.54)" fill="none" stroke="#A3402A" stroke-width="2.77" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></g>
+<text x="116" y="356" font-family="Inter" font-size="11.5" font-weight="400" fill="#2B211D" xml:space="preserve"><tspan font-family="Inter" font-weight="600">QASPER</tspan><tspan> · 摘要</tspan></text>
+<text x="84" y="398" font-family="Inter" font-size="13.5" font-weight="500" fill="#A3402A" xml:space="preserve">在右侧定位原文 →</text>
+<line x1="84" y1="422" x2="488" y2="422" stroke="#E2D3C7" stroke-width="1"/>
+<text x="84" y="452" font-family="Inter" font-size="13.5" font-weight="500" fill="#2B211D" xml:space="preserve">如果找不到充分证据呢？</text>
+<text x="488" y="452" font-family="Inter" font-size="13.5" font-weight="400" fill="#A3402A" xml:space="preserve" text-anchor="end">↗</text>
+<rect x="84" y="806" width="404" height="100" fill="#FFFFFF" rx="12" stroke="#E2D3C7" stroke-width="1"/>
+<text x="104" y="838" font-family="Inter" font-size="13.5" font-weight="400" fill="#665850" xml:space="preserve">继续追问，或拖入论文…</text>
+<g data-icon="paperclip" transform="translate(104 866) scale(0.62)" fill="none" stroke="#665850" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></g>
+<text x="126" y="880" font-family="Inter" font-size="12.5" font-weight="400" fill="#665850" xml:space="preserve">添加论文</text>
+<rect x="440" y="858" width="32" height="32" fill="#A3402A" rx="6"/>
+<g data-icon="arrow-up" transform="translate(448 866) scale(0.67)" fill="none" stroke="#FFFFFF" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></g>
+<line x1="620" y1="152" x2="1300" y2="152" stroke="#E2D3C7" stroke-width="1"/>
+<text x="620" y="128" font-family="Inter" font-size="14" font-weight="400" fill="#2B211D" xml:space="preserve"><tspan font-family="Inter" font-weight="600">QASPER</tspan><tspan font-family="Inter" font-weight="500" fill="#2B211D">   阅读版</tspan><tspan font-family="Inter" fill="#665850">  /  </tspan><tspan font-family="Inter" fill="#665850">原</tspan><tspan font-family="Inter" fill="#665850">PDF</tspan></text>
+<g data-icon="zoom-in" transform="translate(1239 115) scale(0.75)" fill="none" stroke="#665850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6"/><path d="M8 11h6"/></g>
+<g data-icon="focus" transform="translate(1273 115) scale(0.75)" fill="none" stroke="#665850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></g>
+<text x="620" y="184" font-family="Inter" font-size="11" font-weight="500" fill="#665850" xml:space="preserve" letter-spacing="0.8">NAACL 2021</text>
+<text x="620" y="222" font-family="Source Serif 4" font-size="32" font-weight="600" fill="#2B211D" xml:space="preserve">A Dataset of Information-Seeking</text>
+<text x="620" y="262" font-family="Source Serif 4" font-size="32" font-weight="600" fill="#2B211D" xml:space="preserve">Questions and Answers Anchored</text>
+<text x="620" y="302" font-family="Source Serif 4" font-size="32" font-weight="600" fill="#2B211D" xml:space="preserve">in Research Papers</text>
+<text x="620" y="336" font-family="Inter" font-size="13" font-weight="400" fill="#665850" xml:space="preserve">Pradeep Dasigi · Kyle Lo · Iz Beltagy · Arman Cohan · Noah A. Smith · Matt Gardner</text>
+<line x1="620" y1="364" x2="1300" y2="364" stroke="#E2D3C7" stroke-width="1"/>
+<text x="620" y="402" font-family="Source Serif 4" font-size="19" font-weight="600" fill="#2B211D" xml:space="preserve">Abstract</text>
+<rect x="618" y="423" width="320.88" height="32" fill="#F3DCD2" rx="4"/>
+<rect x="618" y="493" width="344.85" height="32" fill="#F3DCD2" rx="4"/>
+<line x1="620" y1="453" x2="936.88" y2="453" stroke="#A3402A" stroke-width="1.5"/>
+<text x="620" y="446" font-family="Source Serif 4" font-size="17" font-weight="400" fill="#2B211D" xml:space="preserve">“provide supporting evidence to answers”</text>
+<text x="620" y="516" font-family="Source Serif 4" font-size="17" font-weight="400" fill="#2B211D" xml:space="preserve">“1,585 Natural Language Processing papers”</text>
+<text x="948.88" y="446" font-family="Inter" font-size="10.5" font-weight="500" fill="#A3402A" xml:space="preserve" letter-spacing="0.4">原文摘录</text>
+<text x="620" y="560" font-family="Inter" font-size="13" font-weight="500" fill="#665850" xml:space="preserve"><tspan>原文摘要摘录 · </tspan><tspan font-family="Inter" font-weight="500">PDF</tspan><tspan> 第1页</tspan></text>
+<text x="620" y="586" font-family="Inter" font-size="12.5" font-weight="400" fill="#665850" xml:space="preserve">数据集范围为自然语言处理论文。</text>
+<rect x="980" y="476" width="280" height="214" fill="#FFFFFF" rx="12" stroke="#E2D3C7" stroke-width="1"/>
+<text x="996" y="502" font-family="Inter" font-size="11.5" font-weight="400" fill="#665850" xml:space="preserve"><tspan>摘要 · </tspan><tspan font-family="Inter" font-weight="500">PDF</tspan><tspan> 第1页</tspan></text>
+<text x="996" y="536" font-family="Source Serif 4" font-size="15" font-weight="400" fill="#2B211D" xml:space="preserve">provide supporting evidence</text>
+<text x="996" y="559" font-family="Source Serif 4" font-size="15" font-weight="400" fill="#2B211D" xml:space="preserve">to answers</text>
+<text x="996" y="586" font-family="Inter" font-size="12" font-weight="400" fill="#665850" xml:space="preserve">当前只读取摘要片段</text>
+<line x1="996" y1="604" x2="1244" y2="604" stroke="#E2D3C7" stroke-width="1"/>
+<text x="996" y="636" font-family="Inter" font-size="12.5" font-weight="500" fill="#A3402A" xml:space="preserve">用作引用</text>
+<text x="1072" y="636" font-family="Inter" font-size="12.5" font-weight="500" fill="#665850" xml:space="preserve">存为笔记</text>
+<text x="996" y="662" font-family="Inter" font-size="12" font-weight="400" fill="#A3402A" xml:space="preserve">引用建议仍需核验</text>
+</g>
+</svg>

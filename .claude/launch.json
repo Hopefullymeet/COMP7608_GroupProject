@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "prototype",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "prototype", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "prototype-alt",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "prototype", "dev", "--port", "5174"],
+      "port": 5174
+    }
+  ]
+}
