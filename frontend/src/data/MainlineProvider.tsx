@@ -197,7 +197,7 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
   }, [api, topic, session])
 
   function openTopic(topicId: string, tab: Tab = 'discover', sessionId?: string | null, title?: string) {
-    if (tab === 'compare' || discovering.busy || reading.busy || confirmation) return
+    if (discovering.busy || reading.busy || confirmation) return
     const previous = selected.current
     const changedTopic = previous.topic !== topicId
     const nextSession = sessionId === undefined
@@ -387,7 +387,7 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
     void status(async()=>{await workspace.write('workspace.archive',{kind,id});if(id===topic||id===session)goHome()})
   }
   const state: State = {
-    ...view,dropped:files.map(f=>f.name),mainline: { demo,pages:['library'],
+    ...view,dropped:files.map(f=>f.name),mainline: { demo,pages:['library','wiki'],
       attachFiles:incoming=>{void status(async()=>{
         const selected=demo&&incoming?.length?incoming.map(f=>({file_id:f.name,name:f.name})):(await api.call('file.pick',{purpose:'papers'})).files
         setFiles(old=>[...old,...selected.filter(f=>!old.some(o=>o.file_id===f.file_id))])

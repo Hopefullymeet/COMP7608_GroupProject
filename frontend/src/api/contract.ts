@@ -1,3 +1,4 @@
+import type { ResearchTask, ResearchMethods } from './research'
 import type { ImportTask, ImportResult, LibraryMethods, Located } from './library'
 export type Id = string
 export type NonEmpty<T> = [T, ...T[]]
@@ -39,12 +40,12 @@ export type MainTask = { topic_id: Id } & (
   { kind: 'discovery'; input: { query: string; filters?: { year_from?: number; year_to?: number } } | { previous_search_id: Id } } |
   { kind: 'reading_qa'; session_id: Id; input: { question: string; selection?: { source_version_id: Id; passage_id: Id; quote:string }; sources: NonEmpty<Source> } }
 )
-export type WorkspaceTask = ImportTask
+export type WorkspaceTask = ImportTask | ResearchTask
 export type TaskInput = MainTask | WorkspaceTask
 export type Transfer = { endpoint: string; purpose: string; data_categories: NonEmpty<string> }
 export type Issue = { reason: string; retryable: boolean; next_action: string; details?: Record<string, unknown> }
 export type Start = { task_id: Id; run_id: Id; status: 'queued'; scope_id?: Id }
-type Result = Discovery | Reading | ImportResult
+type Result = Discovery | Reading | ImportResult | {record_id:string}
 export type Finished =
   | { status: 'completed'; result: Result }
   | { status: 'partial'; result: Result; issue: Issue }
@@ -64,7 +65,7 @@ type InTopic = { topic_id: Id }
 type InSession = InTopic & { session_id: Id }
 type ForTask = { task_id: Id }
 type InSearch = InTopic & { search_id: Id }
-export type Methods = LibraryMethods & {
+export type Methods = LibraryMethods & ResearchMethods & {
   'protocol.version': [Record<string, never>, { major: number; minor: number }]
   'topic.list': [Record<string, never>, { items: Topic[] }]
   'topic.create': [Write & { title: string }, InTopic]

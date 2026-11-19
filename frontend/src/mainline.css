@@ -61,6 +61,15 @@
   .year-panel { animation: none; }
   .year-chevron { transition: none; }
 }
+.form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin: 14px 0; }
+.form-grid label { display: grid; gap: 5px; color: var(--ink-2); font-size: 13px; }
+.form-grid input, .form-grid select { min-width: 0; width: 100%; }
+.result-card { padding: 20px; margin-bottom: 14px; }
+.result-card h2 { font: 500 23px var(--serif); }
+.table-scroll { overflow: auto; }
+.table-scroll table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+.table-scroll th, .table-scroll td { border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; padding: 10px; }
+.dialog { max-height: 85vh; overflow: auto; }
 .paper-choice { background: transparent; text-align: left; border: 0; color: inherit; flex: 1; min-width: 0; }
 .page textarea, .dialog textarea { width: 100%; padding: 10px; font: inherit; resize: vertical; }
 .page input:not([type=checkbox]), .page select, .dialog input:not([type=checkbox]), .dialog select {
