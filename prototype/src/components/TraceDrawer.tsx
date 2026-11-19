@@ -18,6 +18,7 @@ function usageLabel(usage: Usage) {
 }
 
 function RunCard({ run, open, onToggle }: { run: AgentRun; open: boolean; onToggle: () => void }) {
+  const {state}=useStore()
   const tokens = run.steps.reduce((n, s) => n + (s.tokens ?? 0), 0)
   const ms = run.steps.reduce((n, s) => n + (s.ms ?? 0), 0)
   const config = run.configuration
@@ -29,7 +30,7 @@ function RunCard({ run, open, onToggle }: { run: AgentRun; open: boolean; onTogg
           <small>{run.task}</small>
           <strong>{run.label}</strong>
         </span>
-        <span className={`run-chip ${run.status}`}>{run.limit ? 'Paused' : run.status === 'running' ? <><Spinner /> Running</> : run.status === 'partial' ? 'Partial' : 'Done'}</span>
+        <span className={`run-chip ${run.status}`}>{run.limit ? 'Paused' : run.status === 'running' ? <><Spinner /> Running</> : run.status === 'partial' ? 'Partial' : run.status==='failed'?'Failed':run.status==='cancelled'?'Cancelled':'Done'}</span>
       </button>
       {open && (
         <>
@@ -54,8 +55,8 @@ function RunCard({ run, open, onToggle }: { run: AgentRun; open: boolean; onTogg
               <p>Budget: {plural(config.budget.calls, 'call')} · {config.budget.tokens.toLocaleString()} tokens · {config.budget.minutes} min · ${config.budget.cost}</p>
             </>}
             {run.estimate && <p>Estimated (demo): {usageLabel(run.estimate)}</p>}
-            {run.usage ? <span>Used (demo): {usageLabel(run.usage)}</span>
-              : <span>{plural(run.steps.length, 'step')} · ~{tokens.toLocaleString()} tokens · {(ms / 1000).toFixed(1)} s <em>(mock)</em></span>}
+            {run.usage ? <span>{state.mainline&&!state.mainline.demo?'Used':'Used (demo)'} · {usageLabel(run.usage)}</span>
+              : state.mainline?<span>{plural(run.steps.length,'step')} · Usage unavailable</span> : <span>{plural(run.steps.length, 'step')} · ~{tokens.toLocaleString()} tokens · {(ms / 1000).toFixed(1)} s <em>(mock)</em></span>}
           </div>
         </>
       )}
@@ -67,7 +68,7 @@ export function TraceDrawer() {
   const { state, act } = useStore()
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const { open, focus } = state.trace
-  const runIds = state.route.view === 'check'
+  const runIds = !state.mainline && state.route.view === 'check'
     ? state.runOrder.filter((id) => state.runs[id]?.manuscriptId === state.check.activeId)
     : state.runOrder
 

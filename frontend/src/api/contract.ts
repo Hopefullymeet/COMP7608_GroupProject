@@ -7,14 +7,14 @@ export type NonEmpty<T> = [T, ...T[]]
 export type Scope = 'abstract' | 'full_text'
 export type Version = { source_version_id: Id; available_scope: 'metadata' | Scope }
 export type Topic = { topic_id: Id; title: string }
-export type Session = { session_id: Id; title?: string }
+export type Session = { session_id: Id; title?: string;updated_at?:string;has_turns?:boolean }
 export type LibraryItem = { paper_id: Id; title: string; topic_ids: Id[]; source_versions: NonEmpty<Version> }
 export type Action = 'pending' | 'hold' | 'exclude' | 'add'
 export type Decision = Exclude<Action, 'add'> | 'added'
 export type Candidate = {
   candidate_id: Id; title: string; authors: string[]; doi?: string; year?: number
   venue?: { name: string; source: string }; metadata_url: string; abstract?: string
-  reason: string; available_scope: Version['available_scope']; read_scope: 'none' | Scope; decision: Decision
+  change?:'new'|'updated';reason: string; available_scope: Version['available_scope']; read_scope: 'none' | Scope; decision: Decision
 }
 export type Discovery = {
   search_id: Id; candidates: Candidate[]; excluded: Candidate[]
@@ -53,6 +53,8 @@ export type Finished =
   | { status: 'partial'; result: Result; issue: Issue }
   | { status: 'failed'; issue: Issue }
   | { status: 'cancelled'; result?: Result }
+export type HistoryRun={task_id:Id;run_id:Id;kind:TaskInput['kind'];label:string;status:'queued'|'running'|Finished['status'];started_at:string;topic_id?:Id;session_id?:Id;
+  steps:{kind:'plan'|'tool'|'observe'|'decide'|'stop';title:string;detail:string}[];usage?:{calls:number;tokens:number;ms:number;cost:number};checkpoint_id?:Id}
 export type Snapshot = { task_id: Id; run_id: Id; last_event_seq: number } & (
   { status: 'queued' | 'running' } | Finished
 )
@@ -73,7 +75,7 @@ export type Methods = LibraryMethods & ResearchMethods & CitationMethods & Servi
   'topic.create': [Write & { title: string }, InTopic]
   'session.list': [InTopic, { items: Session[] }]
   'session.create': [Write & InTopic, InSession]
-  'session.get': [InSession, { turns: Turn[]; active_task_id?: Id }]
+  'session.get': [InSession, { turns: Turn[]; active_task_id?: Id;reader?:{source_version_id:Id;passage_id?:Id} }]
   'discovery.latest': [InTopic, { search_id?: Id; active_task_id?: Id;task_id?:Id }]
   'discovery.get': [InSearch, Discovery]
   'discovery.steps': [ForTask, { steps: Step[] }]
@@ -86,6 +88,7 @@ export type Methods = LibraryMethods & ResearchMethods & CitationMethods & Servi
   'evidence.locate': [InTopic & { message_id: Id; anchor_id: Id }, Evidence | Located]
   'task.prepare': [Write & TaskInput, { confirmation_id: Id; transfers: Transfer[];budget?:Budget;source_versions?:Id[] }]
   'task.start': [Write & TaskInput & { confirmation_id: Id }, Start]
+  'task.history':[{topic_id?:Id},{items:HistoryRun[]}]
   'task.get': [ForTask, Snapshot]
   'task.cancel': [Write & ForTask, ForTask & { status: Finished['status'] }]
 }

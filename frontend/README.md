@@ -1,8 +1,10 @@
-# PaperTrace 前端接入
+# PaperTrace 桌面前端
 
-桌面端与浏览器直接共用 `prototype/src` 中的 React 页面、布局、样式和动画。Discover、Read & Ask、Agent trace 和证据弹层都使用原型组件。前端接入代码集中在 `frontend/src`。
+Windows 应用与浏览器共用 React、TypeScript 和原型的布局、证据弹层及页面样式。正式前端位于 `frontend/`，数据走[接口契约](../docs/contracts/README.md)。独立视觉原型保留在 `prototype/`。
 
-## 运行
+## 运行与打包
+
+使用 Node 24 与 pnpm 12。Windows 桌面构建还需 Rust、Microsoft C++ Build Tools 和 WebView2。[Tauri Windows 环境说明](https://v2.tauri.app/start/prerequisites/#windows)
 
 ```powershell
 pnpm --dir prototype install --frozen-lockfile
@@ -10,23 +12,26 @@ pnpm --dir frontend install --frozen-lockfile
 pnpm --dir frontend desktop
 ```
 
-Windows 上需先装 Rust、Microsoft C++ Build Tools 和 WebView2。[Tauri Windows 环境说明](https://v2.tauri.app/start/prerequisites/#windows)
+`pnpm --dir frontend desktop:build` 生成 `frontend/src-tauri/target/release/papertrace.exe`。便携构建使用 `pnpm --dir frontend desktop:build --config src-tauri/tauri.portable.conf.json`，在可写目录启动生成的 exe 即可离线使用内置样例。此配置在应用旁保存 WebView 数据。本次桌面走查使用便携构建；当前环境启动标准构建时，Windows 在创建应用窗口前返回访问被拒绝。
 
-`desktop` 启动 Vite 并打开 PaperTrace 独立窗口。`pnpm --dir frontend desktop:build` 将前端资源打入可执行文件，适合断开开发服务器后演示。`pnpm --dir frontend dev` 用于浏览器预览。
-
-便携预览可在构建命令后加 `--config src-tauri/tauri.portable.conf.json`，演示数据会写入可执行文件旁的 `papertrace-data`。
-
-| 入口 | 数据来源 |
+| 入口 | 用途 |
 |---|---|
-| `http://localhost:5174/` | 原型的原版回放，包含 Compare 和侧栏工作区页面。加 `?speed=4` 可加速。 |
-| `http://localhost:5174/?mode=contract` | 使用原型界面配合 v0.4 契约样例，浏览器本地保存主题、检索和会话。 |
-| PaperTrace 桌面窗口 | 默认使用 PubMedQA 契约样例，在 WebView 内保存演示会话。 |
+| Windows 应用默认入口 | 桌面契约样例；数据保存在当前 WebView 用户资料目录 |
+| `pnpm --dir frontend dev` → `http://localhost:5174/?mode=contract` | 浏览器契约样例；同一浏览器、来源和资料目录可读回上次记录 |
+| `http://localhost:5174/?speed=4` | 独立脚本回放，刷新重置；也可用 `pnpm --dir prototype dev` 启动 |
 
-契约模式从 **Try the demo** 开始，选择 **Find papers** 并确认数据去向，将 PubMedQA **Add to topic**。进入 **Read & ask**，在右侧选择材料版本，使用建议问题并确认。点击回答的出处，右栏显示版本 `v1`，高亮 `v1-p2` 并打开原型的证据弹层。刷新后从侧栏展开主题和会话，可以读回回答和原出处。
+`pnpm --dir frontend test` 运行客户端契约回归测试，`pnpm --dir frontend build` 与 `pnpm --dir prototype build` 分别校验两个入口。
 
-## 宿主接入
+## 走查样例
 
-- [MainlineProvider](src/data/MainlineProvider.tsx) 将主题、会话、候选、材料版本、任务步骤和回答转换为原型 Store 的界面数据。阅读问答使用右栏所选的可读版本，出处按回答 ID 和锚点 ID 查询历史版本。Compare、工作区管理和证据采纳目前由原型回放演示。
-- [任务订阅](src/data/useTask.ts) 统一处理授权、幂等重发、流式预览、游标补收及取消。首版契约的 `discovery.latest` 返回最新检索 ID 和在途任务 ID。前端在收到终态时缓存检索 ID 与任务 ID 的对应关系，用于在同一客户端读回 Agent 步骤。跨客户端读取已完成检索的步骤仍需和宿主确认。
-- 真实宿主提供命令后，在启动或构建前设置 `VITE_PAPERTRACE_TRANSPORT=rpc` 来启用[桌面适配器](src/api/desktop.ts)。适配器连接时检查协议版本。当前约定 `papertrace_rpc({ request })` 接收完整 JSON-RPC 请求，`papertrace_subscribe({ request, channel })` 通过独立 Channel 转发 `task.event` 的 `params`。两个命令都返回带对应请求 ID 的 JSON-RPC 响应。
-- 字段与行为见 [发现 → 阅读 → 定位契约](../docs/contracts/discover-read-locate.md) 和 [共用协议](../docs/contracts/protocol.md)。
+1. Home 点 **Try the demo**，在 Discover 确认检索范围，将 PubMedQA 加入主题。Read & ask 选择版本、提问、点出处，在原文旁保存笔记。侧栏可回到最近会话。
+2. Library 选择同一主题，点 **Import papers** 导入两份演示材料；重复导入进入人工复核。选择论文可查看文件版本、标签和主题归属。移入回收站前可查看影响，恢复后重新可读。
+3. 主题的 Compare 页选择两篇论文并确认维度，查看每格的依据或缺口，可修订后保存为笔记。Evidence wiki 选择来源笔记并生成草稿，在差异预览中选定变更后采纳。
+4. Citation check 打开样例稿件或粘贴 Markdown，选择句子和目标材料后运行独立回查。审阅意见与改稿分别保存。预览措辞和引用，生成新稿版本，再运行回查。稿件、报告、比较 CSV、笔记、书目和证据可从此页导出。
+5. Models & services 可保存服务配置、测试连接、设置预算、审查只读授权及校验备份。Home 的研究更新可打开相关记录和可恢复任务。
+
+样例使用固定论文片段和模拟任务。样例导入展示预设文件，原 PDF、真实模型推理、外部检索、系统凭据和 Word/LaTeX 文件处理由接入的宿主提供。
+
+## 真实宿主接入
+
+构建或启动前设置 `$env:VITE_PAPERTRACE_TRANSPORT='rpc'`。桌面启动后通过 `protocol.version` 检查版本；`papertrace_rpc({request})` 接收 JSON-RPC 请求并返回同 ID 的响应，`papertrace_subscribe({request,channel})` 确认订阅后通过独立 Tauri Channel 转发 `task.event.params`。文件通过宿主交付的句柄传递。局部结果、错误、游标补收、任务取消及用户确认使用同一套前端控制器。[桌面适配器](src/api/desktop.ts) · [任务控制器](src/data/useTask.ts) · [页面与方法索引](../docs/contracts/README.md)

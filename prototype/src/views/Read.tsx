@@ -120,7 +120,8 @@ function Chat() {
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(text) } }} />
           <div className="composer-bar">
-            <span className="scope-pill"><Icon name="file" size={13} /> Reading scope: {(state.mainline && selected ? [selected] : readable).map((id) => paperFor(state, id).short).join(', ')}</span>
+            {state.mainline&&readable.length>1&&<details className="scope-select"><summary>Reading scope ({state.mainline.readVersions?.length||1})</summary><div className="card">{readable.map(id=><label key={id} className="check-row"><input type="checkbox" checked={(state.mainline?.readVersions?.length?state.mainline.readVersions:[selected]).includes(id)} onChange={e=>{const ids=state.mainline?.readVersions?.length?state.mainline.readVersions:[selected];state.mainline?.selectVersions?.(e.target.checked?[...ids,id]:ids.filter(x=>x!==id))}}/>{paperFor(state,id).short}</label>)}</div></details>}
+            <span className="scope-pill"><Icon name="file" size={13} /> Reading scope: {(state.mainline && selected ? (state.mainline.readVersions?.length?state.mainline.readVersions:[selected]) : readable).map((id) => paperFor(state, id).short).join(', ')}</span>
             <span className="grow" />
             <button className="send" disabled={state.qaRunning || !text.trim()} onClick={() => send(text)} aria-label="Send"><Icon name="arrowUp" size={16} /></button>
           </div>
@@ -160,6 +161,8 @@ function Reader() {
   const historical = state.mainline && state.activeEvidence && paperFor(state, state.readerPaperId)
   const paper = historical || (papers.find((p) => p.id === state.readerPaperId) ?? papers[0])
 
+  const scrollTimer=useRef<ReturnType<typeof setTimeout>>()
+  useEffect(()=>()=>clearTimeout(scrollTimer.current),[paper?.id,state.activeSessionId])
   if (!paper) return <div className="empty-state"><h2>No papers in this topic</h2><button className="primary" onClick={() => act.openTopic(currentTopic(state), 'discover')}>Find papers</button></div>
 
   const used = new Set<string>()
@@ -183,7 +186,16 @@ function Reader() {
         </div>
       </div>
 
-      <div className="reader-scroll scroll">
+      <div className="reader-scroll scroll" onScroll={e=>{
+        if(!state.mainline?.bookmark || state.activeEvidence)return
+        const scroller=e.currentTarget
+        clearTimeout(scrollTimer.current)
+        scrollTimer.current=setTimeout(()=>{
+          const top=scroller.getBoundingClientRect().top
+          const p=Array.from(scroller.querySelectorAll<HTMLElement>('[data-passage-id]')).find(p=>p.getBoundingClientRect().bottom>top)
+          if(p?.dataset.passageId)state.mainline?.bookmark?.(paper.id,p.dataset.passageId)
+        },400)
+      }}>
         <article className="paper">
           <p className="paper-venue">{paper.venue} {paper.year || ''}{paper.externalId && <> · {paper.externalId}</>}</p>
           <h1>{paper.title}</h1>
@@ -206,8 +218,10 @@ function Reader() {
                 <h2>{paper.stored === 'abstract' ? 'Abstract' : 'Full text'}</h2>
                 {state.mainline ? paper.passages.map((p) => {
                   const active = state.activeEvidence && evidenceFor(state, state.activeEvidence.id)?.passageId === p.id
+                  const quote=active&&state.activeEvidence?evidenceFor(state,state.activeEvidence.id)?.quote:''
+                  const at=quote?p.text.indexOf(quote):-1
                   return <section key={p.id} data-passage-id={p.id}>{p.page>0&&<h3>{p.section} · p. {p.page}</h3>}<p onMouseUp={()=>{const text=window.getSelection()?.toString().trim();if(text&&p.text.includes(text))state.mainline?.selectQuote?.(paper.id,p.id,text)}} className={`abstract${active ? ' located-passage' : ''}`} key={p.id}
-                    data-ev-anchor={active ? state.activeEvidence?.anchor : undefined}>{p.text}</p><button className="link-btn quiet" onClick={()=>state.mainline?.bookmark?.(paper.id,p.id)}>Bookmark passage</button></section>
+                    data-ev-anchor={active ? state.activeEvidence?.anchor : undefined}>{quote&&at>=0?<>{p.text.slice(0,at)}<mark>{quote}</mark>{p.text.slice(at+quote.length)}</>:p.text}</p><button className="link-btn quiet" onClick={()=>state.mainline?.bookmark?.(paper.id,p.id)}>Bookmark passage</button></section>
                 }) : <p className="abstract">{paper.passages.map((p) => <PassageText key={p.id} p={p} highlight={used} />)}</p>}
               </>}
               {!state.mainline && paper.stored !== 'full-text' && <div className="fulltext-note">

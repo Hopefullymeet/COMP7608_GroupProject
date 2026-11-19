@@ -8,6 +8,7 @@
     "desktop": "tauri dev",
     "desktop:build": "tauri build",
     "build": "tsc --noEmit && vite build",
+    "test": "node --test tests/workspace.test.mjs",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },

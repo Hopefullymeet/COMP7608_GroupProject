@@ -16,11 +16,14 @@
   padding: 12px 16px;
 }
 .app--desktop .page-head { padding-right: 138px; }
-.app--desktop .desktop-drag-area { pointer-events: none; z-index: 2; }
+.app--desktop .main:has(.page) .desktop-drag-area { pointer-events: none; z-index: 2; }
 .app--desktop .desktop-drag-area .window-controls { pointer-events: auto; }
 .app--desktop .page-head { -webkit-app-region: drag; }
 .app--desktop .page-head :is(button, select, input) { -webkit-app-region: no-drag; }
 .activity-list { margin-top: 14px; max-height: 25vh; overflow: auto; }
+.scope-select { position: relative; font-size: 12px; }
+.scope-select > div { position: absolute; bottom: 100%; left: 0; min-width: 260px; max-height: 240px; overflow: auto; padding: 12px; z-index: 4; }
+.scope-select + .scope-pill { display: none; }
 .scope-detail { overflow-wrap: anywhere; margin-block: 10px; color: var(--ink-2); }
 .result-card, .lib-detail { overflow-wrap: anywhere; }
 .topic-head--desktop { height: var(--topic-header-height); gap: 12px; padding-right: 16px; }
@@ -76,6 +79,8 @@
 .result-card h2 { font: 500 23px var(--serif); }
 .table-scroll { overflow: auto; }
 .table-scroll table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+.table-scroll th small { display: block; font-weight: 400; color: var(--ink-3); }
+.dialog .link-btn + .link-btn {margin-inline-start: 8px;}
 .table-scroll th, .table-scroll td { border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; padding: 10px; }
 .dialog { max-height: 85vh; overflow: auto; }
 .paper-choice { background: transparent; text-align: left; border: 0; color: inherit; flex: 1; min-width: 0; }

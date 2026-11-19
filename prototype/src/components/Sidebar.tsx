@@ -39,7 +39,7 @@ export function Sidebar() {
   const topics = state.topics.filter((t) => match(t.title) || sessionsOf(state, t.id).some((s) => match(s.title)))
   const shownTopics = q || allTopics ? topics : topics.slice(0, TOPIC_LIMIT)
   const recents = [...state.sessions]
-    .filter((s) => hasMessages(state, s.id) || !state.topics.find((t) => t.id === s.topicId)?.scripted)
+    .filter((s) => s.hasTurns || hasMessages(state, s.id) || !state.topics.find((t) => t.id === s.topicId)?.scripted)
     .sort((a, b) => b.order - a.order)
     .slice(0, RECENT_LIMIT)
 
@@ -123,7 +123,7 @@ export function Sidebar() {
         {!q && topics.length > TOPIC_LIMIT && (
           <ShowMore hidden={topics.length - TOPIC_LIMIT} open={allTopics} onToggle={() => setAllTopics((v) => !v)} />
         )}
-        {topics.length === 0 && <div className="side-empty">Nothing matches “{filter}”.</div>}
+        {topics.length === 0 && <div className="side-empty">{filter ? 'Nothing matches “'+filter+'”.' : 'No topics yet.'}</div>}
       </nav>
 
       {!q && (

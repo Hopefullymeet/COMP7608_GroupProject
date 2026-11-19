@@ -17,6 +17,7 @@ function CandidateCard({ c, disabled }: { c: Candidate; disabled?: boolean }) {
     <article className={`cand ${c.decision}`} data-testid={`cand-${c.paperId}`}>
       <div className="cand-main">
         <div className="cand-top">
+          {c.change&&<span className="tag accent">{c.change==='new'?'New candidate':'Updated candidate'}</span>}
           {!state.mainline && c.round > 1 && <span className="tag accent">New in round {c.round}</span>}
           <span className="tag">{c.readLevel}</span>
           <span className="tag quiet">via {c.source}</span>
@@ -127,6 +128,8 @@ function MainlineSearch({ question, submit, busy, running }: {
 
 export function Discover() {
   const { state, act } = useStore()
+  const [picked,pick]=useState<string[]>([])
+  const batch=state.candidates.filter(c=>picked.includes(c.id)&&c.decision!=='added'&&c.decision!=='excluded').map(c=>c.id)
   const d = state.discovery
   const discoveryRuns = state.runOrder.map((id) => state.runs[id]).filter((r) => r.task === 'Discovery')
   const latest = discoveryRuns[0]
@@ -166,6 +169,7 @@ export function Discover() {
       </section>
 
       {state.mainline?.watch&&<label className="lib-tools">Check for changes <select aria-label="Search frequency" value={state.mainline.interval} onChange={e=>state.mainline?.watch?.(Number(e.target.value))}><option value={0}>Off</option><option value={1}>Daily</option><option value={7}>Weekly</option><option value={30}>Monthly</option></select></label>}
+      {state.mainline&&batch.length>0&&<button className="ghost-btn" disabled={state.mainline.searchBusy} onClick={()=>state.mainline?.addCandidates?.(batch)}>Add selected to topic ({batch.length})</button>}
       <div className="disc-grid">
         <section className="cand-list" aria-label="Candidates">
           {state.angles.length === 0 && d.status !== 'running' && (
@@ -182,8 +186,8 @@ export function Discover() {
                   <h2>{a.label}</h2>
                   <span className={`status ${a.status}`}>{a.status === 'searching' && <Spinner />}{ANGLE_LABEL[a.status]}</span>
                 </div>
-                {items.map((c) => <CandidateCard key={c.id} c={c}
-                  disabled={state.mainline && (state.mainline.searchBusy || d.status === 'running')} />)}
+                {items.map((c) => <div key={c.id}>{state.mainline&&c.decision!=='added'&&c.decision!=='excluded'&&<label className="check-row"><input type="checkbox" checked={picked.includes(c.id)} onChange={e=>pick(e.target.checked?[...picked,c.id]:picked.filter(x=>x!==c.id))}/>Select candidate</label>}<CandidateCard c={c}
+                  disabled={state.mainline && (state.mainline.searchBusy || d.status === 'running')} /></div>)}
                 {a.status === 'gap' && (
                   <div className="gap-note"><Icon name="alert" size={15} /> {a.gapReason ?? 'No candidate passed screening for this angle.'}</div>
                 )}
