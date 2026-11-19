@@ -4,6 +4,7 @@
 
 ## 已完成
 
+- 已定义[稿件、独立回查与成果导出接口](docs/contracts/citation-export.md)。
 - 已定义[比较与 Wiki 接口](docs/contracts/comparison-wiki.md)，覆盖修订和逐项采纳。
 - 已定义[资料库、归档、全文与笔记接口](docs/contracts/library-reading.md)。
 

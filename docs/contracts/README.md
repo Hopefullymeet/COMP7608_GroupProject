@@ -4,6 +4,7 @@
 
 | 文件 | 内容 |
 |---|---|
+| [citation-export.md](citation-export.md) | 稿件、建议、回查、审阅、写回与导出 |
 | [comparison-wiki.md](comparison-wiki.md) | 论文比较、概念与关系、草稿及逐项审阅 |
 | [library-reading.md](library-reading.md) | 资料导入、复核与回收、主题归档、全文与笔记 |
 | [protocol.md](protocol.md) | 共用协议：通信、标识、写入重试、任务与事件、通用错误、证据定位 |
@@ -38,12 +39,12 @@
 | Evidence Wiki | 浏览概念页与关系 | `wiki.list` | [已细化](comparison-wiki.md) | |
 | | 生成或重生成草稿 | `task.start`（`wiki_draft`） | [已细化](comparison-wiki.md) | |
 | | 审阅、接受或丢弃草稿 | `wiki.review` | [已细化](comparison-wiki.md) | |
-| Citation check | 添加稿件、识别论述和引用 | | 待补 | Markdown、LaTeX、Word 实现顺序 |
-| | 引用建议 | `task.start`（`citation_suggest`） | 待补 | |
-| | 独立回查 | `task.start`（`citation_audit`） | 待补 | |
-| | 审阅检查意见 | `audit.review` | 待补 | |
-| | 采纳引用或措辞 | `draft.apply_suggestions` | 待补 | 写回能力 |
-| | 导出稿件、报告或成果 | | 待补 | 报告导出入口 |
+| Citation check | 添加稿件、识别论述和引用 | `draft.import/list` | [已细化](citation-export.md) | |
+| | 引用建议 | `task.start`（`citation_suggest`） | [已细化](citation-export.md) | |
+| | 独立回查 | `task.start`（`citation_audit`） | [已细化](citation-export.md) | |
+| | 审阅检查意见 | `audit.review` | [已细化](citation-export.md) | |
+| | 采纳引用或措辞 | `draft.apply_suggestions` | [已细化](citation-export.md) | |
+| | 导出稿件、报告或成果 | `export.create` | [已细化](citation-export.md) | |
 | Models & services | 模型、检索源与解析服务配置及连接测试 | | 待补 | 首批接入的服务 |
 | | 查看任务数据去向 | `task.prepare` | [已细化](discover-read-locate.md#11-方法与类型) | 预算首版由服务端配置 |
 | | 外部 Agent 只读授权 | | 待补 | 授权有效期与凭据交互 |
