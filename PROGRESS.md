@@ -4,6 +4,8 @@
 
 ## 已完成
 
+- 已定义[资料库、归档、全文与笔记接口](docs/contracts/library-reading.md)。
+
 - 已提交 Group 52 Proposal，完成 [MVP 设计草案](docs/PaperTrace_MVP_Design.md)及[项目书、技术书与设计交接包](docs/deliverables/PaperTrace_Handoff_20261109/)。
 - 视觉原型（`visual-prototype`）已通过评审，覆盖论文发现、阅读问答、证据定位、比较及工作区页面。演示使用示例数据，范围见[原型说明](prototype/AGENTS.md)。
 - 已完成[共用协议](docs/contracts/protocol.md)和[发现 → 阅读 → 定位首版契约](docs/contracts/discover-read-locate.md)评审，包含授权、自动补搜、重连与摘要定位。
