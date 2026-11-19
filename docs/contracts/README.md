@@ -4,6 +4,7 @@
 
 | 文件 | 内容 |
 |---|---|
+| [library-reading.md](library-reading.md) | 资料导入、复核与回收、主题归档、全文与笔记 |
 | [protocol.md](protocol.md) | 共用协议：通信、标识、写入重试、任务与事件、通用错误、证据定位 |
 | [discover-read-locate.md](discover-read-locate.md) | 主线「发现 → 加入主题 → 阅读问答 → 定位原文」的方法、类型和联调样例 |
 
@@ -15,24 +16,24 @@
 |---|---|---|---|---|
 | Home 与侧栏 | 创建主题或会话 | `topic.create`、`session.create` | [已细化](discover-read-locate.md#11-方法与类型) | |
 | | 查看主题和会话 | `topic.list`、`session.list` | [已细化](discover-read-locate.md#11-方法与类型) | 待处理事项 |
-| | 拖入材料（复用 Library 导入） | | 待补 | |
-| | 删除主题或会话 | | 待补 | 会话、笔记和成果的保留与恢复 |
+| | 导入材料 | `file.pick`、`paper_import` | [已细化](library-reading.md) | |
+| | 归档与恢复主题、会话 | `workspace.archive/archived/unarchive` | [已细化](library-reading.md) | |
 | Discover | 发起或细化检索 | `task.prepare`、`task.start`（`discovery`） | [已细化](discover-read-locate.md#21-发现论文) | 后续尝试会议来源筛选 |
 | | 读回检索与候选 | `discovery.latest`、`discovery.get` | [已细化](discover-read-locate.md#12-检索与候选) | |
 | | 加入、暂存、排除或恢复候选 | `candidate.decide` | [已细化](discover-read-locate.md#12-检索与候选) | 完整复核随 Library 导入交付 |
 | | 查看 Agent 步骤 | `discovery.steps` | [已细化](discover-read-locate.md#13-任务结果与事件) | |
 | | 定期检索与文献变化 | | 待补 | 交付批次 |
 | Read & Ask | 提问和读回历史 | `task.prepare`、`task.start`（`reading_qa`）、`session.get` | [已细化](discover-read-locate.md#23-阅读问答) | 选中文本提问 |
-| | 定位原文、查看证据卡 | `evidence.locate` | 摘要[已细化](discover-read-locate.md#24-点击出处定位原文)，全文待补 | 全文坐标与高亮格式 |
-| | 打开论文和读取摘要 | `source.read_abstract` | [已细化](discover-read-locate.md#24-点击出处定位原文) | 后续交付全文查看；阅读位置待补 |
+| | 定位原文、查看证据卡 | `evidence.locate` | [摘要](discover-read-locate.md)、[全文](library-reading.md) | |
+| | 打开论文和读取摘要 | `source.read_abstract` | [已细化](discover-read-locate.md#24-点击出处定位原文) | [全文与阅读位置](library-reading.md) |
 | Discover 与 Read & Ask | 查询、订阅或取消任务 | `task.get`、`task.subscribe`、`task.cancel` | [已细化](protocol.md#4-任务与事件) | 断点继续待补 |
-| | 保存回答、编辑笔记、用作引用 | | 待补 | 笔记恢复 |
+| | 保存回答、编辑笔记、用作引用 | `note.list/save` | [已细化](library-reading.md) | |
 | Compare | 发起比较 | `task.start`（`paper_comparison`） | 待补 | 维度预设、按格增量返回 |
 | | 修订、保存或存为笔记 | `comparison.save` | 待补 | |
 | Library | 浏览个人库 | `library.list` | [已细化](discover-read-locate.md#22-加入主题并读回-library) | 分页 |
-| | 导入、补全文、复核重复与冲突 | `task.start`（`paper_import`）、`library.resolve_import` | 待补 | 导入格式与批量范围 |
-| | 移出主题、回收站、恢复与清理 | | 待补 | 恢复冲突处理 |
-| | 标签与批量操作、来源更新 | | 待补 | |
+| | 导入、补全文、复核重复与冲突 | `task.start`（`paper_import`）、`library.resolve_import` | [已细化](library-reading.md) | |
+| | 移出主题、回收站、恢复与清理 | `library.organize/impact/trash/restore/purge` | [已细化](library-reading.md) | |
+| | 标签与批量操作、来源更新 | `library.catalog/organize` | [已细化](library-reading.md) | |
 | Evidence Wiki | 浏览概念页与关系 | | 待补 | |
 | | 生成或重生成草稿 | `task.start`（`wiki_draft`） | 待补 | |
 | | 审阅、接受或丢弃草稿 | `wiki.review` | 待补 | 差异粒度、逐项采纳、目标版本变化 |
