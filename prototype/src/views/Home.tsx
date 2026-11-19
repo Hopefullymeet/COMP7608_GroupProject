@@ -69,8 +69,11 @@ export function Home() {
           <div className="home-actions">
             <div className="home-actions-inner">
               <div className="composer-bar">
-                <button className="ghost-btn sm" disabled={!expanded && !state.mainline} onClick={() => state.mainline ? state.mainline.attachFiles?.() : fileRef.current?.click()}>
-                  <Icon name="paperclip" size={15} /> Add papers
+                <button className="ghost-btn sm home-attach" aria-label="Add papers" title={expanded ? undefined : 'Add papers'}
+                  disabled={!expanded && !state.mainline}
+                  onClick={() => state.mainline ? state.mainline.attachFiles?.() : fileRef.current?.click()}>
+                  <Icon name="paperclip" size={15} />
+                  <span className="home-attach-label" aria-hidden="true">Add papers</span>
                 </button>
               </div>
             </div>

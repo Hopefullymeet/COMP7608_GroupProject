@@ -181,6 +181,10 @@ function Reader() {
   useEffect(()=>()=>clearTimeout(scrollTimer.current),[paper?.id,state.activeSessionId])
   if (!paper) return <div className="empty-state"><h2>No papers in this topic</h2><button className="primary" onClick={() => act.openTopic(currentTopic(state), 'discover')}>Find papers</button></div>
 
+  const choices = (papers.some((p) => p.id === paper.id) ? papers : [paper, ...papers]).map((p) => {
+    const version = p.short === `${p.title} · ${p.id}` ? p.id.slice(0, 8) : undefined
+    return { paper: p, label: version ? p.title : p.short, version }
+  })
   const used = new Set<string>()
   state.messages.filter((m) => m.sessionId === state.activeSessionId)
     .forEach((m) => m.segments.forEach((s) => s.evidenceId && used.add(s.evidenceId)))
@@ -191,13 +195,23 @@ function Reader() {
   return (
     <section className="reader" aria-label="Paper">
       <div className="reader-bar">
-        <div className="paper-tabs">
-          {papers.map((p) => (
-            <button key={p.id} className={p.id === paper.id ? 'on' : ''} onClick={() => act.setReader(p.id)}>{p.short}</button>
+        <div className="paper-tabs" role="group" aria-label="Papers in this reader">
+          {choices.map(({ paper: p, label, version }) => (
+            <button key={p.id} className={p.id === paper.id ? 'on' : ''} aria-pressed={p.id === paper.id}
+              title={p.short} onClick={() => act.setReader(p.id)}>
+              <span className="paper-tab-label">{label}</span>
+              {version && <small className="paper-tab-version">{version}</small>}
+            </button>
           ))}
         </div>
+        <select className="paper-picker" aria-label="Paper in reader" title={paper.short}
+          value={paper.id} onChange={(event) => act.setReader(event.target.value)}>
+          {choices.map(({ paper: p, label, version }) => (
+            <option key={p.id} value={p.id}>{version ? `${version} · ${label}` : label}</option>
+          ))}
+        </select>
         <div className="view-toggle">
-          <button className="on">Reading view</button>
+          <button className="on" aria-pressed="true">Reading</button>
           <button disabled={!state.mainline?.original} onClick={()=>state.mainline?.original?.(paper.id)}>Original PDF</button>
         </div>
       </div>

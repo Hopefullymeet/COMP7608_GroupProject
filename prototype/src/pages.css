@@ -42,8 +42,9 @@ select {
   background-position: right 15px center, right 10px center; background-size: 5px 5px; background-repeat: no-repeat;
 }
 @supports (appearance: base-select) {
-  select, select::picker(select) { appearance: base-select; }
-  select { align-items: center; gap: 10px; background-image: none; padding-right: 10px; }
+  /* The narrow reader keeps the native single-line selected value and ellipsis. */
+  select:where(:not(.paper-picker)), select:where(:not(.paper-picker))::picker(select) { appearance: base-select; }
+  select:where(:not(.paper-picker)) { align-items: center; gap: 10px; background-image: none; padding-right: 10px; }
   select::picker-icon { color: var(--ink-3); }
   select::picker(select) {
     margin-top: 5px; max-height: min(20rem, 45vh); overflow: auto;
