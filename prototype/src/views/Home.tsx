@@ -84,6 +84,7 @@ export function Home() {
           <span><small>Try the demo</small>{state.mainline ? 'Which scientific QA datasets use paper abstracts?' : DEFAULT_QUESTION}</span>
           <Icon name="arrowRight" size={14} />
         </button>}
+        {!!state.mainline?.activity?.length&&<details className="activity-list"><summary>Research updates ({state.mainline.activity.length})</summary>{state.mainline.activity.map(a=><button key={a.id} className="lib-row" onClick={a.open}><span><strong>{a.title}</strong><small>{a.detail}</small></span></button>)}</details>}
       </div>
     </div>
   )

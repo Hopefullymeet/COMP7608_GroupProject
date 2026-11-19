@@ -1,3 +1,4 @@
+import type { Budget, ServiceMethods, ResumeTask } from './services'
 import type { CitationTask, CitationMethods } from './citation'
 import type { ResearchTask, ResearchMethods } from './research'
 import type { ImportTask, ImportResult, LibraryMethods, Located } from './library'
@@ -38,10 +39,10 @@ export type Reading = {
 }
 export type Turn = { task_id: Id; question: string; answer: Reading }
 export type MainTask = { topic_id: Id } & (
-  { kind: 'discovery'; input: { query: string; filters?: { year_from?: number; year_to?: number } } | { previous_search_id: Id } } |
+  { kind: 'discovery'; input: { query: string; filters?: { year_from?: number; year_to?: number; venue?:string } } | { previous_search_id: Id } } |
   { kind: 'reading_qa'; session_id: Id; input: { question: string; selection?: { source_version_id: Id; passage_id: Id; quote:string }; sources: NonEmpty<Source> } }
 )
-export type WorkspaceTask = ImportTask | ResearchTask | CitationTask
+export type WorkspaceTask = ResumeTask | ImportTask | ResearchTask | CitationTask
 export type TaskInput = MainTask | WorkspaceTask
 export type Transfer = { endpoint: string; purpose: string; data_categories: NonEmpty<string> }
 export type Issue = { reason: string; retryable: boolean; next_action: string; details?: Record<string, unknown> }
@@ -66,14 +67,14 @@ type InTopic = { topic_id: Id }
 type InSession = InTopic & { session_id: Id }
 type ForTask = { task_id: Id }
 type InSearch = InTopic & { search_id: Id }
-export type Methods = LibraryMethods & ResearchMethods & CitationMethods & {
+export type Methods = LibraryMethods & ResearchMethods & CitationMethods & ServiceMethods & {
   'protocol.version': [Record<string, never>, { major: number; minor: number }]
   'topic.list': [Record<string, never>, { items: Topic[] }]
   'topic.create': [Write & { title: string }, InTopic]
   'session.list': [InTopic, { items: Session[] }]
   'session.create': [Write & InTopic, InSession]
   'session.get': [InSession, { turns: Turn[]; active_task_id?: Id }]
-  'discovery.latest': [InTopic, { search_id?: Id; active_task_id?: Id }]
+  'discovery.latest': [InTopic, { search_id?: Id; active_task_id?: Id;task_id?:Id }]
   'discovery.get': [InSearch, Discovery]
   'discovery.steps': [ForTask, { steps: Step[] }]
   'candidate.decide': [Write & InSearch & { candidate_id: Id; decision: Action }, { candidate_id: Id } & (
@@ -83,7 +84,7 @@ export type Methods = LibraryMethods & ResearchMethods & CitationMethods & {
   'library.list': [{ topic_id?: Id }, { items: LibraryItem[] }]
   'source.read_abstract': [InTopic & { source_version_id: Id }, Abstract]
   'evidence.locate': [InTopic & { message_id: Id; anchor_id: Id }, Evidence | Located]
-  'task.prepare': [Write & TaskInput, { confirmation_id: Id; transfers: Transfer[] }]
+  'task.prepare': [Write & TaskInput, { confirmation_id: Id; transfers: Transfer[];budget?:Budget;source_versions?:Id[] }]
   'task.start': [Write & TaskInput & { confirmation_id: Id }, Start]
   'task.get': [ForTask, Snapshot]
   'task.cancel': [Write & ForTask, ForTask & { status: Finished['status'] }]

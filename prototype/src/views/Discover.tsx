@@ -59,6 +59,8 @@ function MainlineSearch({ question, submit, busy, running }: {
   busy: boolean; running: boolean
 }) {
   const [open, setOpen] = useState(false)
+  const {state}=useStore()
+  const [venue,setVenue]=useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const filter = useRef<HTMLDivElement>(null)
@@ -66,7 +68,7 @@ function MainlineSearch({ question, submit, busy, running }: {
   const panelId = useId()
   const valid = [from, to].every((value) => !value || (/^\d+$/.test(value) && Number(value) >= 1 && Number(value) <= 9999))
     && !(from && to && Number(from) > Number(to))
-  const selected = Boolean(from || to)
+  const selected = Boolean(from || to || (venue && state.mainline?.venueFilter))
   const range = from && to ? `${from}–${to}` : from ? `From ${from}` : `Through ${to}`
   function close() {
     setOpen(false)
@@ -106,9 +108,10 @@ function MainlineSearch({ question, submit, busy, running }: {
             value={to} aria-invalid={!valid} aria-describedby={!valid ? `${panelId}-error` : undefined}
             onChange={(e) => setTo(e.target.value)} /></label>
         </div>
+        {state.mainline?.venueFilter&&<label>Venue <input value={venue} onChange={e=>setVenue(e.target.value)} placeholder="Conference name"/></label>}
         {!valid && <p className="year-error" id={`${panelId}-error`} role="status">Use years from 1 to 9999, with the start year first.</p>}
         <div className="year-panel-actions">
-          <button type="button" className="link-btn" disabled={!selected} onClick={() => { setFrom(''); setTo('') }}>Clear</button>
+          <button type="button" className="link-btn" disabled={!selected} onClick={() => { setFrom(''); setTo('');setVenue('') }}>Clear</button>
           <button type="submit" className="primary sm" disabled={!valid}>Done</button>
         </div>
       </form>}
@@ -116,7 +119,7 @@ function MainlineSearch({ question, submit, busy, running }: {
     <button className="primary" disabled={!valid || busy} onClick={() => {
       setOpen(false)
       submit(question, selected ? {
-        ...(from && { year_from: Number(from) }), ...(to && { year_to: Number(to) }),
+        ...(venue.trim() && state.mainline?.venueFilter && {venue:venue.trim()}), ...(from && { year_from: Number(from) }), ...(to && { year_to: Number(to) }),
       } : undefined)
     }}><Icon name="compass" size={15} /> Find papers</button>
   </div>
@@ -162,6 +165,7 @@ export function Discover() {
         </div>
       </section>
 
+      {state.mainline?.watch&&<label className="lib-tools">Check for changes <select aria-label="Search frequency" value={state.mainline.interval} onChange={e=>state.mainline?.watch?.(Number(e.target.value))}><option value={0}>Off</option><option value={1}>Daily</option><option value={7}>Weekly</option><option value={30}>Monthly</option></select></label>}
       <div className="disc-grid">
         <section className="cand-list" aria-label="Candidates">
           {state.angles.length === 0 && d.status !== 'running' && (

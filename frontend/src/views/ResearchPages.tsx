@@ -68,13 +68,13 @@ function WikiTopic({topic}:{topic:string}) {
     <div className="lib-grid"><section className="card lib-detail"><h2>Concept pages</h2><select aria-label="Concept page" value={pageId} onChange={e=>pageTo(e.target.value)}><option value="">New concept page</option>{wiki?.pages.map(p=><option key={p.page_id} value={p.page_id}>{p.title}</option>)}</select>
       {page&&<><h2>{page.title}</h2>{page.statements.map(s=><Entry key={s.id} value={s}/>)}<h3>Relationships</h3>{page.relations.map(r=><Entry key={r.id} value={r}/>)}</>}</section>
     <section className="card lib-detail"><h2>{page?'Regenerate draft':'Generate draft'}</h2>{!page&&<label>Concept title <input value={title} onChange={e=>setTitle(e.target.value)}/></label>}
-      <h3>Source notes</h3>{notes?.items.map(n=><label className="check-row" key={n.note_id}><input type="checkbox" checked={selected.includes(n.note_id)} onChange={()=>pick(toggle(selected,n.note_id))}/>{n.text}</label>)}
+      <h3>Source notes</h3>{notes?.items.map(n=><label className="check-row" key={n.note_id}><input type="checkbox" disabled={!n.anchor_ids.length} checked={selected.includes(n.note_id)} onChange={()=>pick(toggle(selected,n.note_id))}/>{n.text}{!n.anchor_ids.length&&<small>Add a source to use this note in the wiki.</small>}</label>)}
       {!notes?.items.length&&<p>Save a reading or comparison note in this topic to start a draft.</p>}
       {wiki?.pages.flatMap(p=>p.relations).map(r=><label className="check-row" key={r.id}><input type="checkbox" checked={relations.includes(r.id)} onChange={()=>relate(toggle(relations,r.id))}/>{r.from} → {r.to}</label>)}
       <button className="primary" disabled={busy||(!title.trim()&&!page)||(!selected.length&&!relations.length)} onClick={()=>void prepare({kind:'wiki_draft',topic_id:topic,input:{title:page?.title??title,page_id:page?.page_id,note_ids:selected,relation_ids:relations}})}>Generate draft</button></section></div>
       {review&&<ReviewWiki topic={topic} draft={review} close={()=>setReview(undefined)}/>}</>
 }
 export function WikiPage() {
-  const {state}=useStore(),[topic,setTopic]=useState(state.topics[0]?.id??'')
+  const {state}=useStore(),[topic,setTopic]=useState((state.route.view==='wiki'&&state.route.topicId)||state.topics[0]?.id||'')
   return <div className="page"><PageHead icon="wiki" title="Evidence wiki" sub="Concepts, relationships and their sources"><TopicSelect value={topic} onChange={setTopic}/></PageHead><div className="page-body scroll">{topic?<WikiTopic key={topic} topic={topic}/>:<p>Choose a topic to view its evidence wiki.</p>}</div></div>
 }

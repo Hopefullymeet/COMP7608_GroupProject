@@ -8,15 +8,21 @@ import { researchFixture, type ResearchFixture } from './researchFixture'
 import { asLocated, emptyLibrary, type LibraryFixture } from './library'
 import { libraryFixture } from './libraryFixture'
 
+import { defaultConfig, type Activity, type Config, type Grant, type Offer, type Watch } from './services'
+
 type Run = { input: TaskInput; run_id: string; events: TaskEvent[]; script: EventBody[] }
 type State = {
+  config:Config
+  grants:Grant[]
+  watches:Watch[]
+  activity:Activity[]
   manuscripts:Record<string,Manuscript[]>
   research:ResearchFixture
   shelf:LibraryFixture
   topics: Topic[]
   sessions: Record<string, Session[]>
   turns: Record<string, Turn[]>
-  searches: Record<string, Discovery & { task_id: string; query: string; filters?: { year_from?: number; year_to?: number } }>
+  searches: Record<string, Discovery & { task_id: string; query: string; filters?: { year_from?: number; year_to?: number; venue?:string } }>
   latest: Record<string, string>
   library: LibraryItem[]
   runs: Record<string, Run>
@@ -33,10 +39,21 @@ function fail(reason: string, message: string, next_action = 'refresh_data', det
 }
 
 export function createMock(): Client {
-  const initial: State = { manuscripts:{},research:{comparisons:{},wiki:{}}, shelf:emptyLibrary(), topics: [], sessions: {}, turns: {}, searches: {}, latest: {}, library: [], runs: {}, writes: {}, confirmations: {} }
+  const initial: State = { config:defaultConfig(),grants:[],watches:[],activity:[],manuscripts:{},research:{comparisons:{},wiki:{}}, shelf:emptyLibrary(), topics: [], sessions: {}, turns: {}, searches: {}, latest: {}, library: [], runs: {}, writes: {}, confirmations: {} }
   const state: State = JSON.parse(localStorage.getItem(key) ?? 'null') ?? initial
   state.shelf ??= emptyLibrary()
-  const shelf=libraryFixture(state,evidence)
+  state.config??=defaultConfig();state.grants??=[];state.watches??=[];state.activity??=[]
+  const shelf=libraryFixture(state,evidence,versions=>{
+    const records:{kind:string;label:string}[]=[]
+    const has=(anchors:string[])=>anchors.some(a=>versions.includes((a===evidence.anchor.anchor_id?evidence.source:state.shelf.anchors[a]?.source)?.source_version_id))
+    for(const c of Object.values(state.research?.comparisons??{}).flat())if(c.source_versions.some(v=>versions.includes(v)))records.push({kind:'Comparison',label:c.question})
+    for(const wiki of Object.values(state.research?.wiki??{}))for(const page of wiki.pages){
+      for(const s of page.statements)if(has(s.anchor_ids))records.push({kind:'Wiki statement',label:s.text})
+      for(const r of page.relations)if(has([...r.anchor_ids,...r.counter_anchor_ids]))records.push({kind:'Wiki relationship',label:r.from+' → '+r.to})
+    }
+    for(const d of Object.values(state.manuscripts??{}).flat())for(const s of d.versions[0].sentences)if(s.cites.some(v=>versions.includes(v)))records.push({kind:'Manuscript',label:d.name+' · '+s.text})
+    return records
+  })
   state.research??={comparisons:{},wiki:{}}
   const research=researchFixture(state,state.research,asLocated(evidence))
   const citation=citationFixture(state,state.research,state.manuscripts??={},asLocated(evidence))
@@ -54,6 +71,12 @@ export function createMock(): Client {
     if(body.type==='task.finished' && body.payload.status==='completed' && (run.input.kind==='paper_comparison'||run.input.kind==='wiki_draft')) research.generate(run.input,task)
     if(body.type==='task.finished' && body.payload.status==='completed' && (run.input.kind==='citation_audit'||run.input.kind==='citation_suggest')){
       if(!citation.generate(run.input,task))body={type:'task.finished',payload:{status:'partial',result:{record_id:task},issue:{reason:'Missing target material',next_action:'restore_source',retryable:false}}}
+    }
+    if(body.type==='task.finished'){
+      if(run.input.kind==='discovery'&&body.payload.status==='completed'&&'candidates' in body.payload.result) {
+        state.activity.unshift({id:id(),topic_id:run.input.topic_id,title:'Search results updated',detail:body.payload.result.candidates.length+' visible candidates',target:'discover'})
+      }
+      for(const grant of state.grants)if(grant.task_id===task&&grant.status==='active')grant.status='expired'
     }
     const event = { task_id: task, run_id: run.run_id, event_seq: run.events.length + 1, ...body }
     run.events.push(event)
@@ -83,6 +106,7 @@ export function createMock(): Client {
   Object.entries(state.runs).forEach(([task, run]) => { if (active(run)) schedule(task) })
 
   function taskScript(input: TaskInput, task: string): EventBody[] {
+    if(input.kind==='resume')return [{type:'task.progress',payload:{stage:'validate',message:'Checking checkpoint scope'}},{type:'task.progress',payload:{stage:'resume',message:'Restoring submitted work'}},{type:'task.finished',payload:{status:'completed',result:{record_id:input.input.checkpoint_id}}}]
     if(input.kind==='citation_audit'||input.kind==='citation_suggest'){
       return [...['identify','read','assess'].map((stage):EventBody=>({type:'task.progress',payload:{stage,message:stage}})),{type:'task.finished',payload:{status:'completed',result:{record_id:task}}}]
     }
@@ -121,6 +145,7 @@ export function createMock(): Client {
     const request = parent ?? ('query' in input.input ? input.input : fail('INVALID_PARAMS', 'The previous search could not be found.'))
     const excluded = parent?.excluded ?? []
     const matches = /pubmed|biomed|scientific|abstract|dataset|科学|摘要/i.test(request.query)
+      && (!request.filters?.venue || sample.venue?.name.toLowerCase().includes(request.filters.venue.toLowerCase()))
       && (request.filters?.year_from ?? 1) <= 2019 && (request.filters?.year_to ?? 9999) >= 2019
     const added = state.library.some((item) => item.paper_id === 'p1' && item.topic_ids.includes(input.topic_id))
     const candidates: Candidate[] = matches && !excluded.length ? [{
@@ -148,8 +173,46 @@ export function createMock(): Client {
     ]
   }
 
+  const offers=():Offer[]=>Object.entries(state.runs).flatMap(([task_id,r])=>{
+    const input=r.input
+    const versions='source_versions' in input.input ? input.input.source_versions : input.kind==='reading_qa'?input.input.sources.map(s=>s.source_version_id):[]
+    return active(r)&&versions.length?[{offer_id:task_id,task_id,endpoint:'https://helper.example.org',purpose:'Review selected sources',source_versions:versions,estimated_usage:'One read-only request'}]:[]
+  })
+  const backupKey=key+'/backup'
+  let preview=''
   const handlers: { [M in Method]: (params: Methods[M][0]) => Methods[M][1] } = {
     ...shelf.handlers,...research.handlers,...citation.handlers,
+    'services.get':()=>state.config,
+    'services.save':({base_revision,operation_id:_,...config})=>{
+      if(base_revision!==state.config.revision)throw new Error('Settings changed. Reload the current configuration.')
+      state.config={...config,revision:id()};return state.config
+    },
+    'services.test':({id})=>({ok:true,message:'Configuration for '+id+' passed fixture validation. Network connectivity is untested.'}),
+    'services.credentials':()=>{throw new Error('Connect a desktop host to manage system credentials.')},
+    'access.list':()=>({offers:offers(),grants:state.grants}),
+    'access.grant':({offer_id})=>{const offer=offers().find(o=>o.offer_id===offer_id);if(!offer)throw new Error('This task has ended.')
+      const grant:Grant={...offer,grant_id:id(),status:'active'};state.grants.push(grant);return grant},
+    'access.revoke':({grant_id})=>{const g=state.grants.find(g=>g.grant_id===grant_id);if(g)g.status='revoked';return {revoked:!!g}},
+    'backup.create':()=>{if(Object.values(state.runs).some(active))throw new Error('Finish active tasks before backing up.')
+      localStorage.setItem(backupKey,JSON.stringify({version:id(),state}));return {name:'Local demo backup',saved:true}},
+    'backup.inspect':({file_id})=>{
+      const raw=localStorage.getItem(backupKey);const b=raw?JSON.parse(raw):undefined
+      const valid=!!b?.state?.shelf && file_id==='demo-backup'
+      preview=valid?b.version:''
+      return {preview_id:preview||id(),valid,summary:valid?b.state.topics.length+' topics · '+b.state.library.length+' papers':'No valid local backup.',issues:valid?[]:['Create a demo backup first.']}
+    },
+    'backup.restore':({preview_id})=>{
+      const b=JSON.parse(localStorage.getItem(backupKey)??'null')
+      if(!b||!preview||b.version!==preview||preview!==preview_id||Object.values(state.runs).some(active))throw new Error('Backup changed or a task is active. Inspect again.')
+      Object.assign(state,b.state);preview='';return {restored:true}
+    },
+    'discovery.watch':({topic_id,search_id,interval_days})=>{
+      state.watches=state.watches.filter(w=>w.topic_id!==topic_id||w.search_id!==search_id)
+      if(interval_days)state.watches.push({topic_id,search_id,interval_days})
+      return {interval_days}
+    },
+    'workspace.activity':({topic_id})=>({items:state.activity.filter(a=>!topic_id||a.topic_id===topic_id),watches:state.watches.filter(w=>!topic_id||w.topic_id===topic_id)}),
+    'file.stage_drop':({paths})=>({files:paths.map(path=>{const name=path.split(/[\\\\/]/).pop()??path;return {file_id:name,name}})}),
     'protocol.version': () => ({ major: 0, minor: 4 }),
     'topic.list': () => ({ items: state.topics.filter(t=>!state.shelf.archive.some(a=>a.id===t.topic_id)) }),
     'topic.create': ({ title }) => {
@@ -172,7 +235,7 @@ export function createMock(): Client {
       }),
     }),
     'discovery.latest': ({ topic_id }) => ({
-      search_id: state.latest[topic_id],
+      search_id: state.latest[topic_id],task_id:state.searches[state.latest[topic_id]]?.task_id,
       active_task_id: Object.keys(state.runs).find((task) => {
         const run = state.runs[task]
         return active(run) && run.input.kind === 'discovery' && run.input.topic_id === topic_id
@@ -196,6 +259,7 @@ export function createMock(): Client {
           paper = { paper_id: 'p1', title: candidate.title, topic_ids: [], source_versions: [version] }
           state.library.push(paper)
         }
+        state.shelf.entries[paper.paper_id]??={identity:candidate.doi??paper.paper_id,authors:candidate.authors}
         const linked = paper.topic_ids.includes(topic_id)
         if (!linked) paper.topic_ids.push(topic_id)
         search.excluded = search.excluded.filter((item) => item !== candidate)
@@ -225,14 +289,17 @@ export function createMock(): Client {
       return exists ? (anchor_id==='a1' && shelf.lookup(anchor_id) ? evidence : shelf.lookup(anchor_id)) : fail('SOURCE_UNAVAILABLE', 'The original abstract is unavailable.', 'restore_source')
     },
     'task.prepare': ({ operation_id: _, ...input }) => {
+      if(input.kind==='discovery'&&!state.config.services.some(s=>s.kind==='search'&&s.enabled))throw new Error('Enable a literature search source in Models & services.')
+      const selectedModel=state.config.models.find(m=>m.id===state.config.model_id)!
       const confirmation_id = id()
       state.confirmations[confirmation_id] = input
       return {
         confirmation_id,
-        transfers: input.kind==='citation_suggest'||input.kind==='citation_audit' ? [{endpoint:'https://model.example.org',purpose:input.kind,data_categories:['Selected manuscript sentences and cited sources']}] : input.kind === 'paper_import' ? [] : (input.kind==='wiki_draft'||input.kind==='paper_comparison') ? [{endpoint:'https://model.example.org',purpose:input.kind,data_categories:['Selected source versions and notes']}] : input.kind === 'discovery'
+        budget:state.config.budget,source_versions:'source_versions' in input.input?input.input.source_versions:input.kind==='reading_qa'?input.input.sources.map(s=>s.source_version_id):[],
+        transfers: selectedModel.local && input.kind!=='discovery'?[]:input.kind==='citation_suggest'||input.kind==='citation_audit' ? [{endpoint:selectedModel.endpoint,purpose:input.kind,data_categories:['Selected manuscript sentences and cited sources']}] : input.kind === 'paper_import' ? [] : (input.kind==='wiki_draft'||input.kind==='paper_comparison') ? [{endpoint:selectedModel.endpoint,purpose:input.kind,data_categories:['Selected source versions and notes']}] : input.kind === 'discovery'
           ? [{ endpoint: 'https://search.example.org', purpose: 'Find relevant papers', data_categories: ['Research question and search terms'] },
-             { endpoint: 'https://model.example.org', purpose: 'Assess coverage and relevance', data_categories: ['Research question', 'Candidate metadata and abstracts'] }]
-          : [{ endpoint: 'https://model.example.org', purpose: 'Answer the question', data_categories: ['Question and recent conversation', 'Selected abstracts'] }],
+             { endpoint: selectedModel.endpoint, purpose: 'Assess coverage and relevance', data_categories: ['Research question', 'Candidate metadata and abstracts'] }]
+          : [{ endpoint: selectedModel.endpoint, purpose: 'Answer the question', data_categories: ['Question and recent conversation', 'Selected abstracts'] }],
       }
     },
     'task.start': ({ operation_id: _, confirmation_id, ...input }) => {

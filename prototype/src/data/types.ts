@@ -71,7 +71,7 @@ export interface Candidate {
   paperId: string
   angleId: string
   reason: string
-  readLevel: 'Abstract read' | 'Metadata only'
+  readLevel: 'Abstract read' | 'Metadata only' | 'Full text read'
   source: string
   decision: Decision
   round: number

@@ -10,8 +10,10 @@ function Manuscripts({topic}:{topic:string}) {
   const {api,write,prepare,busy,report:err,demo}=useWorkspace()
   const items=useRead('draft.list',{topic_id:topic})?.items??[]
   const papers=useRead('library.catalog',{})?.papers??[]
-  const [docId,pickDoc]=useState(''),[version,pickVersion]=useState(''),[reportId,pickReport]=useState('')
-  const [selected,setSelected]=useState<string[]|null>(null),[sources,setSources]=useState<string[]|null>(null),[extend,setExtend]=useState(false)
+  const {state}=useStore()
+  const target=state.route.view==='check'?state.route:undefined
+  const [docId,pickDoc]=useState(target?.draftId??''),[version,pickVersion]=useState(''),[reportId,pickReport]=useState('')
+  const [selected,setSelected]=useState<string[]|null>(target?.sentenceId?[target.sentenceId]:null),[sources,setSources]=useState<string[]|null>(null),[extend,setExtend]=useState(false)
   const [creating,create]=useState(false),[name,setName]=useState('related-work.md'),[body,setBody]=useState('')
   const [preview,setPreview]=useState<Finding>(),[apply,setApply]=useState<'citation'|'wording'|'both'>('both')
   const [format,setFormat]=useState<ExportFormat>('audit_report'),[pdfs,include]=useState(false),[status,setStatus]=useState('')
@@ -71,6 +73,6 @@ function Manuscripts({topic}:{topic:string}) {
       <button className="primary" disabled={busy} onClick={()=>void write('draft.apply_suggestions',{topic_id:topic,draft_id:doc.draft_id,version_id:v.version_id,report_id:report.report_id,finding_id:preview.finding_id,apply}).then(d=>{pickVersion(d.versions[0].version_id);pickReport('');setSelected(null);setPreview(undefined)}).catch(err)}>Apply to new version</button></Dialog>}</>
 }
 export function CitationPage(){
-  const {state}=useStore(),[topic,setTopic]=useState(state.topics[0]?.id??'')
+  const {state}=useStore(),[topic,setTopic]=useState((state.route.view==='check'&&state.route.topicId)||state.topics[0]?.id||'')
   return <div className="page"><PageHead title="Citation check" icon="shield" sub="Check a manuscript against its selected sources"><TopicSelect value={topic} onChange={setTopic}/></PageHead><div className="page-body scroll">{topic?<Manuscripts topic={topic} key={topic}/>:<p>Select a topic to add a manuscript.</p>}</div></div>
 }

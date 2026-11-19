@@ -6,7 +6,10 @@ import type { AgentRun, ChatMessage, Decision, EvidenceAnchor, Paper, SearchAngl
 import { errorText } from '../api/contract'
 import type { Client, Discovery, Finished, Step, TaskInput, Turn, Abstract } from '../api/contract'
 import { asLocated, type DocumentView, type Origin, type Picked } from '../api/library'
-import { useWorkspace } from './Workspace'
+import { ScopeDetails } from '../components/ScopeDetails'
+import { isTauri } from '../api/desktop'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
+import { useRead, useWorkspace } from './Workspace'
 import { operation, retryWrite, useTask } from './useTask'
 
 type Request = { message_id: string; anchor_id: string }
@@ -55,6 +58,8 @@ function paperFromAbstract(source: Abstract | DocumentView, paper?: Paper): Pape
 export function MainlineProvider({ api, demo, children }: { api: Client; demo: boolean; children: React.ReactNode }) {
   const workspace=useWorkspace()
   const [files,setFiles]=useState<Picked[]>([])
+  const config=useRead('services.get',{})
+  const activity=useRead('workspace.activity',{})
   const selection=useRef<{source_version_id:string;passage_id:string;quote:string}>()
   const { act: prototypeActions } = useStore()
   const [view, setView] = useState<State>(defaultView)
@@ -98,6 +103,18 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
     writeKeys.current.delete(name)
     return result
   }
+
+  useEffect(()=>{
+    if(!isTauri()||view.route.view!=='home')return
+    let valid=true
+    const listener=getCurrentWebview().onDragDropEvent(e=>{
+      if(!valid||e.payload.type!=='drop')return
+      const paths=e.payload.paths
+      void workspace.write('file.stage_drop',{paths}).then(({files})=>{if(valid)setFiles(old=>[...old,...files])}).catch(reveal)
+    })
+    void listener.catch(reveal)
+    return ()=>{valid=false;void listener.then(stop=>stop()).catch(()=>{})}
+  },[api,view.route.view])
 
   async function refreshLibrary(topic_id: string) {
     const { items } = await api.call('library.list', { topic_id })
@@ -177,9 +194,9 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
     let active = true
     setLoadingSearch(true)
     void Promise.all([
-      api.call('discovery.latest', { topic_id: topic }).then(async ({ search_id, active_task_id }) => {
+      api.call('discovery.latest', { topic_id: topic }).then(async ({ search_id, active_task_id,task_id }) => {
         if (!active) return
-        const saved = search_id ? refreshSearch(topic, search_id, localStorage.getItem(discoveryKey(topic, search_id)) ?? undefined) : undefined
+        const saved = search_id ? refreshSearch(topic, search_id, task_id ?? localStorage.getItem(discoveryKey(topic, search_id)) ?? undefined) : undefined
         if (active_task_id) discovering.attach(active_task_id)
         await saved
       }),
@@ -311,7 +328,7 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
     }).catch((cause) => { if (token === readerRequest.current) reveal(cause) })
   }
 
-  function discover(text: string, refine = false, filters?: { year_from?: number; year_to?: number }) {
+  function discover(text: string, refine = false, filters?: { year_from?: number; year_to?: number; venue?:string }) {
     if (busy || loadingSearch || discovering.task || !topic || !text.trim() || (refine && !search)) return
     const input = refine && search ? { previous_search_id: search.search_id } : { query: text.trim(), ...(filters && { filters }) }
     setSearchQuestion(text.trim())
@@ -348,7 +365,7 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
   const candidates = [...(search?.candidates ?? []), ...(search?.excluded ?? [])]
   const candidatePapers: Record<string, Paper> = Object.fromEntries(candidates.map((c) => [c.candidate_id, {
     id: c.candidate_id, short: c.title, title: c.title, authors: c.authors, venue: c.venue?.name ?? '', year: c.year ?? 0,
-    venueSource: c.venue?.source ?? '', doi: c.doi, stored: c.available_scope === 'metadata' ? 'metadata' : 'abstract', passages: [],
+    venueSource: c.venue?.source ?? '', doi: c.doi, stored: c.available_scope === 'full_text' ? 'full-text' : c.available_scope, passages: [],
   }]))
   const steps = discovering.task ? discovering.preview.steps : savedTrace?.steps ?? []
   const runId = discovering.task ?? savedTrace?.id
@@ -387,7 +404,16 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
     void status(async()=>{await workspace.write('workspace.archive',{kind,id});if(id===topic||id===session)goHome()})
   }
   const state: State = {
-    ...view,dropped:files.map(f=>f.name),mainline: { demo,pages:['library','wiki','check'],
+    ...view,dropped:files.map(f=>f.name),mainline: { demo,pages:['library','wiki','check','settings'],
+      venueFilter:config?.services.some(s=>s.kind==='search'&&s.enabled&&s.fields.includes('venue')),
+      interval:activity?.watches.find(w=>w.topic_id===topic&&w.search_id===search?.search_id)?.interval_days??0,
+      watch:search?(interval_days:number)=>void workspace.write('discovery.watch',{topic_id:topic,search_id:search.search_id,interval_days}).catch(reveal):undefined,
+      activity:activity?.items.map(item=>({id:item.id,title:item.title,detail:item.detail,topic:item.topic_id,open:()=>{
+        if(item.checkpoint_id){void workspace.prepare({kind:'resume',topic_id:item.topic_id,input:{checkpoint_id:item.checkpoint_id}});return}
+        if(item.target==='library')act.navigate({view:'library',paperId:item.paper_id})
+        else if(item.target==='wiki'||item.target==='check')act.navigate({view:item.target,topicId:item.topic_id,draftId:item.draft_id,sentenceId:item.sentence_id})
+        else openTopic(item.topic_id,item.target,item.session_id)
+      }})),
       attachFiles:incoming=>{void status(async()=>{
         const selected=demo&&incoming?.length?incoming.map(f=>({file_id:f.name,name:f.name})):(await api.call('file.pick',{purpose:'papers'})).files
         setFiles(old=>[...old,...selected.filter(f=>!old.some(o=>o.file_id===f.file_id))])
@@ -407,7 +433,7 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
     runs: Object.fromEntries(runs.map((run) => [run.id, run])), runOrder: runs.map((run) => run.id),
     candidates: candidates.map((c) => ({
       id: c.candidate_id, paperId: c.candidate_id, angleId: 'results', reason: c.reason, round,
-      readLevel: c.read_scope === 'none' ? 'Metadata only' : 'Abstract read',
+      readLevel: c.read_scope === 'none' ? 'Metadata only' : c.read_scope==='full_text'?'Full text read':'Abstract read',
       source: c.venue?.source ?? 'Search',
       decision: c.decision === 'hold' ? 'held' : c.decision === 'exclude' ? 'excluded' : c.decision,
       ...(c.decision === 'added' && { note: 'Added to topic' }),
@@ -416,7 +442,7 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
 
   const act = {
     ...prototypeActions,
-    navigate: (route: Route) => { if (route.view === 'home') goHome(); else if (route.view === 'topic') openTopic(route.topicId, route.tab); else if (!busy){goHome();setView(s=>({...s,route}))} },
+    navigate: (route: Route) => { if (route.view === 'home') goHome(); else if (route.view === 'topic') {openTopic(route.topicId, route.tab);if(route.sourceVersion)setView(s=>({...s,readerPaperId:route.sourceVersion!}))} else if (!busy){goHome();setView(s=>({...s,route}))} },
     newTopic: () => {setFiles([]);goHome(true)},
     toggleNote:(id:string)=>{if(!view.noted.includes(id)) saveEvidence(id,'answer')},
     toggleCite:(id:string)=>{if(!view.cited.includes(id)) saveEvidence(id,'citation')},
@@ -456,6 +482,7 @@ export function MainlineProvider({ api, demo, children }: { api: Client; demo: b
     </div>}
     {confirmation?.confirmation && <Dialog title="Confirm data transfer" onClose={confirmation.dismiss}>
       <p className="dialog-text">{taskInput?.kind === 'reading_qa' ? 'Review the destinations before asking.' : 'Review the destinations before searching.'}</p>
+      <ScopeDetails scope={confirmation.confirmation}/>
       {confirmation.confirmation.transfers.map((transfer, index) => <p className="dialog-text" key={index}>
         <strong>{transfer.purpose}</strong><br />{transfer.endpoint}<br />{transfer.data_categories.join(', ')}
       </p>)}

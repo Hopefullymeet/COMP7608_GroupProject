@@ -15,6 +15,14 @@
   justify-content: flex-end;
   padding: 12px 16px;
 }
+.app--desktop .page-head { padding-right: 138px; }
+.app--desktop .desktop-drag-area { pointer-events: none; z-index: 2; }
+.app--desktop .desktop-drag-area .window-controls { pointer-events: auto; }
+.app--desktop .page-head { -webkit-app-region: drag; }
+.app--desktop .page-head :is(button, select, input) { -webkit-app-region: no-drag; }
+.activity-list { margin-top: 14px; max-height: 25vh; overflow: auto; }
+.scope-detail { overflow-wrap: anywhere; margin-block: 10px; color: var(--ink-2); }
+.result-card, .lib-detail { overflow-wrap: anywhere; }
 .topic-head--desktop { height: var(--topic-header-height); gap: 12px; padding-right: 16px; }
 .topic-head--desktop .topic-title { max-width: 480px; }
 .topic-head--desktop .topic-title h1 { overflow: hidden; text-overflow: ellipsis; }

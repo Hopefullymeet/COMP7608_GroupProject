@@ -5,7 +5,7 @@ import { asEntry, asLocated, type ImportTask, type LibraryFixture, type LibraryM
 export type Handlers<T> = { [K in keyof T]: T[K] extends [infer P,infer R] ? (params:P)=>R : never }
 export type FixtureState = { library:LibraryItem[]; shelf:LibraryFixture; topics:Topic[]; sessions:Record<string,Session[]> }
 const id = () => crypto.randomUUID()
-export function libraryFixture(state:FixtureState, evidence:Evidence) {
+export function libraryFixture(state:FixtureState, evidence:Evidence, dependencies:(versions:string[])=>{kind:string;label:string}[]) {
   const data = state.shelf
   const original = asLocated(evidence)
   const unavailable = ():never => { throw new Error('Source unavailable. Restore the original version in Library.') }
@@ -68,11 +68,12 @@ export function libraryFixture(state:FixtureState, evidence:Evidence) {
     for(const n of Object.values(data.notes).flat()) {
       if(n.anchor_ids.some(a=>versions.includes((data.anchors[a]??original).source.source_version_id))) references.push({kind:n.origin,label:n.text})
     }
+    references.push(...dependencies(versions))
     return {references,revision:JSON.stringify([selected,references])}
   }
   const handlers:Handlers<LibraryMethods>={
-    'file.pick':({purpose})=>({files:purpose==='papers'?['qasper','multivers'].map(file_id=>({file_id,name:file_id+'.pdf'})):purpose==='draft'?[{file_id:'related-work.md',name:'related-work.md'}]:[]}),
-    'library.catalog':()=>({papers:state.library.map(p=>asEntry(p,data)),trash:data.trash.map(p=>asEntry(p,data)),reviews:data.reviews}),
+    'file.pick':({purpose})=>({files:purpose==='papers'?['qasper','multivers'].map(file_id=>({file_id,name:file_id+'.pdf'})):purpose==='draft'?[{file_id:'related-work.md',name:'related-work.md'}]:[{file_id:'demo-backup',name:'Local demo backup'}]}),
+    'library.catalog':()=>({papers:state.library.map(p=>asEntry(p,data)).sort((a,b)=>a.title.localeCompare(b.title)),trash:data.trash.map(p=>asEntry(p,data)),reviews:data.reviews}),
     'library.resolve_import':({review_id,decision})=>{
       const r=data.reviews.find(x=>x.review_id===review_id)
       if(!r) throw new Error('Review already resolved.')

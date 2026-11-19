@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Dialog } from '../../../prototype/src/components/PageHead'
+import { ScopeDetails } from '../components/ScopeDetails'
 import { errorText, type Client, type Method, type Methods, type WorkspaceTask } from '../api/contract'
 import { operation, retryWrite, useTask } from './useTask'
 
@@ -58,6 +59,7 @@ export function WorkspaceProvider({api,demo,children}:{api:Client;demo:boolean;c
     {children}
     {task.confirmation && <Dialog title="Confirm task scope" onClose={task.dismiss}>
       <p className="dialog-text">{task.confirmation.input.kind.replaceAll('_',' ')}</p>
+      <ScopeDetails scope={task.confirmation}/>
       {task.confirmation.transfers.length===0 && <p>All material stays in this workspace.</p>}
       {task.confirmation.transfers.map((t,i)=><p key={i}><b>{t.purpose}</b><br/>{t.endpoint}<br/>{t.data_categories.join(', ')}</p>)}
       <div className="dialog-actions"><button className="ghost-btn" onClick={task.dismiss}>Cancel</button><button className="primary" disabled={task.busy} onClick={task.start}>Confirm and start</button></div>

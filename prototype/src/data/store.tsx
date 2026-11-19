@@ -13,8 +13,8 @@ import type {
 
 export type Tab = 'discover' | 'read' | 'compare'
 export type Page = 'library' | 'wiki' | 'check' | 'settings'
-export type Route = { view: 'home' } | { view: 'topic'; topicId: string; tab: Tab }
-  | { view: 'library'; paperId?: string } | { view: Exclude<Page, 'library'> }
+export type Route = { view: 'home' } | { view: 'topic'; topicId: string; tab: Tab;sourceVersion?:string }
+  | { view: 'library'; paperId?: string } | { view: Exclude<Page, 'library'>;topicId?:string;draftId?:string;sentenceId?:string }
 
 type TaskState = 'idle' | 'running' | 'done'
 type ExternalGrant = { runId: string; requestId: string; paperIds: string[]; status: 'pending' | 'received' }
@@ -23,8 +23,12 @@ type ManuscriptCheck = DraftSnapshot & { status: TaskState; runId: string | null
 export interface State {
   mainline?: {
     demo: boolean; papers: Record<string, Paper>; evidence: Record<string, EvidenceAnchor>
-    search: (query: string, filters?: { year_from?: number; year_to?: number }) => void
+    search: (query: string, filters?: { year_from?: number; year_to?: number; venue?:string }) => void
     pages?:Page[]
+    venueFilter?:boolean
+    interval?:number
+    watch?:(days:number)=>void
+    activity?:{id:string;title:string;detail:string;topic:string;open:()=>void}[]
     original?:(version:string)=>void
     bookmark?:(version:string,passage:string)=>void
     selectQuote?:(version:string,passage:string,quote:string)=>void

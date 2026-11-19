@@ -4,7 +4,7 @@ import type { Client, Finished, Start, Step, TaskInput, Transfer } from '../api/
 
 type Preview = { text: string; steps: Step[]; progress: string }
 const empty: Preview = { text: '', steps: [], progress: '' }
-type Confirmation = { input: TaskInput; confirmation_id: string; transfers: Transfer[]; startKey: string }
+type Confirmation = { budget?:import('../api/services').Budget;source_versions?:string[]; input: TaskInput; confirmation_id: string; transfers: Transfer[]; startKey: string }
 export const operation = () => crypto.randomUUID()
 
 // If the response was lost, repeat the same logical write with the same parameters.
