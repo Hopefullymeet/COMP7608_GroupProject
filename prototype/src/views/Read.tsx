@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { NEW_SESSION, allEvidence, currentTopic, evidenceFor, paperFor, papersOfTopic, sourceStatus, useStore } from '../data/store'
 import { QUESTIONS } from '../data/scripts'
 import { Icon, Spinner } from '../components/Icon'
+import { Disclosure } from '../components/Disclosure'
 import { plural, scrollWithin } from '../components/util'
 import type { ChatMessage, Passage } from '../data/types'
 
@@ -76,6 +77,7 @@ function Chat() {
 
   const readable = papers.filter((id) => paperFor(state, id).stored !== 'metadata')
   const selected = readable.includes(state.readerPaperId) ? state.readerPaperId : readable[0]
+  const readingScope = state.mainline?.readVersions?.length ? state.mainline.readVersions : [selected]
   const suggestions = (state.mainline
     ? state.mainline.demo ? [{ id: 'pubmedqa', text: 'What context does PubMedQA provide to the model?', requires: undefined },{id:'limits',text:'What does the abstract establish about the conclusions?',requires:undefined}] : []
     : QUESTIONS).filter((q) => !asked.has(q.text))
@@ -120,8 +122,22 @@ function Chat() {
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(text) } }} />
           <div className="composer-bar">
-            {state.mainline&&readable.length>1&&<details className="scope-select"><summary>Reading scope ({state.mainline.readVersions?.length||1})</summary><div className="card">{readable.map(id=><label key={id} className="check-row"><input type="checkbox" checked={(state.mainline?.readVersions?.length?state.mainline.readVersions:[selected]).includes(id)} onChange={e=>{const ids=state.mainline?.readVersions?.length?state.mainline.readVersions:[selected];state.mainline?.selectVersions?.(e.target.checked?[...ids,id]:ids.filter(x=>x!==id))}}/>{paperFor(state,id).short}</label>)}</div></details>}
-            <span className="scope-pill"><Icon name="file" size={13} /> Reading scope: {(state.mainline && selected ? (state.mainline.readVersions?.length?state.mainline.readVersions:[selected]) : readable).map((id) => paperFor(state, id).short).join(', ')}</span>
+            {state.mainline && readable.length > 1 ? (
+              <Disclosure className="scope-select" icon="book" title={`Reading scope (${readingScope.length})`}>
+                <div className="card scope-options">
+                  {readable.map((id) => (
+                    <label key={id} className="check-row">
+                      <input type="checkbox" checked={readingScope.includes(id)}
+                        onChange={(e) => state.mainline?.selectVersions?.(e.target.checked
+                          ? [...readingScope, id] : readingScope.filter((version) => version !== id))} />
+                      <span>{paperFor(state, id).short}</span>
+                    </label>
+                  ))}
+                </div>
+              </Disclosure>
+            ) : (
+              <span className="scope-pill"><Icon name="file" size={13} /> Reading scope: {(state.mainline && selected ? readingScope : readable).map((id) => paperFor(state, id).short).join(', ')}</span>
+            )}
             <span className="grow" />
             <button className="send" disabled={state.qaRunning || !text.trim()} onClick={() => send(text)} aria-label="Send"><Icon name="arrowUp" size={16} /></button>
           </div>

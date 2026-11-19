@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Dialog, PageHead } from '../../../prototype/src/components/PageHead'
+import { Icon } from '../../../prototype/src/components/Icon'
 import { useRead, useWorkspace } from '../data/Workspace'
 import type { Config, Offer, ServiceMethods } from '../api/services'
 
@@ -49,14 +50,15 @@ function SettingsForm({ config }: { config: Config }) {
               <label key={m.id} className={'model-card' + (selected?.id === m.id ? ' on' : '')}>
                 <input
                   type="radio"
+                  name="model-provider"
                   checked={selected?.id === m.id}
                   onChange={() => {
                     set({ ...draft, model_id: m.id })
                     setTest('')
                   }}
                 />
-                <span className="radio" />
-                <b className="grow">{m.label}</b>
+                <span className="radio" aria-hidden="true" />
+                <strong className="grow">{m.label}</strong>
                 <span className="tag">{m.local ? 'Local' : 'Remote'}</span>
               </label>
             ))}
@@ -65,9 +67,13 @@ function SettingsForm({ config }: { config: Config }) {
             <>
               <div className="form-grid">
                 {(['endpoint', 'model'] as const).map((k) => (
-                  <label key={k}>
+                  <label className="set-field" key={k}>
                     {k === 'model' ? 'Model ID' : 'Endpoint base URL'}
                     <input
+                      className="text-field"
+                      aria-invalid={
+                        k === 'model' ? !selected.model.trim() : !validEndpoint(selected.endpoint)
+                      }
                       value={selected[k]}
                       onChange={(e) =>
                         set({
@@ -186,7 +192,7 @@ function SettingsForm({ config }: { config: Config }) {
           </div>
         </section>
       ))}
-      <div className="lib-tools">
+      <div className="lib-tools settings-save">
         <button
           className="primary"
           disabled={!valid || !dirty || busy}
@@ -199,8 +205,16 @@ function SettingsForm({ config }: { config: Config }) {
             Discard edits
           </button>
         )}
-        {!valid && <span role="alert">Check model endpoints, IDs and budget limits.</span>}
-        <span role="status">{test}</span>
+        {!valid && (
+          <span className="set-error" role="alert">
+            Check model endpoints, IDs and budget limits.
+          </span>
+        )}
+        {test && (
+          <span className="record-meta" role="status">
+            {test}
+          </span>
+        )}
       </div>
     </>
   )
@@ -222,12 +236,15 @@ function AccessAndBackup() {
           <h2>External Agent access</h2>
         </div>
         <div className="set-body">
-          {!offers.length && !grants.length && <p>No active task has requested read-only access.</p>}
+          {!offers.length && !grants.length && (
+            <p className="usage">No active task has requested read-only access.</p>
+          )}
           {offers
             .filter((o) => !grants.some((g) => g.offer_id === o.offer_id && g.status === 'active'))
             .map((o) => (
               <div className="source-row" key={o.offer_id}>
-                <b className="grow">{o.purpose}</b>
+                <Icon name="shield" size={17} />
+                <strong className="grow">{o.purpose}</strong>
                 <button className="ghost-btn" onClick={() => choose(o)}>
                   Review access
                 </button>
@@ -235,10 +252,12 @@ function AccessAndBackup() {
             ))}
           {grants.map((g) => (
             <div key={g.grant_id} className="source-row">
+              <Icon name="shield" size={17} />
               <div className="grow">
-                {g.endpoint} · {g.status}
+                <strong className="target-material">{g.endpoint}</strong>
                 <small>{g.source_versions.join(', ')}</small>
               </div>
+              <span className={`tag ${g.status === 'active' ? 'ok' : ''}`}>{g.status}</span>
               {g.status === 'active' && (
                 <button
                   className="ghost-btn"
@@ -273,7 +292,11 @@ function AccessAndBackup() {
               Inspect backup
             </button>
           </div>
-          <p role="status">{result}</p>
+          {result && (
+            <p className="record-meta" role="status">
+              {result}
+            </p>
+          )}
         </div>
       </section>
       {offer && (

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Dialog } from '../../../prototype/src/components/PageHead'
+import { Disclosure } from '../../../prototype/src/components/Disclosure'
+import { Icon } from '../../../prototype/src/components/Icon'
 import type { Located, Note } from '../api/library'
 import { useRead, useWorkspace } from '../data/Workspace'
 
@@ -10,18 +12,18 @@ export function EvidenceLink({ id }: { id: string }) {
   return (
     <>
       <button
-        className="link-btn"
+        className="src-btn"
         onClick={() => void api.call('evidence.open', { anchor_id: id }).then(setItem).catch(report)}
       >
-        View source
+        <Icon name="quote" size={13} /> View source
       </button>
       {item && (
         <Dialog title="Source evidence" onClose={() => setItem(undefined)}>
-          <p>
+          <p className="record-meta">
             {item.source.source_version_id} · {item.read_scope.replace('_', ' ')} · {p?.section}
             {p?.page ? ' · p. ' + p.page : ''}
           </p>
-          <blockquote>{item.quote}</blockquote>
+          <blockquote className="evidence-excerpt">{item.quote}</blockquote>
           <p>{p?.text}</p>
           {p?.page ? (
             <button
@@ -89,6 +91,7 @@ function Editor({ topic, note, close }: { topic: string; note?: Note; close: () 
   return (
     <Dialog title="Research note" onClose={done}>
       <textarea
+        className="text-field"
         aria-label="Note text"
         rows={6}
         value={text}
@@ -102,8 +105,9 @@ function Editor({ topic, note, close }: { topic: string; note?: Note; close: () 
           <EvidenceLink key={a} id={a} />
         ))}
       </div>
-      <label>
-        Insert source anchor <input value={add} onChange={(e) => setAdd(e.target.value)} />
+      <label className="set-field">
+        Insert source anchor
+        <input className="text-field" value={add} onChange={(e) => setAdd(e.target.value)} />
       </label>
       <button
         className="link-btn"
@@ -116,22 +120,30 @@ function Editor({ topic, note, close }: { topic: string; note?: Note; close: () 
         Insert
       </button>
       {previous.current?.history.map((h) => (
-        <details key={h.revision}>
-          <summary>Revision · {h.revision}</summary>
-          <p>{h.text}</p>
-          <button
-            className="link-btn"
-            onClick={() => {
-              setText(h.text)
-              setAnchors(h.anchor_ids)
-            }}
-          >
-            Restore this version
-          </button>
-        </details>
+        <Disclosure
+          className="record-history"
+          key={h.revision}
+          icon="clock"
+          title={<span title={h.revision}>Revision · {h.revision.slice(0, 8)}</span>}
+        >
+          <div className="history-entries">
+            <p>{h.text}</p>
+            <button
+              className="link-btn"
+              onClick={() => {
+                setText(h.text)
+                setAnchors(h.anchor_ids)
+              }}
+            >
+              Restore this version
+            </button>
+          </div>
+        </Disclosure>
       ))}
       <div className="dialog-actions">
-        <small role="status">{status}</small>
+        <small className="record-meta" role="status">
+          {status}
+        </small>
         <button className="primary" onClick={done}>
           Done
         </button>
@@ -151,14 +163,17 @@ export function Notes({ topic }: { topic: string }) {
       ) : (
         <>
           <div className="lib-tools">
-            <input
-              aria-label="Search notes"
-              placeholder="Search text, session or source"
-              value={query}
-              onChange={(e) => search(e.target.value)}
-            />
+            <label className="field-search">
+              <Icon name="search" size={16} />
+              <input
+                aria-label="Search notes"
+                placeholder="Search text, session or source"
+                value={query}
+                onChange={(e) => search(e.target.value)}
+              />
+            </label>
             <button className="primary" onClick={() => setEdit('new')}>
-              New note
+              <Icon name="plus" size={14} /> New note
             </button>
           </div>
           {result?.items
@@ -166,17 +181,19 @@ export function Notes({ topic }: { topic: string }) {
               [n.text, n.session_id, ...n.anchor_ids].join(' ').toLowerCase().includes(query.toLowerCase()),
             )
             .map((n) => (
-              <article className="card" key={n.note_id}>
-                <small>
-                  {n.origin} · {n.revision}
+              <article className="research-record" key={n.note_id}>
+                <small className="record-meta" title={n.revision}>
+                  {n.origin} · {n.revision.slice(0, 8)}
                 </small>
                 <p>{n.text}</p>
-                {n.anchor_ids.map((a) => (
-                  <EvidenceLink key={a} id={a} />
-                ))}{' '}
-                <button className="link-btn" onClick={() => setEdit(n)}>
-                  Edit note
-                </button>
+                <div className="set-controls">
+                  {n.anchor_ids.map((a) => (
+                    <EvidenceLink key={a} id={a} />
+                  ))}
+                  <button className="link-btn" onClick={() => setEdit(n)}>
+                    Edit note
+                  </button>
+                </div>
               </article>
             ))}
           {edit && (

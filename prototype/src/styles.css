@@ -101,11 +101,12 @@ code { font: 12px/1.45 var(--mono); }
 .primary:disabled { opacity: 0.45; }
 .primary.sm, .ghost-btn.sm { padding: 5px 10px; font-size: 13px; }
 .ghost-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border-radius: 8px; color: var(--ink-2); border: 1px solid var(--line-2); background: var(--surface); }
-.ghost-btn:hover { border-color: var(--ink-4); color: var(--ink); }
+.ghost-btn:hover:not(:disabled) { border-color: var(--ink-4); color: var(--ink); }
+.ghost-btn:disabled, .link-btn:disabled, .danger:disabled { opacity: 0.45; }
 .ghost-btn.accent { color: var(--accent); border-color: #e2b9aa; font-weight: 500; }
 .ghost-btn.accent:hover { background: var(--accent-faint); border-color: var(--accent); color: var(--accent); }
 .link-btn { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-size: 13px; font-weight: 500; }
-.link-btn:hover { text-decoration: underline; }
+.link-btn:hover:not(:disabled) { text-decoration: underline; }
 .icon-btn { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; color: var(--ink-2); }
 .icon-btn:hover { background: var(--sunk); color: var(--ink); }
 .icon-btn.sm { width: 26px; height: 26px; }
@@ -150,11 +151,12 @@ code { font: 12px/1.45 var(--mono); }
 .home-title { display: flex; align-items: center; justify-content: center; gap: 12px; text-align: center; font: 600 40px/1.15 var(--serif); letter-spacing: -0.02em; margin: 0 0 24px; }
 .home-title > svg { flex: none; }
 .composer.big { position: relative; padding: 14px 64px 14px 20px; transition: padding 360ms cubic-bezier(0.22, 1, 0.36, 1), border-color 0.15s, box-shadow 0.15s; }
-.composer.big.has-content { padding: 20px 16px 14px 20px; }
+.composer.big.has-content, .composer.big.with-attachments { padding-right: 16px; }
+.composer.big.has-content { padding-top: 20px; }
 .composer.big > .send { position: absolute; right: 16px; bottom: 14px; }
 .home-actions { display: grid; grid-template-rows: 0fr; opacity: 0; visibility: hidden; transition: grid-template-rows 360ms cubic-bezier(0.22, 1, 0.36, 1), opacity 240ms, visibility 240ms; }
 .home-actions-inner { overflow: hidden; min-height: 0; }
-.has-content .home-actions { grid-template-rows: 1fr; opacity: 1; visibility: visible; }
+.has-content .home-actions, .with-attachments .home-actions { grid-template-rows: 1fr; opacity: 1; visibility: visible; }
 /* Animate actual height so the centered heading and suggestion move with the field. */
 .home-input { position: relative; }
 .composer.big textarea { display: block; height: 34px; min-height: 0; padding: 2px; overflow-y: auto; transition: height 360ms cubic-bezier(0.22, 1, 0.36, 1); }
@@ -164,6 +166,7 @@ code { font: 12px/1.45 var(--mono); }
   .composer.big, .composer.big textarea, .home-actions { transition: none; }
 }
 .composer.big .composer-bar { margin-top: 12px; padding-right: 50px; min-height: 34px; }
+.composer.big.with-attachments:not(.has-content) .composer-bar { margin-top: 6px; }
 .suggestion { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 12px; padding: 10px 14px; border-radius: 10px; color: var(--ink-2); text-align: left; font-size: 13.5px; }
 .suggestion:hover { background: var(--sunk); color: var(--ink); }
 .suggestion svg { flex: none; }

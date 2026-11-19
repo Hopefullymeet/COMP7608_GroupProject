@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { PageHead, Dialog } from '../../../prototype/src/components/PageHead'
+import { Disclosure } from '../../../prototype/src/components/Disclosure'
+import { Icon } from '../../../prototype/src/components/Icon'
 import { useStore } from '../../../prototype/src/data/store'
 import { useRead, useWorkspace } from '../data/Workspace'
 import type { Cell, Comparison, Draft, Relation, Statement } from '../api/research'
@@ -9,7 +11,7 @@ export function TopicSelect({ value, onChange }: { value: string; onChange: (v: 
   const { state } = useStore()
   return (
     <select
-      className="lib-select"
+      className="lib-select workspace-picker"
       aria-label="Research topic"
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -44,12 +46,12 @@ function ComparisonTable({
     <section className="card result-card">
       <h2>{record.question}</h2>
       <div className="table-scroll">
-        <table>
+        <table className="cmp-table">
           <thead>
             <tr>
-              <th>Dimension</th>
+              <th scope="col">Dimension</th>
               {record.source_versions.map((v) => (
-                <th key={v}>
+                <th scope="col" key={v}>
                   {names[v] ?? v}
                   <small title={v}>Version {v.length > 12 ? v.slice(0, 8) : v}</small>
                 </th>
@@ -59,30 +61,35 @@ function ComparisonTable({
           <tbody>
             {rows.map((row) => (
               <tr key={row}>
-                <th>{row}</th>
+                <th scope="row">{row}</th>
                 {record.source_versions.map((v) => {
                   const i = cells.findIndex((c) => c.dimension === row && c.source_version_id === v),
                     c = cells[i]
                   return (
-                    <td key={v}>
+                    <td key={v} className={!edit && c?.status === 'missing' ? 'missing' : undefined}>
                       {!c ? (
                         'Missing cell'
                       ) : edit ? (
                         <>
                           <textarea
+                            className="text-field"
                             aria-label={row + ' text for ' + v}
                             value={c.text}
                             onChange={(e) => change(i, { text: e.target.value })}
                           />
                           <select
+                            aria-label={row + ' assessment for ' + v}
                             value={c.status}
                             onChange={(e) => change(i, { status: e.target.value as Cell['status'] })}
                           >
                             {['evidenced', 'not_comparable', 'missing', 'disputed'].map((s) => (
-                              <option key={s}>{s}</option>
+                              <option key={s} value={s}>
+                                {s.replaceAll('_', ' ')}
+                              </option>
                             ))}
                           </select>
                           <input
+                            className="text-field"
                             aria-label="Source anchors"
                             value={c.anchor_ids.join(',')}
                             onChange={(e) =>
@@ -97,7 +104,11 @@ function ComparisonTable({
                         </>
                       ) : (
                         <>
-                          <small className="tag">{c.status.replace('_', ' ')}</small>
+                          <small
+                            className={`tag ${c.status === 'evidenced' ? 'ok' : c.status === 'disputed' ? 'bad' : 'warn'}`}
+                          >
+                            {c.status.replaceAll('_', ' ')}
+                          </small>
                           <p>{c.text}</p>
                           {c.anchor_ids.map((a) => (
                             <EvidenceLink id={a} key={a} />
@@ -172,14 +183,20 @@ function ComparisonTable({
         )}
       </div>
       {record.history.map((h) => (
-        <details key={h.revision}>
-          <summary>Earlier revision · {h.revision}</summary>
-          {h.cells.map((c) => (
-            <p key={c.dimension + c.source_version_id}>
-              {c.dimension} · {c.text}
-            </p>
-          ))}
-        </details>
+        <Disclosure
+          className="record-history"
+          key={h.revision}
+          icon="clock"
+          title={<span title={h.revision}>Earlier revision · {h.revision.slice(0, 8)}</span>}
+        >
+          <div className="history-entries">
+            {h.cells.map((c) => (
+              <p key={c.dimension + c.source_version_id}>
+                {c.dimension} · {c.text}
+              </p>
+            ))}
+          </div>
+        </Disclosure>
       ))}
     </section>
   )
@@ -218,7 +235,7 @@ export function ComparePage() {
         <section className="card result-card">
           <h2>Compare papers</h2>
           <div className="form-grid">
-            <label>
+            <label className="set-field">
               First source
               <select value={left?.id ?? ''} onChange={(e) => setA(e.target.value)}>
                 {options.map((o) => (
@@ -228,7 +245,7 @@ export function ComparePage() {
                 ))}
               </select>
             </label>
-            <label>
+            <label className="set-field">
               Second source
               <select value={right?.id ?? ''} onChange={(e) => setB(e.target.value)}>
                 {rights.map((o) => (
@@ -238,13 +255,13 @@ export function ComparePage() {
                 ))}
               </select>
             </label>
-            <label>
+            <label className="set-field">
               Question
-              <input value={question} onChange={(e) => setQuestion(e.target.value)} />
+              <input className="text-field" value={question} onChange={(e) => setQuestion(e.target.value)} />
             </label>
-            <label>
+            <label className="set-field">
               Dimensions (comma-separated)
-              <input value={dims} onChange={(e) => setDims(e.target.value)} />
+              <input className="text-field" value={dims} onChange={(e) => setDims(e.target.value)} />
             </label>
           </div>
           {(!left || !right) && (
@@ -266,7 +283,7 @@ export function ComparePage() {
               })
             }
           >
-            Compare papers
+            <Icon name="columns" size={15} /> Compare papers
           </button>
         </section>
         {records?.items.map((c) => (
@@ -283,7 +300,7 @@ export function ComparePage() {
 }
 function Entry({ value }: { value: Statement | Relation }) {
   return (
-    <div>
+    <div className="research-record">
       {'text' in value ? (
         <p>{value.text}</p>
       ) : (
@@ -321,8 +338,8 @@ function ReviewWiki({ topic, draft, close }: { topic: string; draft: Draft; clos
   return (
     <Dialog title={'Review changes · ' + draft.title} onClose={close}>
       {draft.changes.map((c) => (
-        <div className="card" key={c.id}>
-          <label>
+        <div className="card check-option" key={c.id}>
+          <label className="check-row">
             <input
               type="checkbox"
               checked={ids.includes(c.id)}
@@ -332,13 +349,13 @@ function ReviewWiki({ topic, draft, close }: { topic: string; draft: Draft; clos
           </label>
           {c.before && (
             <div>
-              <small>Current</small>
+              <small className="record-meta">Current</small>
               <Entry value={c.before} />
             </div>
           )}
           {c.after && (
             <div>
-              <small>Proposed</small>
+              <small className="record-meta">Proposed</small>
               <Entry value={c.after} />
             </div>
           )}
@@ -404,28 +421,31 @@ function WikiTopic({ topic }: { topic: string }) {
         <section className="card lib-detail">
           <h2>{page ? 'Regenerate draft' : 'Generate draft'}</h2>
           {!page && (
-            <label>
-              Concept title <input value={title} onChange={(e) => setTitle(e.target.value)} />
+            <label className="set-field">
+              Concept title
+              <input className="text-field" value={title} onChange={(e) => setTitle(e.target.value)} />
             </label>
           )}
           <h3>Source notes</h3>
           {notes?.items.map((n) => (
-            <label className="check-row" key={n.note_id}>
+            <label className="check-row check-option" key={n.note_id}>
               <input
                 type="checkbox"
                 disabled={!n.anchor_ids.length}
                 checked={selected.includes(n.note_id)}
                 onChange={() => pick(toggle(selected, n.note_id))}
               />
-              {n.text}
-              {!n.anchor_ids.length && <small>Add a source to use this note in the wiki.</small>}
+              <span>
+                {n.text}
+                {!n.anchor_ids.length && <small>Add a source to use this note in the wiki.</small>}
+              </span>
             </label>
           ))}
           {!notes?.items.length && <p>Save a reading or comparison note in this topic to start a draft.</p>}
           {wiki?.pages
             .flatMap((p) => p.relations)
             .map((r) => (
-              <label className="check-row" key={r.id}>
+              <label className="check-row check-option" key={r.id}>
                 <input
                   type="checkbox"
                   checked={relations.includes(r.id)}

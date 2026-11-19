@@ -102,14 +102,17 @@ function MainlineSearch({ question, submit, busy, running }: {
       {open && <form id={panelId} className="card year-panel" aria-label="Publication years"
         onSubmit={(e) => { e.preventDefault(); if (valid) close() }}>
         <div className="year-fields">
-          <label>From year<input type="text" inputMode="numeric" maxLength={4} placeholder="Any year"
+          <label className="set-field">From year<input className="text-field" type="text" inputMode="numeric" maxLength={4} placeholder="Any year"
             value={from} aria-invalid={!valid} aria-describedby={!valid ? `${panelId}-error` : undefined}
             onChange={(e) => setFrom(e.target.value)} /></label>
-          <label>To year<input type="text" inputMode="numeric" maxLength={4} placeholder="Any year"
+          <label className="set-field">To year<input className="text-field" type="text" inputMode="numeric" maxLength={4} placeholder="Any year"
             value={to} aria-invalid={!valid} aria-describedby={!valid ? `${panelId}-error` : undefined}
             onChange={(e) => setTo(e.target.value)} /></label>
         </div>
-        {state.mainline?.venueFilter&&<label>Venue <input value={venue} onChange={e=>setVenue(e.target.value)} placeholder="Conference name"/></label>}
+        {state.mainline?.venueFilter && <label className="set-field year-venue">
+          Venue
+          <input className="text-field" value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Conference name" />
+        </label>}
         {!valid && <p className="year-error" id={`${panelId}-error`} role="status">Use years from 1 to 9999, with the start year first.</p>}
         <div className="year-panel-actions">
           <button type="button" className="link-btn" disabled={!selected} onClick={() => { setFrom(''); setTo('');setVenue('') }}>Clear</button>
@@ -168,8 +171,28 @@ export function Discover() {
         </div>
       </section>
 
-      {state.mainline?.watch&&<label className="lib-tools">Check for changes <select aria-label="Search frequency" value={state.mainline.interval} onChange={e=>state.mainline?.watch?.(Number(e.target.value))}><option value={0}>Off</option><option value={1}>Daily</option><option value={7}>Weekly</option><option value={30}>Monthly</option></select></label>}
-      {state.mainline&&batch.length>0&&<button className="ghost-btn" disabled={state.mainline.searchBusy} onClick={()=>state.mainline?.addCandidates?.(batch)}>Add selected to topic ({batch.length})</button>}
+      {(state.mainline?.watch || batch.length > 0) && (
+        <div className="discovery-tools">
+          {state.mainline?.watch && (
+            <label className="discovery-watch">
+              <Icon name="clock" size={15} /> Check for changes
+              <select aria-label="Search frequency" value={state.mainline.interval}
+                onChange={(e) => state.mainline?.watch?.(Number(e.target.value))}>
+                <option value={0}>Off</option>
+                <option value={1}>Daily</option>
+                <option value={7}>Weekly</option>
+                <option value={30}>Monthly</option>
+              </select>
+            </label>
+          )}
+          {state.mainline && batch.length > 0 && (
+            <button className="ghost-btn sm" disabled={state.mainline.searchBusy}
+              onClick={() => state.mainline?.addCandidates?.(batch)}>
+              <Icon name="plus" size={14} /> Add selected to topic ({batch.length})
+            </button>
+          )}
+        </div>
+      )}
       <div className="disc-grid">
         <section className="cand-list" aria-label="Candidates">
           {state.angles.length === 0 && d.status !== 'running' && (
@@ -186,8 +209,18 @@ export function Discover() {
                   <h2>{a.label}</h2>
                   <span className={`status ${a.status}`}>{a.status === 'searching' && <Spinner />}{ANGLE_LABEL[a.status]}</span>
                 </div>
-                {items.map((c) => <div key={c.id}>{state.mainline&&c.decision!=='added'&&c.decision!=='excluded'&&<label className="check-row"><input type="checkbox" checked={picked.includes(c.id)} onChange={e=>pick(e.target.checked?[...picked,c.id]:picked.filter(x=>x!==c.id))}/>Select candidate</label>}<CandidateCard c={c}
-                  disabled={state.mainline && (state.mainline.searchBusy || d.status === 'running')} /></div>)}
+                {items.map((c) => (
+                  <div key={c.id}>
+                    {state.mainline && c.decision !== 'added' && c.decision !== 'excluded' && (
+                      <label className="check-row candidate-selection">
+                        <input type="checkbox" checked={picked.includes(c.id)}
+                          onChange={(e) => pick(e.target.checked ? [...picked, c.id] : picked.filter((id) => id !== c.id))} />
+                        Select candidate
+                      </label>
+                    )}
+                    <CandidateCard c={c} disabled={state.mainline && (state.mainline.searchBusy || d.status === 'running')} />
+                  </div>
+                ))}
                 {a.status === 'gap' && (
                   <div className="gap-note"><Icon name="alert" size={15} /> {a.gapReason ?? 'No candidate passed screening for this angle.'}</div>
                 )}

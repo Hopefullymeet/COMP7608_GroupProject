@@ -68,6 +68,7 @@ export function LibraryPage() {
               <button
                 key={t}
                 className={t === tab ? 'on' : ''}
+                aria-pressed={t === tab}
                 onClick={() => {
                   setTab(t)
                   choose([])
@@ -92,16 +93,20 @@ export function LibraryPage() {
             ))}
           </select>
         </div>
-        {feedback && <p role="status">{feedback}</p>}
+        {feedback && (
+          <p className="review-done" role="status">
+            <Icon name="check" size={15} /> {feedback}
+          </p>
+        )}
         {tab === 'Notes' ? (
           <Notes key={topic} topic={topic} />
         ) : tab === 'Archived' ? (
-          <section className="card">
+          <section className="card result-card">
             <h2>Archived topics and sessions</h2>
             {archived?.items.map((a) => (
               <div className="trash-row" key={a.id}>
                 <b className="grow">{a.title}</b>
-                {a.kind}
+                <span className="tag">{a.kind}</span>
                 <button
                   className="ghost-btn"
                   disabled={busy}
@@ -176,7 +181,7 @@ export function LibraryPage() {
                     >
                       Restore
                     </button>
-                    <button className="link-btn" onClick={() => void preview(true).catch(report)}>
+                    <button className="danger-link" onClick={() => void preview(true).catch(report)}>
                       Delete permanently…
                     </button>
                   </>
@@ -224,12 +229,16 @@ export function LibraryPage() {
                 {!shown.length && (
                   <p className="pad">{catalog ? 'No matching papers.' : 'Loading library…'}</p>
                 )}
-                {shown.length > limit && <button onClick={() => more(limit + 30)}>Show more papers</button>}
+                {shown.length > limit && (
+                  <button className="link-btn lib-more" onClick={() => more(limit + 30)}>
+                    Show more papers
+                  </button>
+                )}
               </section>
               {paper && (
                 <aside className="card lib-detail">
                   <h2>{paper.title}</h2>
-                  <p>{paper.identity}</p>
+                  <p className="record-meta">{paper.identity}</p>
                   <h3>Files and versions</h3>
                   {paper.files.map((f) => (
                     <p key={f.source_version_id}>
@@ -289,7 +298,13 @@ export function LibraryPage() {
                         </button>
                       </div>
                       <h3>Tags</h3>
-                      <input value={tag} placeholder="Tag" onChange={(e) => setTag(e.target.value)} />
+                      <input
+                        className="text-field"
+                        aria-label="Tag"
+                        value={tag}
+                        placeholder="Tag name"
+                        onChange={(e) => setTag(e.target.value)}
+                      />
                       <div className="lib-tools">
                         {(['tag', 'untag'] as const).map((a) => (
                           <button
@@ -381,7 +396,7 @@ export function LibraryPage() {
           ))}
           {!impact.references.length && <p>No linked records.</p>}
           {impact.purge && (
-            <label>
+            <label className="check-row">
               <input type="checkbox" checked={clear} onChange={(e) => setClear(e.target.checked)} /> Also
               clear saved excerpts
             </label>

@@ -3,6 +3,7 @@ import { useStore } from '../data/store'
 import { DEFAULT_QUESTION, DEMO_TOPIC } from '../data/fixtures'
 import { Icon } from '../components/Icon'
 import { Logo } from '../components/Logo'
+import { Disclosure } from '../components/Disclosure'
 
 export function Home() {
   const { state, act } = useStore()
@@ -42,7 +43,7 @@ export function Home() {
         <h1 className="home-title"><Logo size={38} /><span>What are you researching today?</span></h1>
 
         <div
-          className={`composer big ${expanded ? 'has-content' : ''} ${over ? 'over' : ''}`}
+          className={`composer big ${state.mainline ? 'with-attachments' : ''} ${expanded ? 'has-content' : ''} ${over ? 'over' : ''}`}
           onDragOver={(e) => { e.preventDefault(); setOver(true) }}
           onDragLeave={() => setOver(false)}
           onDrop={(e) => { e.preventDefault(); setOver(false); addFiles(e.dataTransfer.files) }}
@@ -65,26 +66,38 @@ export function Home() {
               <small>{state.mainline?'Review the import scope after creating the topic.':'Files are listed but not read in this prototype.'}</small>
             </div>
           )}
-          {<div className="home-actions">
+          <div className="home-actions">
             <div className="home-actions-inner">
               <div className="composer-bar">
-                <button className="ghost-btn" disabled={!expanded && !state.mainline} onClick={() => state.mainline ? state.mainline.attachFiles?.() : fileRef.current?.click()}>
+                <button className="ghost-btn sm" disabled={!expanded && !state.mainline} onClick={() => state.mainline ? state.mainline.attachFiles?.() : fileRef.current?.click()}>
                   <Icon name="paperclip" size={15} /> Add papers
                 </button>
               </div>
             </div>
-          </div>}
+          </div>
           <input ref={fileRef} type="file" accept=".pdf,.bib" multiple hidden onChange={(e) => addFiles(e.target.files)} />
           <button className="send" disabled={!canSubmit} onClick={submit} aria-label="Start research"><Icon name="arrowUp" size={17} /></button>
         </div>
 
-        {state.mainline && !expanded && <button className="link-btn" onClick={()=>state.mainline?.attachFiles?.()}>Add papers</button>}
         {(!state.mainline || state.mainline.demo) && <button className="suggestion" disabled={!canDemo} title={canDemo ? undefined : "Refresh to restore the demo topic"} onClick={() => act.startDemo()}>
           <Icon name="compass" size={15} />
           <span><small>Try the demo</small>{state.mainline ? 'Which scientific QA datasets use paper abstracts?' : DEFAULT_QUESTION}</span>
           <Icon name="arrowRight" size={14} />
         </button>}
-        {!!state.mainline?.activity?.length&&<details className="activity-list"><summary>Research updates ({state.mainline.activity.length})</summary>{state.mainline.activity.map(a=><button key={a.id} className="lib-row" onClick={a.open}><span><strong>{a.title}</strong><small>{a.detail}</small></span></button>)}</details>}
+        {!!state.mainline?.activity?.length && (
+          <Disclosure className="activity-list" icon="clock" title={<>Research updates <span className="tag">{state.mainline.activity.length}</span></>}>
+            <ul className="activity-items scroll">
+              {state.mainline.activity.map((a) => (
+                <li key={a.id}>
+                  <button onClick={a.open} className="activity-item">
+                    <span className="grow"><strong>{a.title}</strong><small>{a.detail}</small></span>
+                    <Icon name="arrowRight" size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </Disclosure>
+        )}
       </div>
     </div>
   )

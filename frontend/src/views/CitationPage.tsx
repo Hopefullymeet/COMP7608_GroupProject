@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../../../prototype/src/data/store'
 import { Dialog, PageHead } from '../../../prototype/src/components/PageHead'
+import { Icon } from '../../../prototype/src/components/Icon'
 import { useRead, useWorkspace } from '../data/Workspace'
 import type { Decision, ExportFormat, Finding, Report } from '../api/citation'
 import { EvidenceLink } from './Notes'
@@ -101,7 +102,7 @@ function Manuscripts({ topic }: { topic: string }) {
     <>
       <div className="lib-tools">
         <button className="primary" onClick={() => create(true)}>
-          Add manuscript
+          <Icon name="plus" size={14} /> Add manuscript
         </button>
         {doc && (
           <>
@@ -135,22 +136,29 @@ function Manuscripts({ topic }: { topic: string }) {
         <>
           <section className="card result-card">
             <h2>{doc.name}</h2>
-            <p>
-              {doc.format} · {doc.write_mode} · {v.version_id}
+            <p className="record-meta" title={v.version_id}>
+              {doc.format} · {doc.write_mode} · Version {doc.versions.length - doc.versions.indexOf(v)}
             </p>
             {v.warnings.map((w) => (
-              <p key={w}>{w}</p>
+              <p className="gap-note" key={w}>
+                <Icon name="alert" size={15} /> {w}
+              </p>
             ))}
-            {v.sentences.map((s) => (
-              <label key={s.id} className="check-row">
-                <input
-                  type="checkbox"
-                  checked={sentences.includes(s.id)}
-                  onChange={() => setSelected(toggle(sentences, s.id))}
-                />
-                {s.text} <small>{s.cites.map((c) => '[@' + c + ']').join(' ')}</small>
-              </label>
-            ))}
+            <div className="check-list">
+              {v.sentences.map((s) => (
+                <label key={s.id} className="check-row check-option">
+                  <input
+                    type="checkbox"
+                    checked={sentences.includes(s.id)}
+                    onChange={() => setSelected(toggle(sentences, s.id))}
+                  />
+                  <span>
+                    {s.text}
+                    {s.cites.length > 0 && <small>{s.cites.map((c) => '[@' + c + ']').join(' ')}</small>}
+                  </span>
+                </label>
+              ))}
+            </div>
             <h3>Source scope</h3>
             <label className="check-row">
               <input
@@ -163,16 +171,25 @@ function Manuscripts({ topic }: { topic: string }) {
               />
               Include other papers from Library
             </label>
-            {available.map((a) => (
-              <label className="check-row" key={a.id}>
-                <input
-                  type="checkbox"
-                  checked={versions.includes(a.id)}
-                  onChange={() => setSources(toggle(versions, a.id))}
-                />
-                {a.title} · {a.scope} · {a.id}
-              </label>
-            ))}
+            {available.length > 0 && (
+              <div className="check-list">
+                {available.map((a) => (
+                  <label className="check-row check-option" key={a.id}>
+                    <input
+                      type="checkbox"
+                      checked={versions.includes(a.id)}
+                      onChange={() => setSources(toggle(versions, a.id))}
+                    />
+                    <span>
+                      <strong>{a.title}</strong>
+                      <small title={a.id}>
+                        {a.scope.replaceAll('_', ' ')} · {a.id.slice(0, 8)}
+                      </small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
             <div className="lib-tools">
               <button
                 className="primary"
@@ -195,21 +212,25 @@ function Manuscripts({ topic }: { topic: string }) {
           )}
           {report && (
             <>
-              <select
-                aria-label="Report"
-                value={report.report_id}
-                onChange={(e) => pickReport(e.target.value)}
-              >
-                {v.reports.map((r, i) => (
-                  <option key={r.report_id} value={r.report_id}>
-                    {r.kind} · {v.reports.length - i}
-                  </option>
-                ))}
-              </select>
-              <p>
-                {report.complete ? 'Check complete' : 'Partial coverage'} · {report.model} ·{' '}
-                {report.findings.filter((f) => f.decision).length}/{report.findings.length} findings reviewed
-              </p>
+              <div className="lib-tools">
+                <select
+                  aria-label="Report"
+                  value={report.report_id}
+                  onChange={(e) => pickReport(e.target.value)}
+                >
+                  {v.reports.map((r, i) => (
+                    <option key={r.report_id} value={r.report_id}>
+                      {r.kind === 'citation_audit' ? 'Citation check' : 'Citation suggestions'} ·{' '}
+                      {v.reports.length - i}
+                    </option>
+                  ))}
+                </select>
+                <p className="record-meta">
+                  {report.complete ? 'Check complete' : 'Partial coverage'} · {report.model} ·{' '}
+                  {report.findings.filter((f) => f.decision).length}/{report.findings.length} findings
+                  reviewed
+                </p>
+              </div>
               {report.findings.map((f) => (
                 <section className="card result-card" key={f.finding_id}>
                   <h3>{v.sentences.find((s) => s.id === f.sentence_id)?.text}</h3>
@@ -225,16 +246,24 @@ function Manuscripts({ topic }: { topic: string }) {
                           : 'Coverage incomplete'}
                   </span>
                   {f.claims.map((c, i) => (
-                    <p key={i}>
-                      <strong>{c.status.replaceAll('_', ' ')}</strong> · {c.text}
-                      <br />
-                      <small>
-                        {c.source_version_id} · {c.limit}
-                      </small>{' '}
-                      {c.anchor_ids.map((a) => (
-                        <EvidenceLink key={a} id={a} />
-                      ))}
-                    </p>
+                    <div className="research-record" key={i}>
+                      <p>
+                        <span
+                          className={`tag ${c.status === 'supported' ? 'ok' : c.status === 'conflict' ? 'bad' : 'warn'}`}
+                        >
+                          {c.status.replaceAll('_', ' ')}
+                        </span>{' '}
+                        {c.text}
+                      </p>
+                      <small className="record-meta" title={c.source_version_id}>
+                        {[c.source_version_id?.slice(0, 8), c.limit].filter(Boolean).join(' · ')}
+                      </small>
+                      <div>
+                        {c.anchor_ids.map((a) => (
+                          <EvidenceLink key={a} id={a} />
+                        ))}
+                      </div>
+                    </div>
                   ))}
                   <div className="lib-tools">
                     {report.kind === 'citation_audit' &&
@@ -283,7 +312,7 @@ function Manuscripts({ topic }: { topic: string }) {
               ),
             )}
           </select>
-          <label>
+          <label className="check-row">
             <input
               type="checkbox"
               disabled={demo}
@@ -307,14 +336,20 @@ function Manuscripts({ topic }: { topic: string }) {
           <button className="ghost-btn" onClick={() => void pick().catch(err)}>
             {demo ? 'Open sample manuscript' : 'Choose Markdown, LaTeX or Word file'}
           </button>
-          <p>Or paste Markdown</p>
-          <input aria-label="Manuscript name" value={name} onChange={(e) => setName(e.target.value)} />
-          <textarea
-            aria-label="Manuscript text"
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            rows={5}
-          />
+          <label className="set-field">
+            Manuscript name
+            <input className="text-field" value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label className="set-field">
+            Or paste Markdown
+            <textarea
+              aria-label="Manuscript text"
+              className="text-field"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={5}
+            />
+          </label>
           <button
             className="primary"
             disabled={busy || !body.trim() || !name.trim()}
@@ -334,8 +369,12 @@ function Manuscripts({ topic }: { topic: string }) {
       )}
       {preview?.proposal && v && doc && report && (
         <Dialog title="Preview manuscript revision" onClose={() => setPreview(undefined)}>
-          <p>Current · {v.sentences.find((s) => s.id === preview.sentence_id)?.text}</p>
-          <p>Revised sentence · {apply === 'citation' ? original?.text : preview.proposal.text}</p>
+          <div className="rewrite">
+            <p className="record-meta">Current sentence</p>
+            <del>{original?.text}</del>
+            <p className="record-meta">Revised sentence</p>
+            <ins>{apply === 'citation' ? original?.text : preview.proposal.text}</ins>
+          </div>
           <p>
             Citation ·{' '}
             {(apply === 'wording' ? (original?.cites ?? []) : preview.proposal.cites).join(', ') || 'None'}
