@@ -29,6 +29,7 @@
 | Read & Ask | 提问和读回历史 | `task.prepare`、`task.start`（`reading_qa`）、`session.get` | [已细化](discover-read-locate.md#23-阅读问答) | [选中文本提问](library-reading.md) |
 | | 定位原文、查看证据卡 | `evidence.locate` | [摘要](discover-read-locate.md)、[全文](library-reading.md) | |
 | | 打开论文和读取摘要 | `source.read_abstract` | [已细化](discover-read-locate.md#24-点击出处定位原文) | [全文与阅读位置](library-reading.md) |
+| 所有任务 | 历史、步骤及用量 | `task.history` | [已细化](protocol.md#41-工作区的任务记录) | |
 | Discover 与 Read & Ask | 查询、订阅或取消任务 | `task.get`、`task.subscribe`、`task.cancel` | [已细化](protocol.md#4-任务与事件) | [检查点恢复](services-workspace.md) |
 | | 保存回答、编辑笔记、用作引用 | `note.list/save` | [已细化](library-reading.md) | |
 | Compare | 发起比较 | `task.start`（`paper_comparison`） | [已细化](comparison-wiki.md) | 终态读取完整表格 |

@@ -34,6 +34,10 @@ type Revision = {revision:Id,text:string,anchor_ids:Id[],origin:string}
 type Note = Revision & {note_id:Id,session_id?:Id,history:Revision[]}
 ~~~~
 
+继续研究使用以下兼容字段。session.list 的每项可附 updated_at（ISO 8601）、has_turns；session.get 可附 reader:{source_version_id,passage_id?}。reader.position 与 reader.bookmark 可带 session_id，在主题内按会话保存；省略时沿用主题书签。evidence.open 在传入旧版本锚点时始终返回原版本；用于稿件、笔记与比较时也能读回段落和页码。note.save 成功后用 note.list 读回来源、编辑身份和旧版内容，恢复到旧措辞生成一次新修订。
+
+批量选候选沿用 candidate.decide，一项一个操作键，部分失败时保留成功项并显示余项原因。检索结果中的候选可带 change:'new' 或 'updated'，无字段表示无比较基线或无变化；主线在 Refine 或监测后按此标注。重新打开 topic 时可按 task.history 找回跨客户端的步骤。workspace.activity 定位到旧版本时应保留其证据和修订历史。
+
 全文坐标相对旋转后页面左上角归一化至 [0,1]，页序从 1 开始。摘要 page 为 0。reading_qa 支持 full_text 和可选 input.selection:{source_version_id,passage_id,quote}，服务端校验原句。全文回答沿用原句级 anchor_ids；evidence.locate 对全文返回 Located，摘要保持旧响应。笔记文本变化后支持关系待重查。
 
 示例：选择 pubmedqa.pdf 得到 f1，paper_import 的 task_id=t1，序号 1、2、3 报 inspect、match、commit，4 为 completed，result={paper_ids:[],review_ids:["r1"]}。r1 指向 p1，确认 link 后读取 p1 的 v2，通过 evidence.open(a2) 回到 v2 第 2 页的 passage p2；note.save 将 a2 存入 n1。若 v2 已删除则返回 SOURCE_UNAVAILABLE，用户可在回收站恢复。缺解析时导入可 partial，并保留成功项。空选择、未知文件句柄或跨主题选择报 INVALID_PARAMS / NOT_FOUND；过期修订统一报 -32020 STALE_REVISION，next_action=refresh_data。
