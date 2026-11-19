@@ -65,6 +65,12 @@ type TaskEvent<R, Extra = never> = { task_id: Id; run_id: Id; event_seq: number 
 - 取消先停止派发新工作，并尝试中止在途调用。取消与产物提交由服务端决定先后：先提交则返回原终态，先取消则返回 `cancelled`，晚到的响应不得再提交产物。进程重启时，把未提交且无法继续的任务结为 `failed`，原因为 `PROCESS_INTERRUPTED`。首版重试开启新任务。
 - 每条消息的大小上限、调用超时和任务预算可配置，部署默认值通过联调验证。大文件通过文件标识交接。
 
+### 4.1 工作区的任务记录
+
+task.history({topic_id?:Id}) 返回 {items:Run[]}，按开始时间倒序排列。每个 Run 包含 task_id、run_id、kind、label、status、started_at（ISO 8601）、steps 和可选 topic_id、session_id、usage、checkpoint_id。steps 为 {kind:'plan'|'tool'|'observe'|'decide'|'stop',title:string,detail:string}[]；usage 为 {calls,tokens,ms,cost}（均为非负数，cost 单位 USD）。queued/running 展示进行中；终态保留实际状态与从 task.get 读回的 Issue。客户端可查询同一工作区内的历史任务，随步骤更新或结束后刷新。找不到请求主题返回 NOT_FOUND；空工作区返回空数组。中断的任务可通过[检查点](services-workspace.md)另行确认恢复。
+
+例：task.history({topic_id:"t1"}) 返回 task_id=t2 的 reading_qa，步骤先记录 plan 的选取 PubMedQA v1，再记录 tool 的摘要读取、observe 的已定位片段、stop 的理由；界面从 usage 读取实际调用与耗时。未记录用量时显示未知。订阅断线后仍可读这条运行记录。
+
 ## 5. 错误
 
 RPC 拒绝返回 `error: { code: number; message: NonEmptyText; data: Issue }`。无有效请求可关联的 JSON-RPC 协议错误使用标准错误格式。接单后的异常写入 `task.finished.issue`。前端按 `reason` 处理。`retryable` 表示输入与前置条件维持现状时是否可直接重试。
