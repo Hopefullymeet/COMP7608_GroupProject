@@ -19,7 +19,7 @@
 |---|---|---|---|---|
 | Home 与侧栏 | 创建主题或会话 | `topic.create`、`session.create` | [已细化](discover-read-locate.md#11-方法与类型) | |
 | | 查看主题和会话 | `topic.list`、`session.list` | [已细化](discover-read-locate.md#11-方法与类型) | [待办与变化](services-workspace.md) |
-| | 导入材料 | `file.pick`、`paper_import` | [已细化](library-reading.md) | |
+| | 导入材料 | `file.pick`、`file.stage_drop`、`paper_import` | [已细化](library-reading.md) | |
 | | 归档与恢复主题、会话 | `workspace.archive/archived/unarchive` | [已细化](library-reading.md) | |
 | Discover | 发起或细化检索 | `task.prepare`、`task.start`（`discovery`） | [已细化](discover-read-locate.md#21-发现论文) | [按来源能力开放会议筛选](services-workspace.md) |
 | | 读回检索与候选 | `discovery.latest`、`discovery.get` | [已细化](discover-read-locate.md#12-检索与候选) | |
@@ -27,11 +27,11 @@
 | | 查看 Agent 步骤 | `discovery.steps` | [已细化](discover-read-locate.md#13-任务结果与事件) | |
 | | 定期检索与文献变化 | `discovery.watch`、`workspace.activity` | [已细化](services-workspace.md) | |
 | Read & Ask | 提问和读回历史 | `task.prepare`、`task.start`（`reading_qa`）、`session.get` | [已细化](discover-read-locate.md#23-阅读问答) | [选中文本提问](library-reading.md) |
-| | 定位原文、查看证据卡 | `evidence.locate` | [摘要](discover-read-locate.md)、[全文](library-reading.md) | |
-| | 打开论文和读取摘要 | `source.read_abstract` | [已细化](discover-read-locate.md#24-点击出处定位原文) | [全文与阅读位置](library-reading.md) |
+| | 定位原文、查看证据卡 | `evidence.locate`、`evidence.open` | [摘要](discover-read-locate.md)、[全文](library-reading.md) | |
+| | 打开原件、读取摘要或全文，保存会话阅读位置 | `source.original`、`source.read_abstract`、`source.read`、`reader.position/bookmark` | [已细化](discover-read-locate.md#24-点击出处定位原文) | [全文与阅读位置](library-reading.md) |
 | 所有任务 | 历史、步骤及用量 | `task.history` | [已细化](protocol.md#41-工作区的任务记录) | |
-| Discover 与 Read & Ask | 查询、订阅或取消任务 | `task.get`、`task.subscribe`、`task.cancel` | [已细化](protocol.md#4-任务与事件) | [检查点恢复](services-workspace.md) |
-| | 保存回答、编辑笔记、用作引用 | `note.list/save` | [已细化](library-reading.md) | |
+| 所有任务 | 查询、订阅或取消任务 | `task.get`、`task.subscribe`、`task.cancel` | [已细化](protocol.md#4-任务与事件) | [检查点恢复](services-workspace.md) |
+| Read & Ask 和 Library | 保存回答、编辑笔记、用作引用 | `note.list/save` | [已细化](library-reading.md) | |
 | Compare | 发起比较 | `task.start`（`paper_comparison`） | [已细化](comparison-wiki.md) | 终态读取完整表格 |
 | | 修订、保存或存为笔记 | `comparison.save`、`comparison.list`、`note.save` | [已细化](comparison-wiki.md) | |
 | Library | 浏览个人库 | `library.list` | [已细化](discover-read-locate.md#22-加入主题并读回-library) | 客户端分段显示 |
