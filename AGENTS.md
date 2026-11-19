@@ -7,6 +7,7 @@
 - 最小可用优先：只解决当前任务，不创建空目录、重复文档或未使用的框架与依赖。
 - 项目要求先查 `docs/COMP7608B_LLM_Project_Guideline.pdf`。
 - 项目要求与设计说明在 `docs/`，Proposal PDF等交付物在 `docs/deliverables/`。
+- 前端、后端与 Agent 的接口契约在 `docs/contracts/`（入口 `README.md`），编写规则见 `docs/contracts/AGENTS.md`。
 - 视觉原型在 `prototype/`，范围、边界与约束见 `prototype/AGENTS.md`。
 - 发生修改后更新维护 `PROGRESS.md` 的当前状态、已完成与下一步，不冗余、保证最小可用行。
 
