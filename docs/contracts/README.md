@@ -4,6 +4,7 @@
 
 | 文件 | 内容 |
 |---|---|
+| [comparison-wiki.md](comparison-wiki.md) | 论文比较、概念与关系、草稿及逐项审阅 |
 | [library-reading.md](library-reading.md) | 资料导入、复核与回收、主题归档、全文与笔记 |
 | [protocol.md](protocol.md) | 共用协议：通信、标识、写入重试、任务与事件、通用错误、证据定位 |
 | [discover-read-locate.md](discover-read-locate.md) | 主线「发现 → 加入主题 → 阅读问答 → 定位原文」的方法、类型和联调样例 |
@@ -28,15 +29,15 @@
 | | 打开论文和读取摘要 | `source.read_abstract` | [已细化](discover-read-locate.md#24-点击出处定位原文) | [全文与阅读位置](library-reading.md) |
 | Discover 与 Read & Ask | 查询、订阅或取消任务 | `task.get`、`task.subscribe`、`task.cancel` | [已细化](protocol.md#4-任务与事件) | 断点继续待补 |
 | | 保存回答、编辑笔记、用作引用 | `note.list/save` | [已细化](library-reading.md) | |
-| Compare | 发起比较 | `task.start`（`paper_comparison`） | 待补 | 维度预设、按格增量返回 |
-| | 修订、保存或存为笔记 | `comparison.save` | 待补 | |
+| Compare | 发起比较 | `task.start`（`paper_comparison`） | [已细化](comparison-wiki.md) | 终态读取完整表格 |
+| | 修订、保存或存为笔记 | `comparison.save`、`comparison.list`、`note.save` | [已细化](comparison-wiki.md) | |
 | Library | 浏览个人库 | `library.list` | [已细化](discover-read-locate.md#22-加入主题并读回-library) | 分页 |
 | | 导入、补全文、复核重复与冲突 | `task.start`（`paper_import`）、`library.resolve_import` | [已细化](library-reading.md) | |
 | | 移出主题、回收站、恢复与清理 | `library.organize/impact/trash/restore/purge` | [已细化](library-reading.md) | |
 | | 标签与批量操作、来源更新 | `library.catalog/organize` | [已细化](library-reading.md) | |
-| Evidence Wiki | 浏览概念页与关系 | | 待补 | |
-| | 生成或重生成草稿 | `task.start`（`wiki_draft`） | 待补 | |
-| | 审阅、接受或丢弃草稿 | `wiki.review` | 待补 | 差异粒度、逐项采纳、目标版本变化 |
+| Evidence Wiki | 浏览概念页与关系 | `wiki.list` | [已细化](comparison-wiki.md) | |
+| | 生成或重生成草稿 | `task.start`（`wiki_draft`） | [已细化](comparison-wiki.md) | |
+| | 审阅、接受或丢弃草稿 | `wiki.review` | [已细化](comparison-wiki.md) | |
 | Citation check | 添加稿件、识别论述和引用 | | 待补 | Markdown、LaTeX、Word 实现顺序 |
 | | 引用建议 | `task.start`（`citation_suggest`） | 待补 | |
 | | 独立回查 | `task.start`（`citation_audit`） | 待补 | |

@@ -7,6 +7,7 @@
 - 正式入口直接复用原型的页面、样式与交互。契约模式已用 PubMedQA 样例跑通发现、加入主题、摘要问答、出处定位和刷新读回。[运行方式与宿主接口](frontend/README.md)
 - Windows Tauri 独立窗口已用 PubMedQA 样例走通发现、问答和摘要定位。默认窗口为 1440 × 800，窗口控制融入应用顶栏，Discover 年份筛选沿用原型的卡片和配色。
 - 桌面契约入口已接入资料库、导入确认、版本复核、回收站、主题归档、正文阅读及版本化笔记。
+- 已定义[比较与 Wiki 接口](docs/contracts/comparison-wiki.md)，覆盖修订和逐项采纳。
 - 已定义[资料库、归档、全文与笔记接口](docs/contracts/library-reading.md)。
 
 - 已提交 Group 52 Proposal，完成 [MVP 设计草案](docs/PaperTrace_MVP_Design.md)及[项目书、技术书与设计交接包](docs/deliverables/PaperTrace_Handoff_20261109/)。
