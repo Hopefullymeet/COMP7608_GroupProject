@@ -71,7 +71,7 @@ export function libraryFixture(state:FixtureState, evidence:Evidence) {
     return {references,revision:JSON.stringify([selected,references])}
   }
   const handlers:Handlers<LibraryMethods>={
-    'file.pick':({purpose})=>({files:purpose==='papers'?['qasper','multivers'].map(file_id=>({file_id,name:file_id+'.pdf'})):[]}),
+    'file.pick':({purpose})=>({files:purpose==='papers'?['qasper','multivers'].map(file_id=>({file_id,name:file_id+'.pdf'})):purpose==='draft'?[{file_id:'related-work.md',name:'related-work.md'}]:[]}),
     'library.catalog':()=>({papers:state.library.map(p=>asEntry(p,data)),trash:data.trash.map(p=>asEntry(p,data)),reviews:data.reviews}),
     'library.resolve_import':({review_id,decision})=>{
       const r=data.reviews.find(x=>x.review_id===review_id)

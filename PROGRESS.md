@@ -8,6 +8,7 @@
 - Windows Tauri 独立窗口已用 PubMedQA 样例走通发现、问答和摘要定位。默认窗口为 1440 × 800，窗口控制融入应用顶栏，Discover 年份筛选沿用原型的卡片和配色。
 - 桌面契约入口已接入资料库、导入确认、版本复核、回收站、主题归档、正文阅读及版本化笔记。
 - 桌面比较页与 Wiki 已接入任务确认、逐格修订、证据回跳、差异预览及采纳。
+- 桌面稿件页已接入建议与回查、审阅、修订预览、新版重查和成果导出。
 - 已定义[稿件、独立回查与成果导出接口](docs/contracts/citation-export.md)。
 - 已定义[比较与 Wiki 接口](docs/contracts/comparison-wiki.md)，覆盖修订和逐项采纳。
 - 已定义[资料库、归档、全文与笔记接口](docs/contracts/library-reading.md)。

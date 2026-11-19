@@ -2,12 +2,15 @@ import fixture from './pubmedqa.json'
 import { RpcError } from './contract'
 import type { Abstract, Candidate, Client, Discovery, EventBody, Evidence, Finished, LibraryItem, Method, Methods, Reading, Rpc, Session, Step, TaskEvent, TaskInput, Topic, Turn } from './contract'
 
+import { citationFixture } from './citationFixture'
+import type { Manuscript } from './citation'
 import { researchFixture, type ResearchFixture } from './researchFixture'
 import { asLocated, emptyLibrary, type LibraryFixture } from './library'
 import { libraryFixture } from './libraryFixture'
 
 type Run = { input: TaskInput; run_id: string; events: TaskEvent[]; script: EventBody[] }
 type State = {
+  manuscripts:Record<string,Manuscript[]>
   research:ResearchFixture
   shelf:LibraryFixture
   topics: Topic[]
@@ -30,12 +33,13 @@ function fail(reason: string, message: string, next_action = 'refresh_data', det
 }
 
 export function createMock(): Client {
-  const initial: State = { research:{comparisons:{},wiki:{}}, shelf:emptyLibrary(), topics: [], sessions: {}, turns: {}, searches: {}, latest: {}, library: [], runs: {}, writes: {}, confirmations: {} }
+  const initial: State = { manuscripts:{},research:{comparisons:{},wiki:{}}, shelf:emptyLibrary(), topics: [], sessions: {}, turns: {}, searches: {}, latest: {}, library: [], runs: {}, writes: {}, confirmations: {} }
   const state: State = JSON.parse(localStorage.getItem(key) ?? 'null') ?? initial
   state.shelf ??= emptyLibrary()
   const shelf=libraryFixture(state,evidence)
   state.research??={comparisons:{},wiki:{}}
   const research=researchFixture(state,state.research,asLocated(evidence))
+  const citation=citationFixture(state,state.research,state.manuscripts??={},asLocated(evidence))
   const listeners = new Map<string, Set<(event: TaskEvent) => void>>()
   const active = (run: Run) => run.events.at(-1)?.type !== 'task.finished'
   const save = () => localStorage.setItem(key, JSON.stringify(state))
@@ -48,6 +52,9 @@ export function createMock(): Client {
       body={type:'task.finished',payload:{status:'completed',result:shelf.importPapers(run.input)}}
     }
     if(body.type==='task.finished' && body.payload.status==='completed' && (run.input.kind==='paper_comparison'||run.input.kind==='wiki_draft')) research.generate(run.input,task)
+    if(body.type==='task.finished' && body.payload.status==='completed' && (run.input.kind==='citation_audit'||run.input.kind==='citation_suggest')){
+      if(!citation.generate(run.input,task))body={type:'task.finished',payload:{status:'partial',result:{record_id:task},issue:{reason:'Missing target material',next_action:'restore_source',retryable:false}}}
+    }
     const event = { task_id: task, run_id: run.run_id, event_seq: run.events.length + 1, ...body }
     run.events.push(event)
     if (event.type === 'task.finished' && event.payload.status === 'completed') {
@@ -76,6 +83,9 @@ export function createMock(): Client {
   Object.entries(state.runs).forEach(([task, run]) => { if (active(run)) schedule(task) })
 
   function taskScript(input: TaskInput, task: string): EventBody[] {
+    if(input.kind==='citation_audit'||input.kind==='citation_suggest'){
+      return [...['identify','read','assess'].map((stage):EventBody=>({type:'task.progress',payload:{stage,message:stage}})),{type:'task.finished',payload:{status:'completed',result:{record_id:task}}}]
+    }
     if(input.kind==='paper_comparison'||input.kind==='wiki_draft') {
       const stages=input.kind==='paper_comparison'?['read','align','compare']:['collect','propose']
       return [...stages.map((stage):EventBody=>({type:'task.progress',payload:{stage,message:stage}})),{type:'task.finished',payload:{status:'completed',result:{record_id:task}}}]
@@ -139,7 +149,7 @@ export function createMock(): Client {
   }
 
   const handlers: { [M in Method]: (params: Methods[M][0]) => Methods[M][1] } = {
-    ...shelf.handlers,...research.handlers,
+    ...shelf.handlers,...research.handlers,...citation.handlers,
     'protocol.version': () => ({ major: 0, minor: 4 }),
     'topic.list': () => ({ items: state.topics.filter(t=>!state.shelf.archive.some(a=>a.id===t.topic_id)) }),
     'topic.create': ({ title }) => {
@@ -219,7 +229,7 @@ export function createMock(): Client {
       state.confirmations[confirmation_id] = input
       return {
         confirmation_id,
-        transfers: input.kind === 'paper_import' ? [] : (input.kind==='wiki_draft'||input.kind==='paper_comparison') ? [{endpoint:'https://model.example.org',purpose:input.kind,data_categories:['Selected source versions and notes']}] : input.kind === 'discovery'
+        transfers: input.kind==='citation_suggest'||input.kind==='citation_audit' ? [{endpoint:'https://model.example.org',purpose:input.kind,data_categories:['Selected manuscript sentences and cited sources']}] : input.kind === 'paper_import' ? [] : (input.kind==='wiki_draft'||input.kind==='paper_comparison') ? [{endpoint:'https://model.example.org',purpose:input.kind,data_categories:['Selected source versions and notes']}] : input.kind === 'discovery'
           ? [{ endpoint: 'https://search.example.org', purpose: 'Find relevant papers', data_categories: ['Research question and search terms'] },
              { endpoint: 'https://model.example.org', purpose: 'Assess coverage and relevance', data_categories: ['Research question', 'Candidate metadata and abstracts'] }]
           : [{ endpoint: 'https://model.example.org', purpose: 'Answer the question', data_categories: ['Question and recent conversation', 'Selected abstracts'] }],

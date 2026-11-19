@@ -1,4 +1,5 @@
 import { WorkspaceProvider } from './data/Workspace'
+import { CitationPage } from './views/CitationPage'
 import { ComparePage, WikiPage } from './views/ResearchPages'
 import { LibraryPage } from './views/LibraryPage'
 import { StrictMode } from 'react'
@@ -17,7 +18,7 @@ const desktop = isTauri()
 const useRpc = desktop && import.meta.env.VITE_PAPERTRACE_TRANSPORT === 'rpc'
 const demo = desktop ? !useRpc : new URLSearchParams(window.location.search).get('mode') === 'contract'
 const api = useRpc ? createDesktop() : demo ? createMock() : null
-const app = <App comparison={api?<ComparePage/>:undefined} pages={api ? { library:<LibraryPage/>, wiki:<WikiPage/> } : undefined} windowControls={desktop ? <WindowControls /> : undefined} />
+const app = <App comparison={api?<ComparePage/>:undefined} pages={api ? { library:<LibraryPage/>, wiki:<WikiPage/>, check:<CitationPage/> } : undefined} windowControls={desktop ? <WindowControls /> : undefined} />
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <StoreProvider>

@@ -4,9 +4,10 @@ import { errorText, type Client, type Method, type Methods, type WorkspaceTask }
 import { operation, retryWrite, useTask } from './useTask'
 
 type WriteMethod = { [M in Method]: Methods[M][0] extends {operation_id:string}?M:never }[Method]
+type Payload<P> = P extends unknown ? Omit<P,'operation_id'> : never
 type Workspace = {
   api:Client; tick:number; demo:boolean; busy:boolean; refresh:()=>void; report:(error:unknown)=>void
-  write:<M extends WriteMethod>(method:M,params:Omit<Methods[M][0],'operation_id'>)=>Promise<Methods[M][1]>
+  write:<M extends WriteMethod>(method:M,params:Payload<Methods[M][0]>)=>Promise<Methods[M][1]>
   prepare:(task:WorkspaceTask)=>Promise<void>
 }
 const Context=createContext<Workspace|null>(null)
@@ -40,11 +41,11 @@ export function WorkspaceProvider({api,demo,children}:{api:Client;demo:boolean;c
   },[taskKey,task])
   useEffect(()=>{if(task.task)localStorage.setItem(taskKey,task.task)},[task.task,taskKey])
   const writing=useRef(new Map<string,Promise<unknown>>())
-  async function write<M extends WriteMethod>(method:M,params:Omit<Methods[M][0],'operation_id'>):Promise<Methods[M][1]> {
+  async function write<M extends WriteMethod>(method:M,params:Payload<Methods[M][0]>):Promise<Methods[M][1]> {
     const key=method+JSON.stringify(params)
     const active=writing.current.get(key)
     if(active)return active as Promise<Methods[M][1]>
-    const payload={...params,operation_id:operation()} as Methods[M][0]
+    const payload={...params,operation_id:operation()} as unknown as Methods[M][0]
     setPending(p=>p+1)
     const sent=retryWrite(()=>api.call(method,payload)).then(result=>{refresh();return result}).finally(()=>{
       writing.current.delete(key);setPending(p=>p-1)
