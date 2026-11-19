@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useStore, anyRunning, papersOfTopic, type Tab } from '../data/store'
 import { DEMO_TOPIC, PAPERS } from '../data/fixtures'
 import { Icon, Spinner } from '../components/Icon'
@@ -11,7 +12,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'compare', label: 'Compare', icon: 'columns' },
 ]
 
-export function TopicView({ topicId, tab }: { topicId: string; tab: Tab }) {
+export function TopicView({ topicId, tab, windowControls }: { topicId: string; tab: Tab; windowControls?: ReactNode }) {
   const { state, act } = useStore()
   const topic = state.topics.find((t) => t.id === topicId)
   if (!topic) return null
@@ -22,15 +23,16 @@ export function TopicView({ topicId, tab }: { topicId: string; tab: Tab }) {
 
   return (
     <div className="topic">
-      <header className="topic-head">
+      <header className={windowControls ? 'topic-head topic-head--desktop' : 'topic-head'}
+        data-tauri-drag-region={windowControls ? '' : undefined}>
         <button className="icon-btn" onClick={() => act.navigate({ view: 'home' })} aria-label="Back to home"><Icon name="arrowLeft" /></button>
-        <div className="topic-title">
-          <h1>{topic.title}</h1>
+        <div className="topic-title" data-tauri-drag-region={windowControls ? 'deep' : undefined}>
+          <h1 title={windowControls ? topic.title : undefined}>{topic.title}</h1>
           <small>{topic.goal}</small>
         </div>
         {topic.scripted && (
           <nav className="tabs" role="tablist">
-            {TABS.map((t) => (
+            {TABS.filter((t) => !state.mainline || t.id !== 'compare').map((t) => (
               <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'on' : ''}
                 onClick={() => act.openTopic(topicId, t.id)}>
                 <Icon name={t.icon} size={15} /> {t.label}
@@ -42,14 +44,17 @@ export function TopicView({ topicId, tab }: { topicId: string; tab: Tab }) {
           {topic.scripted && (
             <>
               <span title="Papers in this topic"><Icon name="file" size={14} /> {papers.length}</span>
-              <span title="Saved notes"><Icon name="note" size={14} /> {state.noted.length}</span>
-              <span title="Citations picked"><Icon name="quote" size={14} /> {state.cited.length}</span>
+              {!state.mainline && <>
+                <span title="Saved notes"><Icon name="note" size={14} /> {state.noted.length}</span>
+                <span title="Citations picked"><Icon name="quote" size={14} /> {state.cited.length}</span>
+              </>}
             </>
           )}
           <button className={`trace-btn ${state.trace.open ? 'on' : ''}`} onClick={() => act.showTrace(!state.trace.open)}>
             {running ? <Spinner /> : <Icon name="trace" size={15} />} Agent trace
           </button>
         </div>
+        {windowControls}
       </header>
 
       <div className="topic-body">

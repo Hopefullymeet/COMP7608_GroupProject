@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useStore } from './data/store'
 import { Sidebar } from './components/Sidebar'
 import { TraceDrawer } from './components/TraceDrawer'
@@ -10,16 +11,19 @@ import { Wiki } from './views/Wiki'
 import { Check } from './views/Check'
 import { Settings } from './views/Settings'
 
-export function App() {
+export function App({ windowControls }: { windowControls?: ReactNode }) {
   const { state, act } = useStore()
   const r = state.route
   const waiting = state.runOrder.map((id) => state.runs[id]).find((run) => run.limit)
   return (
-    <div className="app">
+    <div className={windowControls ? 'app app--desktop' : 'app'}>
       <Sidebar />
       <main className="main">
+        {windowControls && r.view !== 'topic' && (
+          <div className="desktop-drag-area" data-tauri-drag-region>{windowControls}</div>
+        )}
         {r.view === 'home' ? <Home key={state.homeRevision} />
-          : r.view === 'topic' ? <TopicView topicId={r.topicId} tab={r.tab} />
+          : r.view === 'topic' ? <TopicView topicId={r.topicId} tab={r.tab} windowControls={windowControls} />
           : r.view === 'library' ? <Library />
           : r.view === 'wiki' ? <Wiki />
           : r.view === 'check' ? <Check />

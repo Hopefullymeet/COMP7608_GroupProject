@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { NEW_SESSION, papersOfTopic, sourceStatus, useStore } from '../data/store'
-import { DEMO_TOPIC, EVIDENCE, PAPERS } from '../data/fixtures'
+import { NEW_SESSION, allEvidence, currentTopic, evidenceFor, paperFor, papersOfTopic, sourceStatus, useStore } from '../data/store'
 import { QUESTIONS } from '../data/scripts'
 import { Icon, Spinner } from '../components/Icon'
 import { plural, scrollWithin } from '../components/util'
@@ -11,7 +10,7 @@ function AgentMessage({ m }: { m: ChatMessage }) {
   const run = m.runId ? state.runs[m.runId] : undefined
   const lastStep = run?.steps[run.steps.length - 1]
   const tools = run?.steps.filter((s) => s.kind === 'tool').length ?? 0
-  const papers = papersOfTopic(state, DEMO_TOPIC)
+  const papers = papersOfTopic(state, currentTopic(state))
   let n = 0
   const numbered = m.segments.map((s) => (s.evidenceId ? ++n : 0))
 
@@ -25,8 +24,13 @@ function AgentMessage({ m }: { m: ChatMessage }) {
         <p className="answer">
           {m.segments.map((s, i) => {
             if (s.tone === 'scope') return <span key={i} className="scope-note"><Icon name="eye" size={13} /> {s.text}</span>
+            if (state.mainline && s.evidenceIds?.length) return <span key={i} className="claim">
+              {s.text}{s.evidenceIds.map((id, index) => <button key={id} className="cite"
+                aria-label={`Show source ${index + 1} for sentence ${i + 1}`}
+                onClick={() => act.openEvidence(id, '', true)}>{index + 1}</button>)}
+            </span>
             if (!s.evidenceId) return <span key={i}>{s.text}</span>
-            const source = EVIDENCE[s.evidenceId]
+            const source = evidenceFor(state, s.evidenceId)
             const status = sourceStatus(state, source.paperId)
             const jump = status === 'available' && papers.includes(source.paperId)
             const anchor = `chat-${m.id}-${i}`
@@ -59,7 +63,7 @@ function Chat() {
   const session = state.sessions.find((s) => s.id === state.activeSessionId)
   const messages = state.messages.filter((m) => m.sessionId === session?.id)
   const asked = new Set(messages.filter((m) => m.role === 'user').map((m) => m.segments[0]?.text))
-  const papers = papersOfTopic(state, DEMO_TOPIC)
+  const papers = papersOfTopic(state, currentTopic(state))
 
   useEffect(() => { scrollWithin(endRef.current, '.chat-scroll', 'end') }, [messages.length, state.messages])
 
@@ -69,14 +73,18 @@ function Chat() {
     setText('')
   }
 
-  const suggestions = QUESTIONS.filter((q) => !asked.has(q.text))
+  const readable = papers.filter((id) => paperFor(state, id).stored !== 'metadata')
+  const selected = readable.includes(state.readerPaperId) ? state.readerPaperId : readable[0]
+  const suggestions = (state.mainline
+    ? state.mainline.demo ? [{ id: 'pubmedqa', text: 'What context does PubMedQA provide to the model?', requires: undefined }] : []
+    : QUESTIONS).filter((q) => !asked.has(q.text))
 
   return (
     <section className="chat" aria-label="Conversation">
       <div className="chat-scroll">
         <div className="session-title">
           <Icon name="message" size={14} /> <span className="grow">{session?.title ?? NEW_SESSION}</span>
-          {messages.length > 0 && <button className="link-btn" onClick={() => act.newSession(DEMO_TOPIC)}><Icon name="plus" size={13} /> New session</button>}
+          {messages.length > 0 && <button className="link-btn" onClick={() => act.newSession(currentTopic(state))}><Icon name="plus" size={13} /> New session</button>}
         </div>
         {messages.length === 0 && (
           <div className="chat-empty">
@@ -92,15 +100,15 @@ function Chat() {
         <div ref={endRef} />
       </div>
 
-      {papers.length > 0 && <div className="chat-bottom">
+      {(state.mainline ? readable.length > 0 : papers.length > 0) && <div className="chat-bottom">
         {suggestions.length > 0 && (
           <div className="suggest-row">
             {suggestions.map((q) => {
-              const blocked = !papers.includes('qasper') ? 'qasper' : q.requires && !papers.includes(q.requires) ? q.requires : null
+              const blocked = state.mainline ? null : !papers.includes('qasper') ? 'qasper' : q.requires && !papers.includes(q.requires) ? q.requires : null
               return (
                 <button key={q.id} className="chip-btn" disabled={!!blocked || state.qaRunning} onClick={() => send(q.text)}
-                  title={blocked ? `Add ${PAPERS[blocked].short} to the topic first` : undefined}>
-                  {q.text}{blocked && <small> · needs {PAPERS[blocked].short}</small>}
+                  title={blocked ? `Add ${paperFor(state, blocked).short} to the topic first` : undefined}>
+                  {q.text}{blocked && <small> · needs {paperFor(state, blocked).short}</small>}
                 </button>
               )
             })}
@@ -111,7 +119,7 @@ function Chat() {
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(text) } }} />
           <div className="composer-bar">
-            <span className="scope-pill"><Icon name="file" size={13} /> Reading scope: {papers.filter((id) => PAPERS[id].stored !== 'metadata').map((id) => PAPERS[id].short).join(', ')}</span>
+            <span className="scope-pill"><Icon name="file" size={13} /> Reading scope: {(state.mainline && selected ? [selected] : readable).map((id) => paperFor(state, id).short).join(', ')}</span>
             <span className="grow" />
             <button className="send" disabled={state.qaRunning || !text.trim()} onClick={() => send(text)} aria-label="Send"><Icon name="arrowUp" size={16} /></button>
           </div>
@@ -123,7 +131,7 @@ function Chat() {
 
 function PassageText({ p, highlight }: { p: Passage; highlight: Set<string> }) {
   const { state, act } = useStore()
-  const anchors = Object.values(EVIDENCE)
+  const anchors = allEvidence(state)
     .filter((e) => e.passageId === p.id && highlight.has(e.id))
     .map((e) => ({ e, at: p.text.indexOf(e.quote) }))
     .filter((x) => x.at >= 0)
@@ -147,10 +155,11 @@ function PassageText({ p, highlight }: { p: Passage; highlight: Set<string> }) {
 
 function Reader() {
   const { state, act } = useStore()
-  const papers = papersOfTopic(state, DEMO_TOPIC).map((id) => PAPERS[id])
-  const paper = papers.find((p) => p.id === state.readerPaperId) ?? papers[0]
+  const papers = papersOfTopic(state, currentTopic(state)).map((id) => paperFor(state, id))
+  const historical = state.mainline && state.activeEvidence && paperFor(state, state.readerPaperId)
+  const paper = historical || (papers.find((p) => p.id === state.readerPaperId) ?? papers[0])
 
-  if (!paper) return <div className="empty-state"><h2>No papers in this topic</h2><button className="primary" onClick={() => act.openTopic(DEMO_TOPIC, 'discover')}>Find papers</button></div>
+  if (!paper) return <div className="empty-state"><h2>No papers in this topic</h2><button className="primary" onClick={() => act.openTopic(currentTopic(state), 'discover')}>Find papers</button></div>
 
   const used = new Set<string>()
   state.messages.filter((m) => m.sessionId === state.activeSessionId)
@@ -175,13 +184,14 @@ function Reader() {
 
       <div className="reader-scroll scroll">
         <article className="paper">
-          <p className="paper-venue">{paper.venue} {paper.year}{paper.externalId && <> · {paper.externalId}</>}</p>
+          <p className="paper-venue">{paper.venue} {paper.year || ''}{paper.externalId && <> · {paper.externalId}</>}</p>
           <h1>{paper.title}</h1>
           <p className="paper-authors">{paper.authors.join(' · ')}</p>
           <div className="paper-meta">
             <span><Icon name="file" size={13} /> {paper.stored === 'full-text' ? 'Full text'
-              : paper.stored === 'excerpt' ? 'Selected excerpts' : paper.stored === 'abstract' ? 'Abstract stored · PDF p. 1' : 'Metadata only'}</span>
-            <span>Venue from {paper.venueSource}</span>
+              : paper.stored === 'excerpt' ? 'Selected excerpts' : paper.stored === 'abstract' ? (state.mainline ? 'Abstract stored' : 'Abstract stored · PDF p. 1') : 'Metadata only'}</span>
+            {paper.venueSource && <span>Venue from {paper.venueSource}</span>}
+            {state.mainline && <span>Source version · {paper.id}</span>}
           </div>
 
           {paper.stored !== 'metadata' ? (
@@ -193,9 +203,13 @@ function Reader() {
                 </section>
               )) : <>
                 <h2>{paper.stored === 'abstract' ? 'Abstract' : 'Full text'}</h2>
-                <p className="abstract">{paper.passages.map((p) => <PassageText key={p.id} p={p} highlight={used} />)}</p>
+                {state.mainline ? paper.passages.map((p) => {
+                  const active = state.activeEvidence && evidenceFor(state, state.activeEvidence.id)?.passageId === p.id
+                  return <p className={`abstract${active ? ' located-passage' : ''}`} key={p.id}
+                    data-ev-anchor={active ? state.activeEvidence?.anchor : undefined}>{p.text}</p>
+                }) : <p className="abstract">{paper.passages.map((p) => <PassageText key={p.id} p={p} highlight={used} />)}</p>}
               </>}
-              {paper.stored !== 'full-text' && <div className="fulltext-note">
+              {!state.mainline && paper.stored !== 'full-text' && <div className="fulltext-note">
                 <Icon name="lock" size={15} />
                 <div>
                   <strong>Full text not loaded</strong>
@@ -218,7 +232,7 @@ function Reader() {
 export function Read() {
   const { state, act } = useStore()
   if (!state.activeSessionId) {
-    return <div className="empty-state"><Icon name="message" size={22} /><h2>No sessions yet</h2><p>Create a session to start asking about the papers in this topic.</p><button className="primary" onClick={() => act.newSession(DEMO_TOPIC)}><Icon name="plus" size={15} /> New session</button></div>
+    return <div className="empty-state"><Icon name="message" size={22} /><h2>No sessions yet</h2><p>Create a session to start asking about the papers in this topic.</p><button className="primary" onClick={() => act.newSession(currentTopic(state))}><Icon name="plus" size={15} /> New session</button></div>
   }
   return (
     <div className="read">

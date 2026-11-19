@@ -8,7 +8,7 @@ import { enabledSources, modelErrors, type ModelConfig, type ModelProvider, type
 import { MANUSCRIPTS, DUPLICATE_REVIEW, LIBRARY_META, LIBRARY_SEED, SAMPLE_MEMBERSHIP, WIKI_NOTE_SEED, WIKI_SEED } from './workspace'
 import type {
   AgentRun, Candidate, ChatMessage, ComparisonRow, Coverage, Decision, DraftSentence, DraftSnapshot, FileVersion, Finding, FindingDecision, SearchAngle, Session,
-  TaskEvent, Topic, TrashItem, WikiPage, WikiProposal,
+  TaskEvent, Topic, TrashItem, WikiPage, WikiProposal, Paper, EvidenceAnchor,
 } from './types'
 
 export type Tab = 'discover' | 'read' | 'compare'
@@ -21,6 +21,11 @@ type ExternalGrant = { runId: string; requestId: string; paperIds: string[]; sta
 type ManuscriptCheck = DraftSnapshot & { status: TaskState; runId: string | null; checking: string | null; history: DraftSnapshot[] }
 
 export interface State {
+  mainline?: {
+    demo: boolean; papers: Record<string, Paper>; evidence: Record<string, EvidenceAnchor>
+    search: (query: string, filters?: { year_from?: number; year_to?: number }) => void
+    searchBusy: boolean
+  }
   topics: Topic[]
   route: Route
   paperTopics: Record<string, string[]>
@@ -52,7 +57,7 @@ export interface State {
   externalGrant: ExternalGrant | null
 }
 
-const baseState: State = {
+export const baseState: State = {
   topics: TOPICS,
   route: { view: 'home' },
   paperTopics: SAMPLE_MEMBERSHIP,
@@ -545,6 +550,10 @@ function reducer(s: State, a: Action): State {
 }
 
 export const NEW_SESSION = 'New session'
+export const currentTopic = (s: State) => s.route.view === 'topic' ? s.route.topicId : DEMO_TOPIC
+export const paperFor = (s: State, id: string) => (s.mainline?.papers ?? PAPERS)[id]
+export const evidenceFor = (s: State, id: string) => (s.mainline?.evidence ?? EVIDENCE)[id]
+export const allEvidence = (s: State) => Object.values(s.mainline?.evidence ?? EVIDENCE)
 const maxOrder = (s: State) => Math.max(0, ...s.sessions.map((x) => x.order))
 export const sessionsOf = (s: State, topicId: string) =>
   s.sessions.filter((x) => x.topicId === topicId).sort((a, b) => b.order - a.order)
@@ -784,18 +793,18 @@ function useActions(dispatch: React.Dispatch<Action>, getState: () => State) {
 }
 
 type Store = { state: State; act: ReturnType<typeof useActions> }
-const Ctx = createContext<Store | null>(null)
+export const StoreContext = createContext<Store | null>(null)
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState)
   const ref = useRef(state)
   ref.current = state
   const act = useActions(dispatch, () => ref.current)
-  return <Ctx.Provider value={{ state, act }}>{children}</Ctx.Provider>
+  return <StoreContext.Provider value={{ state, act }}>{children}</StoreContext.Provider>
 }
 
 export function useStore(): Store {
-  const s = useContext(Ctx)
+  const s = useContext(StoreContext)
   if (!s) throw new Error('useStore outside StoreProvider')
   return s
 }

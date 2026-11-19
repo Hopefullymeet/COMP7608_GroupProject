@@ -26,11 +26,12 @@ export function Home() {
     return () => observer.disconnect()
   }, [text, expanded])
   const fileRef = useRef<HTMLInputElement>(null)
-  const canDemo = state.topics.some((t) => t.id === DEMO_TOPIC)
+  const canDemo = !state.mainline ? state.topics.some((t) => t.id === DEMO_TOPIC) : state.mainline.demo
 
   const canSubmit = !!text.trim() || state.dropped.length > 0
   const submit = () => { if (canSubmit) act.startFromHome(text) }
   const addFiles = (files: FileList | null) => {
+    if (state.mainline) return
     const names = Array.from(files ?? []).map((f) => f.name)
     if (names.length) act.drop(names)
   }
@@ -52,7 +53,7 @@ export function Home() {
               style={{ height: inputHeight }}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() } }}
-              placeholder="Ask a research question, or drop PDFs here…"
+              placeholder={state.mainline ? 'Ask a research question…' : 'Ask a research question, or drop PDFs here…'}
               rows={1}
               aria-label="Research question"
             />
@@ -64,7 +65,7 @@ export function Home() {
               <small>Files are listed but not read in this prototype.</small>
             </div>
           )}
-          <div className="home-actions">
+          {!state.mainline && <div className="home-actions">
             <div className="home-actions-inner">
               <div className="composer-bar">
                 <button className="ghost-btn" disabled={!expanded} onClick={() => fileRef.current?.click()}>
@@ -72,16 +73,16 @@ export function Home() {
                 </button>
               </div>
             </div>
-          </div>
+          </div>}
           <input ref={fileRef} type="file" accept=".pdf,.bib" multiple hidden onChange={(e) => addFiles(e.target.files)} />
           <button className="send" disabled={!canSubmit} onClick={submit} aria-label="Start research"><Icon name="arrowUp" size={17} /></button>
         </div>
 
-        <button className="suggestion" disabled={!canDemo} title={canDemo ? undefined : "Refresh to restore the demo topic"} onClick={() => act.startDemo()}>
+        {(!state.mainline || state.mainline.demo) && <button className="suggestion" disabled={!canDemo} title={canDemo ? undefined : "Refresh to restore the demo topic"} onClick={() => act.startDemo()}>
           <Icon name="compass" size={15} />
-          <span><small>Try the demo</small>{DEFAULT_QUESTION}</span>
+          <span><small>Try the demo</small>{state.mainline ? 'Which scientific QA datasets use paper abstracts?' : DEFAULT_QUESTION}</span>
           <Icon name="arrowRight" size={14} />
-        </button>
+        </button>}
       </div>
     </div>
   )

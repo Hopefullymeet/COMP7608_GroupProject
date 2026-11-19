@@ -65,7 +65,7 @@ export function Sidebar() {
         <button className="side-item" onClick={() => { setFilter(''); act.newTopic() }}>
           <Icon name="plus" size={15} /> <span className="grow">New topic</span>
         </button>
-        {PAGES.map((l) => (
+        {!state.mainline && PAGES.map((l) => (
           <button key={l.page} className={`side-item ${route.view === l.page ? 'active' : ''}`} aria-current={route.view === l.page ? 'page' : undefined}
             onClick={() => act.navigate({ view: l.page })}>
             <Icon name={l.icon} size={15} /> <span className="grow">{l.label}</span>
@@ -91,10 +91,10 @@ export function Sidebar() {
                   title={`New session in ${t.title}`} aria-label={`New session in ${t.title}`}>
                   <Icon name="plus" size={14} />
                 </button>
-                <button className="side-delete" onClick={() => act.deleteTopic(t.id)}
+                {!state.mainline && <button className="side-delete" onClick={() => act.deleteTopic(t.id)}
                   title={`Delete topic: ${t.title}`} aria-label={`Delete topic: ${t.title}`}>
                   <Icon name="trash" size={14} />
-                </button>
+                </button>}
               </div>
               {open && (
                 <div className="session-list">
@@ -104,10 +104,10 @@ export function Sidebar() {
                         <span className="grow">{s.title}</span>
                         <small>{s.updated}</small>
                       </button>
-                      <button className="side-delete" onClick={() => act.deleteSession(s.id)}
+                      {!state.mainline && <button className="side-delete" onClick={() => act.deleteSession(s.id)}
                         title={`Delete session: ${s.title}`} aria-label={`Delete session: ${s.title}`}>
                         <Icon name="trash" size={14} />
-                      </button>
+                      </button>}
                     </div>
                   ))}
                   {all.length === 0 && <div className="side-empty">No sessions yet</div>}
@@ -135,18 +135,18 @@ export function Sidebar() {
                 <span>{s.title}</span>
                 <small>{state.topics.find((t) => t.id === s.topicId)?.title} · {s.updated}</small>
               </button>
-              <button className="side-delete" onClick={() => act.deleteSession(s.id)}
+              {!state.mainline && <button className="side-delete" onClick={() => act.deleteSession(s.id)}
                 title={`Delete session: ${s.title}`} aria-label={`Delete session: ${s.title}`}>
                 <Icon name="trash" size={14} />
-              </button>
+              </button>}
             </div>
           ))}
         </div>
       )}
 
       <div className="side-foot">
-        <span className="proto-badge">Prototype · mock data</span>
-        <small>Local workspace · nothing leaves this page</small>
+        {(!state.mainline || state.mainline.demo) && <span className="proto-badge">{state.mainline ? "Contract demo · mock data" : "Prototype · mock data"}</span>}
+        {(!state.mainline || state.mainline.demo) && <small>Local workspace · nothing leaves this page</small>}
       </div>
     </aside>
   )

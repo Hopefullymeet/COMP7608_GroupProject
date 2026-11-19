@@ -109,6 +109,7 @@ export interface AgentRun {
 export interface AnswerSegment {
   text: string
   evidenceId?: string
+  evidenceIds?: string[]
   tone?: 'scope'
 }
 
