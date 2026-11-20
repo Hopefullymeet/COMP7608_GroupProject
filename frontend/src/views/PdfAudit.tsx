@@ -31,6 +31,17 @@ export function PdfAudit({ topic }: { topic: string }) {
   const bibliography = version?.references ?? []
   const exportIds = report?.findings.filter((finding) => finding.decision === 'accept' && !finding.needs_review)
     .map((finding) => finding.finding_id) ?? []
+  const affected = version?.sentences.filter((sentence) => version.stale_sentence_ids?.includes(sentence.id)) ?? []
+  const recheckIds: string[] = []
+  let citationCount = 0
+  for (const sentence of affected) {
+    const count = sentence.cites.length + (sentence.unresolved?.length ?? 0)
+    if (recheckIds.length >= 12 || citationCount + count > 24) continue
+    const candidate = [...recheckIds, sentence.id]
+    if (assignedSources(candidate).length > 12) continue
+    recheckIds.push(sentence.id)
+    citationCount += count
+  }
 
   function reset() { selectVersion(''); selectReport(''); select([]); setPage(0); setExported([]) }
 
@@ -68,13 +79,17 @@ export function PdfAudit({ topic }: { topic: string }) {
     } catch (error) { workspace.report(error) }
   }
 
-  function run() {
-    if (!version || !selected.length) return
-    const keys = new Set(version.sentences.filter((sentence) => selected.includes(sentence.id)).flatMap((sentence) => sentence.cites))
-    const source_versions = [...new Set(bibliography.flatMap((ref) => ref.target_version_id && keys.has(ref.key) ? [ref.target_version_id] : []))]
+  function assignedSources(ids: string[]) {
+    const keys = new Set(version?.sentences.filter((sentence) => ids.includes(sentence.id)).flatMap((sentence) => sentence.cites))
+    return [...new Set(bibliography.flatMap((ref) => ref.target_version_id && keys.has(ref.key) ? [ref.target_version_id] : []))]
+  }
+
+  function run(ids: string[]) {
+    if (!version || !ids.length) return
     selectReport('')
+    setExported([])
     void workspace.prepare({ ...scope, kind: 'citation_audit', input: {
-      draft_id: target.draft_id, version_id: target.version_id, sentence_ids: selected, source_versions,
+      draft_id: target.draft_id, version_id: target.version_id, sentence_ids: ids, source_versions: assignedSources(ids),
     } })
   }
 
@@ -116,6 +131,11 @@ export function PdfAudit({ topic }: { topic: string }) {
         </details>
         {!!version.sentences.length && <div className="synthesis-item">
           <h3>{tr('Select sentences to check')}</h3>
+          {recheckIds.length > 0 && <div className="lib-tools">
+            <button className="primary" disabled={workspace.busy}
+              onClick={() => run(recheckIds)}>{tr('Recheck affected sentences ({0})', recheckIds.length)}</button>
+            {affected.length > recheckIds.length && <small>{tr('{0} more sentences need review', affected.length - recheckIds.length)}</small>}
+          </div>}
           {version.sentences.map((sentence) => <div className="synthesis-claim" key={sentence.id}>
             <label><input type="checkbox" checked={selected.includes(sentence.id)} onChange={() => select((old) =>
               old.includes(sentence.id) ? old.filter((id) => id !== sentence.id) : old.length < 12 ? [...old, sentence.id] : old)} /> {sentence.text}</label>
@@ -124,7 +144,7 @@ export function PdfAudit({ topic }: { topic: string }) {
             </button>}
             {version.stale_sentence_ids?.includes(sentence.id) && <p className="fine">{tr('Evidence needs review')}</p>}
           </div>)}
-          <button className="primary" disabled={workspace.busy || !selected.length} onClick={run}>{tr('Check citations')}</button>
+          <button className="primary" disabled={workspace.busy || !selected.length} onClick={() => run(selected)}>{tr('Check citations')}</button>
         </div>}
       </>}
       {report && version && <section className="synthesis-item">

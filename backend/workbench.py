@@ -200,14 +200,16 @@ class Workbench:
         for item in self.wiki(topic)["items"]:
             entry = item["entry"]
             title = entry.get("title") or entry["subject"]
-            if not set(item["source_versions"]).issubset(versions):
+            if item["needs_review"]:
                 # Reopen the lead after a replacement only when every affected paper
                 # remains in scope. The old claims and quotations stay out of the prompt.
                 old_papers = {host.get("source", v)["paper_id"] for v in item["source_versions"]}
-                if not item["needs_review"] or not old_papers.issubset({s["paper_id"] for s in sources}):
+                if not old_papers.issubset({s["paper_id"] for s in sources}):
                     continue
                 leads.append({"id": item["id"], "kind": item["kind"], "search_text": title,
                               "needs_review": True, "record_id": item["record_id"], "passage_ids": []})
+                continue
+            if not set(item["source_versions"]).issubset(versions):
                 continue
             text = " ".join([title, *(claim["text"] for claim in entry.get("claims", [])),
                              entry.get("open_question", ""), *(claim["gap"] for claim in entry.get("claims", []))])

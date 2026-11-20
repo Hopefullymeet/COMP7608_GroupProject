@@ -53,7 +53,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
   const wiki = useRead('synthesis.wiki', scope)
   const [referenceVersion, referencesFor] = useState('')
   const [direction, setDirection] = useState<'outgoing' | 'incoming'>('outgoing')
-  const [referencePage, setReferencePage] = useState<{ version: string; page: number; quote: string }>()
+  const [referencePage, setReferencePage] = useState<{ version: string; page: number; quote?: string }>()
   const [exported, setExported] = useState<{ name: string; text: string }[]>([])
   const refs = useRead('literature.refs', { ...scope, source_version_id: referenceVersion, direction }, !!referenceVersion)
   const [question, setQuestion] = useState('')
@@ -77,6 +77,8 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
     return selected ? [selected] : []
   })
   const names = Object.fromEntries(papers.flatMap((p) => p.source_versions.map((v) => [v.source_version_id, p.title])))
+  const fullTextVersions = new Set(papers.flatMap((p) => p.source_versions
+    .filter((version) => version.available_scope === 'full_text').map((version) => version.source_version_id)))
   const outline = results?.items.find((item) => item.record_id === resultId) ?? results?.items[0]
   const page = referencePage?.page ?? reader?.source.passages[0]?.page ?? 0
   const pdf = useRead('source.page', { ...scope, source_version_id: referencePage?.version ?? reader?.source.source_version_id ?? '', page }, page > 0)
@@ -285,7 +287,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
         {view === 'wiki' && (wiki?.items.length ? wiki.items.map((item) => <article className="synthesis-item" key={item.id}>
           <h4>{entryTitle(item.entry)}</h4>
           {item.needs_review && <>
-            <p className="synthesis-open">New paper version · review the evidence</p>
+            <p className="synthesis-open">{tr('Evidence needs review')}</p>
             <button className="link-btn" onClick={() => {
               setQuestion('Recheck this finding against the selected paper versions: ' + entryTitle(item.entry))
               setView('outline')
@@ -345,7 +347,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
         {readerPending && <p role="status">Opening source…</p>}
         {referencePage && <section className="synthesis-evidence">
           <h3>{names[referencePage.version]}</h3><p>{tr('PDF page {0}', page)}</p>
-          <blockquote className="evidence-excerpt">{referencePage.quote}</blockquote>
+          {referencePage.quote && <blockquote className="evidence-excerpt">{referencePage.quote}</blockquote>}
           {pdf && <img src={'data:image/png;base64,' + pdf.png} alt={tr('Original PDF page {0}', page)} />}
         </section>}
         {reader && <section ref={shownEvidence} className="synthesis-evidence">
@@ -371,12 +373,26 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
         {refs?.items.map((ref) => <article key={ref.citing_version_id + ':' + ref.key} className="synthesis-item">
           <strong>{direction === 'incoming' ? ref.citing_title : ref.target_title ?? ref.title}</strong>
           <p className="fine">{ref.text}</p>
+          {ref.target_version_id && fullTextVersions.has(ref.target_version_id) && <button className="link-btn"
+            onClick={() => {
+              if (!ref.target_version_id) return
+              setReader(undefined)
+              setReferencePage({ version: ref.target_version_id, page: 1 })
+              referencesFor('')
+            }}>{tr('Open cited PDF')}</button>}
           {ref.mentions.length ? ref.mentions.map((m, i) =>
             <button className="link-btn" key={i} onClick={() => {
               setReader(undefined)
               setReferencePage({ version: ref.citing_version_id, page: m.page, quote: m.quote })
               referencesFor('')
             }}>{tr('PDF page {0}', m.page)}</button>) : <p>{tr('Reference entry only')}</p>}
+          {ref.mentions.length > 0 && <details>
+            <summary>{tr('Citation context')}</summary>
+            {ref.mentions.map((mention, i) => <blockquote className="evidence-excerpt" key={i}>
+              <small>{tr('PDF page {0}', mention.page)}</small>
+              <p>{mention.quote}</p>
+            </blockquote>)}
+          </details>}
         </article>)}
       </Dialog>}
       {exported.length > 0 && <Dialog title={tr('Export evidence')} onClose={() => setExported([])}>

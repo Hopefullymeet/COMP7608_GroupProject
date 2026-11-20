@@ -414,8 +414,9 @@ class CitationWorkspace:
                 for report in relevant:
                     for finding in report["findings"]:
                         key = "audit-" + finding["cache_key"]
-                        if key in audit_items and self.finding_stale(finding, targets):
-                            changes[key] = audit_items[key]["source_versions"]
+                        item = audit_items.get(key)
+                        if item and item["record_id"] == report["report_id"] and self.finding_stale(finding, targets):
+                            changes[key] = item["source_versions"]
         return changes
 
     def public(self, doc):
@@ -430,7 +431,17 @@ class CitationWorkspace:
             targets = {r["key"]: r["target_version_id"] for r in refs}
             reports = [{**r, "findings": [{**f, "needs_review": self.finding_stale(f, targets)}
                                          for f in r["findings"]]} for r in v["reports"]]
-            stale = {f["sentence_id"] for r in reports for f in r["findings"] if f["needs_review"]}
+            latest = {}
+            attempted = {}
+            for report in reports:
+                for finding in report["findings"]:
+                    key = (finding["sentence_id"], finding["ref_key"])
+                    attempted.setdefault(key, finding)
+                    if any(claim["status"] != "blocked" for claim in finding["claims"]):
+                        latest.setdefault(key, finding)
+            # An interrupted attempt should not clear an outstanding recheck.
+            stale = {finding["sentence_id"] for finding in (attempted | latest).values()
+                     if finding["needs_review"]}
             versions.append({**v, "references": refs, "reports": reports, "stale_sentence_ids": sorted(stale)})
         return {**doc, "versions": versions}
 

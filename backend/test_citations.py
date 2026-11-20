@@ -194,6 +194,40 @@ class TestCitationWorkflow(unittest.TestCase):
             call(self.worker, "export.create", **target, format="evidence", item_ids=[findings[0]["finding_id"]])
         wiki_after = call(self.worker, "synthesis.wiki", topic_id=self.topic)["items"]
         self.assertTrue(wiki_after[0]["needs_review"])
+        scope_input = {"topic_id": self.topic, "input": {"source_versions": [
+            first_version, self.wrong["source_version_id"]]}}
+        _, leads = self.worker.research.scope(scope_input)
+        stale_lead = next(item for item in leads if item["id"] == wiki_after[0]["id"])
+        self.assertTrue(stale_lead["needs_review"])
+        self.assertEqual(stale_lead["passage_ids"], [])
+
+        one_sentence = {**current, "versions": [{**version, "sentences": version["sentences"][:1]}]}
+        _, failed_check = self.start(one_sentence)
+        self.assertEqual(failed_check["status"], "partial")
+        self.assertIn(findings[0]["sentence_id"], call(self.worker, "draft.list", topic_id=self.topic)
+                      ["items"][0]["versions"][0]["stale_sentence_ids"])
+
+        new_context = call(self.worker, "source.read", topic_id=self.topic,
+                           source_version_id=self.wrong["source_version_id"])["passages"][0]
+        new_version = self.wrong["source_version_id"]
+
+        class RecheckModel:
+            key = "fixture"
+
+            def audit(inner, checks, sources, cancelled, progress=None):
+                self.assertEqual([c["source_version_id"] for c in checks], [new_version])
+                return {"checks": [{"id": checks[0]["id"], "status": "evidence_not_established", "limit": "Different study",
+                                    "evidence": [{"id": new_context["passage_id"],
+                                                  "quote": "This paper measures runtime and retrieval throughput."}]}]}, {
+                    new_context["passage_id"]: {"source_version_id": new_version}}, [], {}, None
+
+        self.worker.dsh = RecheckModel()
+        _, rechecked = self.start(one_sentence)
+        self.assertEqual(rechecked["status"], "completed")
+        reports = call(self.worker, "draft.list", topic_id=self.topic)["items"][0]["versions"][0]
+        self.assertNotIn(findings[0]["sentence_id"], reports["stale_sentence_ids"])
+        self.assertIn(findings[1]["sentence_id"], reports["stale_sentence_ids"])
+        self.assertTrue(reports["reports"][-1]["findings"][0]["needs_review"])
         call(self.worker, "draft.resolve_reference", **ref_target, ref_key=ref_key, paper_id=None)
         self.assertFalse(call(self.worker, "synthesis.wiki", topic_id=self.topic)["items"][0]["needs_review"])
         self.import_pdf("Dataset v2", "A benchmark for evidence attribution", "Jane Doe",
