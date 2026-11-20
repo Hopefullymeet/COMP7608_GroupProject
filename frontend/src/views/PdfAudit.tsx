@@ -29,6 +29,8 @@ export function PdfAudit({ topic }: { topic: string }) {
   const target = { ...scope, draft_id: doc?.draft_id ?? '', version_id: version?.version_id ?? '' }
   const image = useRead('draft.page', { ...target, page }, Boolean(page && version))
   const bibliography = version?.references ?? []
+  const exportIds = report?.findings.filter((finding) => finding.decision === 'accept' && !finding.needs_review)
+    .map((finding) => finding.finding_id) ?? []
 
   function reset() { selectVersion(''); selectReport(''); select([]); setPage(0); setExported([]) }
 
@@ -52,14 +54,17 @@ export function PdfAudit({ topic }: { topic: string }) {
     catch (error) { workspace.report(error) }
   }
 
-  async function exportEvidence() {
-    if (!report) return
+  async function exportEvidence(download?: string) {
+    if (!report || !exportIds.length) return
     try {
       const result = await workspace.write('export.create', {
         ...target, format: 'evidence', include_originals: false, report_id: report.report_id,
-        item_ids: report.findings.filter((finding) => finding.decision === 'accept').map((finding) => finding.finding_id),
+        item_ids: exportIds,
       })
-      setExported(result.files ?? [])
+      if (download) {
+        const file = result.files?.find((item) => item.name === download)
+        if (file) downloadText(file)
+      } else setExported(result.files ?? [])
     } catch (error) { workspace.report(error) }
   }
 
@@ -99,6 +104,7 @@ export function PdfAudit({ topic }: { topic: string }) {
             <label>{tr('Source paper')}{' '}
               <select value={papers.find((paper) => paper.source_versions.some((v) => v.source_version_id === ref.target_version_id))?.paper_id ?? ''}
                 disabled={workspace.busy} onChange={(event) => {
+                  setExported([])
                   void workspace.write('draft.resolve_reference', { ...target, ref_key: ref.key,
                     paper_id: event.currentTarget.value || null }).catch(workspace.report)
                 }}>
@@ -130,27 +136,30 @@ export function PdfAudit({ topic }: { topic: string }) {
         </select>}
         {report.findings.map((finding) => <article className="synthesis-item" key={finding.finding_id}>
           <p>{version.sentences.find((item) => item.id === finding.sentence_id)?.text}</p>
+          {finding.needs_review && <p className="fine">{tr('Evidence needs review')}</p>}
           {finding.claims.map((claim, i) => <div key={i}>
             <strong>{tr(assessment[claim.status])}</strong>
             <p>{claim.limit}</p>
             {claim.anchor_ids.map((id) => <EvidenceLink id={id} key={id} />)}
           </div>)}
           <div className="lib-tools">
-            {finding.decision === 'accept' && finding.claims.some((claim) => claim.anchor_ids.length) &&
+            {!finding.needs_review && finding.decision === 'accept' && finding.claims.some((claim) => claim.anchor_ids.length) &&
               <button className="ghost-btn" disabled={workspace.busy || saved.includes(finding.finding_id)}
                 onClick={() => void workspace.write('audit.save_to_wiki', { ...target, report_id: report.report_id,
                   finding_id: finding.finding_id }).then(() => setSaved((old) => [...old, finding.finding_id])).catch(workspace.report)}>
                 {tr(saved.includes(finding.finding_id) ? 'Saved to Topic Wiki' : 'Save finding to Topic Wiki')}
               </button>}
             {(['accept', 'reject', 'defer'] as const).map((decision) => <button key={decision} className="ghost-btn"
-              disabled={workspace.busy} aria-pressed={finding.decision === decision} onClick={() => void review(finding.finding_id, decision)}>
+              disabled={workspace.busy || (finding.needs_review && decision === 'accept')}
+              aria-pressed={finding.decision === decision} onClick={() => void review(finding.finding_id, decision)}>
               {tr({ accept: 'Accept', reject: 'Reject', defer: 'Defer' }[decision])}
             </button>)}
           </div>
         </article>)}
-        <button className="ghost-btn" disabled={workspace.busy || !report.findings.some((item) => item.decision === 'accept')}
+        <button className="ghost-btn" disabled={workspace.busy || !exportIds.length}
           onClick={() => void exportEvidence()}>{tr('Export accepted findings')}</button>
-        {exported.map((file) => <button className="link-btn" key={file.name} onClick={() => downloadText(file)}>{file.name}</button>)}
+        {exportIds.length > 0 && exported.map((file) => <button className="link-btn" key={file.name}
+          disabled={workspace.busy} onClick={() => void exportEvidence(file.name)}>{file.name}</button>)}
       </section>}
     </section>
     <aside className="synthesis-reader" aria-label={tr('Manuscript')}>

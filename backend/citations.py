@@ -387,10 +387,40 @@ class CitationWorkspace:
             return ("user_confirmed", matched) if matched else ("unmatched", None)
         return citation_match(ref, sources)
 
+    def reference_versions(self, draft, sources):
+        return {ref["key"]: source["source_version_id"] if source else None
+                for ref in draft["references"] for _, source in [self.match(draft, ref, sources)]}
+
+    @staticmethod
+    def finding_stale(finding, targets):
+        return any(claim.get("source_version_id") != targets.get(finding["ref_key"])
+                   for claim in finding["claims"])
+
+    def wiki_changes(self, topic, items):
+        audit_items = {item["id"]: item for item in items if item["id"].startswith("audit-")}
+        if not audit_items:
+            return {}
+        reports = {item["record_id"] for item in audit_items.values()}
+        sources = self.sources(topic)
+        changes = {}
+        for doc in self.host.rows("pdf_draft"):
+            if doc["topic_id"] != topic:
+                continue
+            for draft in doc["versions"]:
+                relevant = [report for report in draft["reports"] if report["report_id"] in reports]
+                if not relevant:
+                    continue
+                targets = self.reference_versions(draft, sources)
+                for report in relevant:
+                    for finding in report["findings"]:
+                        key = "audit-" + finding["cache_key"]
+                        if key in audit_items and self.finding_stale(finding, targets):
+                            changes[key] = audit_items[key]["source_versions"]
+        return changes
+
     def public(self, doc):
         versions = []
         sources = self.sources(doc["topic_id"])
-        latest = {v["source_version_id"] for v in sources}
         for v in doc["versions"]:
             refs = []
             for ref in v["references"]:
@@ -398,10 +428,10 @@ class CitationWorkspace:
                 refs.append({**ref, "status": state, "target_title": source["title"] if source else None,
                              "target_version_id": source["source_version_id"] if source else None})
             targets = {r["key"]: r["target_version_id"] for r in refs}
-            stale = {f["sentence_id"] for r in v["reports"] for f in r["findings"] for claim in f["claims"]
-                     if claim.get("source_version_id") and (
-                         claim["source_version_id"] not in latest or targets.get(f["ref_key"]) != claim["source_version_id"])}
-            versions.append({**v, "references": refs, "stale_sentence_ids": sorted(stale)})
+            reports = [{**r, "findings": [{**f, "needs_review": self.finding_stale(f, targets)}
+                                         for f in r["findings"]]} for r in v["reports"]]
+            stale = {f["sentence_id"] for r in reports for f in r["findings"] if f["needs_review"]}
+            versions.append({**v, "references": refs, "reports": reports, "stale_sentence_ids": sorted(stale)})
         return {**doc, "versions": versions}
 
     def page(self, topic, params):
@@ -555,6 +585,8 @@ class CitationWorkspace:
         decision = params.get("decision")
         if finding is None or decision not in ("accept", "reject", "defer"):
             raise LiteratureError("INVALID_PARAMS", "Select a finding and a review decision.")
+        if decision == "accept":
+            self.require_current(topic, params, [finding])
         finding["decision"] = decision
         claim = finding["claims"][0]
         if decision == "accept" and claim["anchor_ids"] and claim["status"] != "blocked":
@@ -568,17 +600,13 @@ class CitationWorkspace:
         return {"finding_id": finding["finding_id"]}
 
     def save_to_wiki(self, topic, params):
-        doc, report = self.report(topic, params)
+        _, report = self.report(topic, params)
         finding = next((f for f in report["findings"] if f["finding_id"] == params.get("finding_id")), None)
         if not finding or finding.get("decision") != "accept" or not finding["claims"][0]["anchor_ids"]:
             raise LiteratureError("INVALID_PARAMS", "Accept an evidence-backed finding first.")
         claim = finding["claims"][0]
         version = claim["source_version_id"]
-        draft = next(v for v in doc["versions"] if v["version_id"] == params["version_id"])
-        ref = next((r for r in draft["references"] if r["key"] == finding["ref_key"]), None)
-        _, source = self.match(draft, ref, self.sources(topic)) if ref else (None, None)
-        if not source or version != source["source_version_id"]:
-            raise LiteratureError("STALE_REVISION", "Check the current cited paper before adding this to the Wiki.", "refresh_data", -32020)
+        self.require_current(topic, params, [finding])
         wiki = self.host.research.wiki(topic)
         key = "audit-" + finding["cache_key"]
         current = {item["id"]: item for item in wiki["items"]}
@@ -597,6 +625,12 @@ class CitationWorkspace:
                                              "history": wiki.get("history", [])})
         return {"item_id": key}
 
+    def require_current(self, topic, params, findings):
+        _, draft = self.snapshot(topic, params)
+        targets = self.reference_versions(draft, self.sources(topic))
+        if any(self.finding_stale(finding, targets) for finding in findings):
+            raise LiteratureError("STALE_REVISION", "Check the current cited paper before using this finding.", "refresh_data", -32020)
+
     def export(self, topic, params):
         if params.get("format") not in ("audit_report", "evidence", "bibliography") or params.get("include_originals"):
             raise LiteratureError("INVALID_PARAMS", "Export selected evidence and bibliography without original files.")
@@ -610,7 +644,9 @@ class CitationWorkspace:
             selected = {p["id"]: p["claims"] for p in record["points"]}
         else:
             _, report = self.report(topic, params)
-            selected = {f["finding_id"]: f["claims"] for f in report["findings"] if f.get("decision") == "accept"}
+            findings = {f["finding_id"]: f for f in report["findings"] if f.get("decision") == "accept"}
+            self.require_current(topic, params, [findings[key] for key in ids if key in findings])
+            selected = {key: f["claims"] for key, f in findings.items()}
         if not set(ids).issubset(selected):
             raise LiteratureError("INVALID_PARAMS", "Select available outline points or accepted findings.")
         markdown, bibliography = ["# PaperTrace evidence", ""], {}

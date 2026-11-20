@@ -12,6 +12,7 @@ export type Finding = {
     limit: string
   }[]
   decision?: Decision
+  needs_review?: boolean
   proposal?: { text: string; cites: string[]; bibliography: string[]; anchor_ids: string[]; scope: string }
 }
 export type Report = {

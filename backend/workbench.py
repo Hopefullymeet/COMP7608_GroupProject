@@ -96,11 +96,13 @@ class Workbench:
         row = host.db.execute("SELECT data FROM records WHERE kind = 'research_wiki' AND id = ?", (topic,)).fetchone()
         wiki = host.get("research_wiki", topic) if row else {"revision": "", "items": []}
         latest = {p["paper_id"]: p["source_versions"][0]["source_version_id"] for p in host.rows("paper") if topic in p["topic_ids"]}
-        dependencies = {}
+        dependencies = host.citations.wiki_changes(topic, wiki["items"])
         for item_id, version in host.db.execute("SELECT item_id, version_id FROM wiki_evidence WHERE topic_id = ?", (topic,)):
             source = host.get("source", version)
             if latest.get(source["paper_id"]) != version:
-                dependencies.setdefault(item_id, []).append(version)
+                changed = dependencies.setdefault(item_id, [])
+                if version not in changed:
+                    changed.append(version)
         return {**wiki, "items": [{**item, "needs_review": item["id"] in dependencies,
                                    "changed_versions": dependencies.get(item["id"], [])}
                                   for item in wiki["items"]]}

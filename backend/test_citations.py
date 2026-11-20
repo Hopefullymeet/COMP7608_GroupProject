@@ -188,8 +188,17 @@ class TestCitationWorkflow(unittest.TestCase):
         call(self.worker, "draft.resolve_reference", **ref_target, ref_key=ref_key, paper_id=self.wrong["paper_id"])
         with self.assertRaisesRegex(Exception, "Check the current cited paper"):
             call(self.worker, "audit.save_to_wiki", **target, finding_id=findings[0]["finding_id"])
+        with self.assertRaisesRegex(Exception, "Check the current cited paper"):
+            call(self.worker, "audit.review", **target, finding_id=findings[0]["finding_id"], decision="accept")
+        with self.assertRaisesRegex(Exception, "Check the current cited paper"):
+            call(self.worker, "export.create", **target, format="evidence", item_ids=[findings[0]["finding_id"]])
+        wiki_after = call(self.worker, "synthesis.wiki", topic_id=self.topic)["items"]
+        self.assertTrue(wiki_after[0]["needs_review"])
         call(self.worker, "draft.resolve_reference", **ref_target, ref_key=ref_key, paper_id=None)
+        self.assertFalse(call(self.worker, "synthesis.wiki", topic_id=self.topic)["items"][0]["needs_review"])
         self.import_pdf("Dataset v2", "A benchmark for evidence attribution", "Jane Doe",
                         "An updated evaluation now examines smaller groups.", paper_id=self.paper["paper_id"])
         stale = call(self.worker, "draft.list", topic_id=self.topic)["items"][0]["versions"][0]["stale_sentence_ids"]
         self.assertEqual(set(stale), {s["id"] for s in version["sentences"][:2]})
+        with self.assertRaisesRegex(Exception, "Check the current cited paper"):
+            call(self.worker, "export.create", **target, format="bibliography", item_ids=[findings[0]["finding_id"]])

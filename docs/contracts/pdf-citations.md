@@ -8,7 +8,7 @@
 | 导入与定位稿件 | `draft.import` 接收 `operation_id`、`topic_id`、`{name,content}`（Base64 PDF）或本机 PDF 路径，可带 `draft_id` 表示新增版本。返回稿件的只读版本及识别出的引用句。重复导入复用原版本。用 `draft.list` 读取稿件和报告，用 `draft.page` 按稿件版本及页码渲染原页。 |
 | 确认书目映射 | `draft.resolve_reference` 接收稿件版本、`ref_key`、所选主题内 `paper_id`。空值恢复自动匹配。歧义、当前主题缺论文和缺全文分别保留待查状态。 |
 | 回查与取消 | `task.prepare → task.start` 的 `citation_audit` 接收 `draft_id`、`version_id`、选定句子和来源版本。检查逐句逐引用进行。远程确认单列明所选稿件句和原文摘录。任务终态含 `record_id`，报告从稿件读回。无法查证和预算耗尽可以保留部分结果。 |
-| 审阅与积累 | `audit.review` 接受、拒绝或留待处理。已接受且附原文的判断按句子、引用范围和来源版本复用。使用 `audit.save_to_wiki` 显式加入主题 Wiki。更换来源版本或手工修改书目映射后，相关历史判断显示待复核。 |
+| 审阅与积累 | `audit.review` 接受、拒绝或留待处理。已接受且附原文的判断按句子、引用范围和来源版本复用。使用 `audit.save_to_wiki` 显式加入主题 Wiki。更换来源版本或手工修改书目映射后，相关判断及已保存的 Wiki 条目标记为待复核。过期判断的再次接受、保存和证据导出返回 `STALE_REVISION`。 |
 | 导出 | `export.create` 支持 `format: evidence`、`audit_report` 和 `bibliography`。输入稿件版本与报告 ID，或提纲 `record_id`，再传选定 `item_ids`。返回供用户下载的 Markdown 和 BibTeX 内容，引用键一致。生成内容和实际下载是两个操作。 |
 
 ## 跑通示例
