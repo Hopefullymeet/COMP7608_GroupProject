@@ -1,4 +1,4 @@
-import { PAPERS } from '../../../prototype/src/data/fixtures'
+import { PAPERS } from '../data/fixtures'
 import type { Evidence, LibraryItem, Session, Topic } from './contract'
 import {
   asEntry,

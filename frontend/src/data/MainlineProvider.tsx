@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Dialog } from '../../../prototype/src/components/PageHead'
-import { baseState, StoreContext, useStore } from '../../../prototype/src/data/store'
-import type { Route, State, Tab } from '../../../prototype/src/data/store'
+import { Dialog } from '../components/PageHead'
+import { baseState, StoreContext, useStore } from './store'
+import type { Route, State, Tab } from './store'
 import type {
   AgentRun,
   ChatMessage,
@@ -10,7 +10,7 @@ import type {
   Paper,
   SearchAngle,
   Session,
-} from '../../../prototype/src/data/types'
+} from './types'
 import { errorText } from '../api/contract'
 import type {
   Client,
@@ -26,7 +26,7 @@ import { asLocated, type DocumentView, type Origin, type Picked } from '../api/l
 import { ScopeDetails } from '../components/ScopeDetails'
 import { isTauri } from '../api/desktop'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
-import { useRead, useWorkspace } from './Workspace'
+import { useRead, useWorkspace } from './WorkspaceProvider'
 import { operation, retryWrite, useTask } from './useTask'
 
 type Request = { message_id: string; anchor_id: string }

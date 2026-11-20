@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Dialog } from '../../../prototype/src/components/PageHead'
-import { Disclosure } from '../../../prototype/src/components/Disclosure'
-import { Icon } from '../../../prototype/src/components/Icon'
+import { Dialog } from '../components/PageHead'
+import { Disclosure } from '../components/Disclosure'
+import { Icon } from '../components/Icon'
 import type { Located, Note } from '../api/library'
-import { useRead, useWorkspace } from '../data/Workspace'
+import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 
 export function EvidenceLink({ id }: { id: string }) {
   const { api, report } = useWorkspace()

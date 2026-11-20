@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Dialog } from '../../../prototype/src/components/PageHead'
+import { Dialog } from '../components/PageHead'
 import { ScopeDetails } from '../components/ScopeDetails'
 import { errorText, type Client, type Method, type Methods, type WorkspaceTask } from '../api/contract'
 import { operation, retryWrite, useTask } from './useTask'

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Dialog, PageHead } from '../../../prototype/src/components/PageHead'
-import { Icon } from '../../../prototype/src/components/Icon'
-import { useRead, useWorkspace } from '../data/Workspace'
+import { Dialog, PageHead } from '../components/PageHead'
+import { Icon } from '../components/Icon'
+import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import type { Config, Offer, ServiceMethods } from '../api/services'
 
 function SettingsForm({ config }: { config: Config }) {

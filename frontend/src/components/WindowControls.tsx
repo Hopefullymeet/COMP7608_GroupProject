@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { Icon } from '../../../prototype/src/components/Icon'
+import { Icon } from './Icon'
 
 export function WindowControls() {
   const [maximized, setMaximized] = useState(false)

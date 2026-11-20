@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { PageHead, Dialog } from '../../../prototype/src/components/PageHead'
-import { Icon } from '../../../prototype/src/components/Icon'
-import { useStore } from '../../../prototype/src/data/store'
+import { PageHead, Dialog } from '../components/PageHead'
+import { Icon } from '../components/Icon'
+import { useStore } from '../data/store'
 import type { Impact, Picked, Review } from '../api/library'
-import { useRead, useWorkspace } from '../data/Workspace'
+import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { Notes } from './Notes'
 
 export function LibraryPage() {

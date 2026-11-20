@@ -1,0 +1,95 @@
+import type { ReactNode } from 'react'
+import { useStore, anyRunning, papersOfTopic, type Tab } from '../data/store'
+import { DEMO_TOPIC, PAPERS } from '../data/fixtures'
+import { Icon, Spinner } from '../components/Icon'
+import { Discover } from './Discover'
+import { Read } from './Read'
+import { Compare } from './Compare'
+
+const TABS: { id: Tab; label: string; icon: string }[] = [
+  { id: 'discover', label: 'Discover', icon: 'compass' },
+  { id: 'read', label: 'Read & ask', icon: 'book' },
+  { id: 'compare', label: 'Compare', icon: 'columns' },
+]
+
+export function TopicView({ topicId, tab, windowControls, comparison }: { topicId: string; tab: Tab; windowControls?: ReactNode; comparison?:ReactNode }) {
+  const { state, act } = useStore()
+  const topic = state.topics.find((t) => t.id === topicId)
+  if (!topic) return null
+  const running = anyRunning(state)
+  const session = state.sessions.find((s) => s.id === state.activeSessionId && s.topicId === topicId)
+  const request = state.messages.find((m) => m.sessionId === session?.id && m.role === 'user')
+  const papers = papersOfTopic(state, topicId)
+
+  return (
+    <div className="topic">
+      <header className={windowControls ? 'topic-head topic-head--desktop' : 'topic-head'}
+        data-tauri-drag-region={windowControls ? '' : undefined}>
+        <button className="icon-btn" onClick={() => act.navigate({ view: 'home' })} aria-label="Back to home"><Icon name="arrowLeft" /></button>
+        <div className="topic-title" data-tauri-drag-region={windowControls ? 'deep' : undefined}>
+          <h1 title={windowControls ? topic.title : undefined}>{topic.title}</h1>
+          <small>{topic.goal}</small>
+        </div>
+        {topic.scripted && (
+          <nav className="tabs" role="tablist">
+            {TABS.filter((t) => !state.mainline || !!comparison || t.id !== 'compare').map((t) => (
+              <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'on' : ''}
+                onClick={() => act.openTopic(topicId, t.id)}>
+                <Icon name={t.icon} size={15} /> {t.label}
+              </button>
+            ))}
+          </nav>
+        )}
+        <div className="head-meta">
+          {topic.scripted && (
+            <>
+              <span title="Papers in this topic"><Icon name="file" size={14} /> {papers.length}</span>
+              {!state.mainline && <>
+                <span title="Saved notes"><Icon name="note" size={14} /> {state.noted.length}</span>
+                <span title="Citations picked"><Icon name="quote" size={14} /> {state.cited.length}</span>
+              </>}
+            </>
+          )}
+          <button className={`trace-btn ${state.trace.open ? 'on' : ''}`} onClick={() => act.showTrace(!state.trace.open)}>
+            {running ? <Spinner /> : <Icon name="trace" size={15} />} Agent trace
+          </button>
+        </div>
+        {windowControls}
+      </header>
+
+      <div className="topic-body">
+        {!topic.scripted ? (
+          request || papers.length > 0 ? <section className="topic-request" aria-label={request ? 'Research request' : 'Topic materials'}>
+            {request && <>
+            <p className="eyebrow">{session?.title}</p>
+            <h2>Research request</h2>
+            <p className="request-text">{request.segments[0]?.text}</p>
+            {!!session?.attachments?.length && <div className="dropped">
+              {session.attachments.map((name, i) => <span className="chip" key={i}><Icon name="file" size={13} />{name}</span>)}
+            </div>}
+            <p className="fine">Your research request and attachments are available until refresh.</p>
+            </>}
+            {papers.length > 0 && <>
+              <h2>Papers in this topic</h2>
+              <ul className="topic-links">
+                {papers.map((id) => {
+                  const wikiPage = state.wiki.pages.find((p) => p.paperId === id)
+                  return <li key={id}>
+                    <button className="link-btn" onClick={() => act.navigate({ view: 'library', paperId: id })}>{PAPERS[id].title}</button>
+                    {wikiPage && <button className="link-btn quiet" aria-label={'Open Wiki page for ' + PAPERS[id].title} onClick={() => act.openWikiPage(wikiPage.id)}>Wiki</button>}
+                  </li>
+                })}
+              </ul>
+            </>}
+            {state.topics.some((t) => t.id === DEMO_TOPIC) && <button className="primary" onClick={() => act.enterTopic(DEMO_TOPIC)}>Explore the scripted demo</button>}
+          </section> : <div className="empty-state">
+            <Icon name="lock" size={22} />
+            <h2>This topic is sample data</h2>
+            <p>The prototype only scripts <strong>Evidence in scientific QA</strong>. Other topics and their sessions only show how lists behave.</p>
+            {state.topics.some((t) => t.id === DEMO_TOPIC) && <button className="primary" onClick={() => act.enterTopic(DEMO_TOPIC)}>Open the scripted topic</button>}
+          </div>
+        ) : tab === 'discover' ? <Discover /> : tab === 'read' ? <Read /> : (comparison ?? <Compare />)}
+      </div>
+    </div>
+  )
+}
