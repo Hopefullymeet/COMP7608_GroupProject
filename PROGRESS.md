@@ -14,4 +14,6 @@
 
 ## 下一步
 
+- 前端按[并行开发交接](docs/product-plan/Frontend_Handoff_ZH.md)推进统一导入、原文阅读和提纲导出，联调基线已纳入上游中文界面。
+
 - 配置 DeepSeek 运行三组质量对照并人工复核。继续接入外部论文发现、稿件读写、授权撤销和备份恢复。[技术交接包](docs/deliverables/PaperTrace_Handoff_20261109/)
