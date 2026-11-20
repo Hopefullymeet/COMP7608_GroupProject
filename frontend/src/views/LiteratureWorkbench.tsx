@@ -1,3 +1,5 @@
+import { downloadText, pdfInput } from '../api/pdf'
+import { useLanguage } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
@@ -18,17 +20,6 @@ const relationLabel: Record<string, string> = {
   uses_benchmark: 'Uses a benchmark', extends: 'Extends', compares: 'Comparison', complements: 'Complementary',
   agrees: 'Agreement', conflicts: 'Conflict',
 }
-const pdfLimit = 16 * 1024 * 1024
-
-function fileContent(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result).split(',')[1])
-    reader.onerror = () => reject(new Error('Could not read ' + file.name))
-    reader.readAsDataURL(file)
-  })
-}
-
 function entryTitle(entry: OutlinePoint | PaperRelation) {
   return 'title' in entry ? entry.title : entry.subject
 }
@@ -54,11 +45,17 @@ export function TopicWikiPage() {
 export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
   topicId: string; initialView?: 'outline' | 'wiki'
 }) {
+  const { tr } = useLanguage()
   const scope = { topic_id: topicId }
   const workspace = useWorkspace()
   const library = useRead('library.list', scope)
   const results = useRead('synthesis.list', scope)
   const wiki = useRead('synthesis.wiki', scope)
+  const [referenceVersion, referencesFor] = useState('')
+  const [direction, setDirection] = useState<'outgoing' | 'incoming'>('outgoing')
+  const [referencePage, setReferencePage] = useState<{ version: string; page: number; quote: string }>()
+  const [exported, setExported] = useState<{ name: string; text: string }[]>([])
+  const refs = useRead('literature.refs', { ...scope, source_version_id: referenceVersion, direction }, !!referenceVersion)
   const [question, setQuestion] = useState('')
   const [choices, setChoices] = useState<Record<string, string | undefined>>({})
   const [resultId, setResultId] = useState('')
@@ -81,8 +78,8 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
   })
   const names = Object.fromEntries(papers.flatMap((p) => p.source_versions.map((v) => [v.source_version_id, p.title])))
   const outline = results?.items.find((item) => item.record_id === resultId) ?? results?.items[0]
-  const page = reader?.source.passages[0]?.page ?? 0
-  const pdf = useRead('source.page', { ...scope, source_version_id: reader?.source.source_version_id ?? '', page }, page > 0)
+  const page = referencePage?.page ?? reader?.source.passages[0]?.page ?? 0
+  const pdf = useRead('source.page', { ...scope, source_version_id: referencePage?.version ?? reader?.source.source_version_id ?? '', page }, page > 0)
   const current = useRef({ workspace, topicId })
   current.current = { workspace, topicId }
 
@@ -95,8 +92,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
       for (const file of files) {
         const data = current.current
         try {
-          if (typeof file !== 'string' && file.size > pdfLimit) throw new Error(file.name + ' exceeds 16 MB.')
-          const upload = typeof file === 'string' ? { path: file } : { name: file.name, content: await fileContent(file) }
+          const upload = await pdfInput(file)
           const imported = await data.workspace.write('library.import_pdf', {
             topic_id: data.topicId, paper_id: paperId, ...upload,
           })
@@ -144,6 +140,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
   }
 
   async function open(anchor: string) {
+    setReferencePage(undefined)
     const sequence = ++request.current
     setReaderPending(true)
     try {
@@ -172,6 +169,19 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
       '. Check their tasks, datasets, splits, metrics and settings before comparing results.')
     setView('outline')
     document.getElementById('synthesis-question')?.focus()
+  }
+
+  async function exportPoints() {
+    if (!outline) return
+    const item_ids = checked.filter((id) => outline.points.some((point) => point.id === id))
+    if (!item_ids.length) return
+    try {
+      const response = await workspace.write('export.create', {
+        ...scope, format: 'evidence', include_originals: false, record_id: outline.record_id, item_ids,
+      })
+      setExported(response.files ?? [])
+      setReview(false)
+    } catch (error) { workspace.report(error) }
   }
 
   async function save() {
@@ -322,6 +332,9 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
                 </option>)}
               </select>}
               <button className="link-btn" disabled={imports > 0} onClick={() => chooseFiles(paper.paper_id)}>Add version</button>
+              <button className="link-btn" onClick={() => referencesFor(checkedVersion ?? paper.source_versions[0].source_version_id)}>
+                {tr('Paper references')}
+              </button>
               {paper.source_versions[0].available_scope === 'metadata' && <small>Text unavailable</small>}
             </div>
           })}
@@ -330,6 +343,11 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
         </div>
 
         {readerPending && <p role="status">Opening source…</p>}
+        {referencePage && <section className="synthesis-evidence">
+          <h3>{names[referencePage.version]}</h3><p>{tr('PDF page {0}', page)}</p>
+          <blockquote className="evidence-excerpt">{referencePage.quote}</blockquote>
+          {pdf && <img src={'data:image/png;base64,' + pdf.png} alt={tr('Original PDF page {0}', page)} />}
+        </section>}
         {reader && <section ref={shownEvidence} className="synthesis-evidence">
           <h3>{names[reader.source.source_version_id] ?? 'Source'}</h3>
           {page > 0 && <p className="fine">PDF page {page}</p>}
@@ -342,6 +360,28 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
         </section>}
       </aside>
 
+      {referenceVersion && <Dialog title={tr('Paper references')} onClose={() => referencesFor('')}>
+        <div className="lib-tools">
+          <button className="ghost-btn" aria-pressed={direction === 'outgoing'} onClick={() => setDirection('outgoing')}>{tr('References')}</button>
+          <button className="ghost-btn" aria-pressed={direction === 'incoming'} onClick={() => setDirection('incoming')}>{tr('Cited by')}</button>
+          <button className="ghost-btn" onClick={workspace.refresh}>{tr('Refresh')}</button>
+        </div>
+        {!!refs?.pending_versions.length && <p>{tr('Reference indexing is pending.')}</p>}
+        {refs && !refs.items.length && <p>{tr('No indexed references found.')}</p>}
+        {refs?.items.map((ref) => <article key={ref.citing_version_id + ':' + ref.key} className="synthesis-item">
+          <strong>{direction === 'incoming' ? ref.citing_title : ref.target_title ?? ref.title}</strong>
+          <p className="fine">{ref.text}</p>
+          {ref.mentions.length ? ref.mentions.map((m, i) =>
+            <button className="link-btn" key={i} onClick={() => {
+              setReader(undefined)
+              setReferencePage({ version: ref.citing_version_id, page: m.page, quote: m.quote })
+              referencesFor('')
+            }}>{tr('PDF page {0}', m.page)}</button>) : <p>{tr('Reference entry only')}</p>}
+        </article>)}
+      </Dialog>}
+      {exported.length > 0 && <Dialog title={tr('Export evidence')} onClose={() => setExported([])}>
+        {exported.map((file) => <p key={file.name}><button className="link-btn" onClick={() => downloadText(file)}>{file.name}</button></p>)}
+      </Dialog>}
       {review && outline && <Dialog title="Save findings to Topic Wiki" onClose={() => setReview(false)}>
         {[...outline.points, ...outline.relations].map((item) => {
           const previous = wiki?.items.find((saved) => saved.id === item.prior_id)
@@ -361,6 +401,8 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
         })}
         <div className="dialog-actions">
           <button className="ghost-btn" onClick={() => setReview(false)}>Cancel</button>
+          <button className="ghost-btn" disabled={workspace.busy || !outline.points.some((p) => checked.includes(p.id))}
+            onClick={() => void exportPoints()}>{tr('Export selected points')}</button>
           <button className="primary" disabled={!checked.length || workspace.busy} onClick={() => void save()}>Save selected findings</button>
         </div>
       </Dialog>}

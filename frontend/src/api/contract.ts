@@ -48,7 +48,7 @@ export type TaskInput = MainTask | WorkspaceTask
 export type Transfer = { endpoint: string; purpose: string; data_categories: NonEmpty<string> }
 export type Issue = { reason: string; retryable: boolean; next_action: string; details?: Record<string, unknown> }
 export type Start = { task_id: Id; run_id: Id; status: 'queued'; scope_id?: Id }
-type Result = Discovery | Reading | ImportResult | {record_id:string; kind?: 'literature_synthesis'}
+type Result = Discovery | Reading | ImportResult | {record_id:string; kind?: 'literature_synthesis' | 'citation_audit'}
 export type Finished =
   | { status: 'completed'; result: Result }
   | { status: 'partial'; result: Result; issue: Issue }

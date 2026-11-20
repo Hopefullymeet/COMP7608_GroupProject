@@ -45,6 +45,13 @@ export function apply(ctx) {
         && tokens.some((token) => p.text.toLowerCase().includes(token)))]
       return results.slice(0, 12).map(({ text, ...row }) => ({ ...row, preview: text.slice(0, 180) }))
     })
+  const lookup = 'lookup.passage_id, lookup.version_id AS source_version_id, lookup.page, lookup.ordinal, paper_passages.text'
+  tool('paper_refs', 'List indexed bibliographic links within your approved papers. A citation alone does not establish support.',
+    { version: { type: 'string' } }, ({ version }) => {
+      if (!versions.has(version)) throw new Error('Version outside topic scope.')
+      const paper = scope.sources.find((item) => item.source_version_id === version)
+      return (paper.relations ?? []).filter((ref) => versions.has(ref.target_version_id)).slice(0, 20)
+    })
   tool('paper_read', 'Read exact passage IDs and their adjacent context within the same PDF page. Use the returned IDs and verbatim quotes.',
     { ids: { type: 'array', items: { type: 'string' }, description: 'Up to four passage IDs returned by search or Wiki.' } },
     ({ ids }) => {
@@ -54,11 +61,11 @@ export function apply(ctx) {
         if (abstract.has(id)) results.set(id, abstract.get(id))
         else {
           if (!fullVersions.size) throw new Error('Passage outside topic scope.')
-          const row = db.prepare(`SELECT ${select} FROM paper_passages
-            WHERE passage_id = ? AND version_id IN (${slots})`).get(id, ...fullVersions)
+          const row = db.prepare(`SELECT ${lookup} FROM passage_lookup AS lookup JOIN paper_passages ON paper_passages.rowid = lookup.fts_rowid
+            WHERE lookup.passage_id = ? AND lookup.version_id IN (${slots})`).get(id, ...fullVersions)
           if (!row) throw new Error('Passage outside topic scope.')
-          const context = db.prepare(`SELECT ${select} FROM paper_passages
-            WHERE version_id = ? AND page = ? AND ordinal BETWEEN ? AND ? ORDER BY ordinal`)
+          const context = db.prepare(`SELECT ${lookup} FROM passage_lookup AS lookup JOIN paper_passages ON paper_passages.rowid = lookup.fts_rowid
+            WHERE lookup.version_id = ? AND lookup.page = ? AND lookup.ordinal BETWEEN ? AND ? ORDER BY lookup.ordinal`)
             .all(row.source_version_id, row.page, row.ordinal - 1, row.ordinal + 1)
           for (const p of context) results.set(p.passage_id, p)
         }

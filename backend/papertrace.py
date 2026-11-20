@@ -12,6 +12,7 @@ from uuid import uuid4
 from dsh import Dsh, DshFailure, ENDPOINT, MODEL
 from literature import LiteratureError, MAX_VERSIONS, digest, init_corpus
 from workbench import Workbench
+from citations import CitationWorkspace, init_citations
 
 
 def encode(value):
@@ -67,7 +68,7 @@ def required(params, key):
 
 class Worker:
     writes = {
-        "comparison.save",
+        "comparison.save", "draft.import", "draft.resolve_reference", "audit.review", "audit.save_to_wiki", "export.create",
         "topic.create", "session.create", "task.prepare", "task.start", "task.cancel",
         "candidate.decide", "reader.bookmark", "note.save", "library.import_pdf", "synthesis.review",
     }
@@ -89,6 +90,8 @@ class Worker:
             );
         """)
         init_corpus(self.db)
+        init_citations(self.db)
+        self.citations = CitationWorkspace(self, identifier)
         self.research = Workbench(self, identifier)
         self.send = send
         self.lock = threading.RLock()
@@ -103,6 +106,12 @@ class Worker:
                     self.finish(task, "failed", issue={
                         "reason": "PROCESS_INTERRUPTED", "retryable": True, "next_action": "retry"
                     })
+        for (version,) in self.db.execute("""
+            SELECT p.version_id FROM pdf_files p
+            JOIN records r ON r.kind = 'source' AND r.id = p.version_id
+            LEFT JOIN citation_index c ON c.version_id = p.version_id WHERE c.version_id IS NULL
+        """):
+            self.jobs.put(("index", version))
         self.runner = threading.Thread(target=self.run_jobs, daemon=True)
         self.runner.start()
 
@@ -186,7 +195,7 @@ class Worker:
         if method in self.writes:
             operation = required(params, "operation_id")
             fingerprint = encode(params)
-            if method == "library.import_pdf":
+            if method in ("library.import_pdf", "draft.import"):
                 fingerprint = digest(fingerprint.encode("utf-8"))
             row = self.db.execute(
                 "SELECT params, result FROM operations WHERE method = ? AND id = ?", (method, operation)
@@ -283,6 +292,24 @@ class Worker:
             return {"steps": [e["payload"] for (row,) in events if (e := json.loads(row))["type"] == "discovery.step"]}
         if method == "candidate.decide":
             return self.decide(params)
+        if method == "literature.refs":
+            return self.citations.refs(self.topic(params), required(params, "source_version_id"),
+                                       params.get("direction", "outgoing"))
+        if method == "draft.import":
+            return self.citations.import_draft(self.topic(params), params)
+        if method == "draft.resolve_reference":
+            return self.citations.resolve_reference(self.topic(params), params)
+        if method == "draft.list":
+            topic = self.topic(params)
+            return {"items": [self.citations.public(r) for r in self.rows("pdf_draft") if r["topic_id"] == topic]}
+        if method == "draft.page":
+            return self.citations.page(self.topic(params), params)
+        if method == "audit.save_to_wiki":
+            return self.citations.save_to_wiki(self.topic(params), params)
+        if method == "audit.review":
+            return self.citations.review(self.topic(params), params)
+        if method == "export.create":
+            return self.citations.export(self.topic(params), params)
         if method == "library.import_pdf":
             return self.research.import_pdf(self.topic(params), params)
         if method == "comparison.list":
@@ -454,6 +481,10 @@ class Worker:
                     raise invalid("Duplicate version or invalid reading scope.")
                 seen.add(version)
                 self.source(version, topic, required(item, "paper_id"))
+        elif kind == "citation_audit":
+            draft, _, audit_jobs = self.citations.jobs(topic, input_)
+            target, label = draft["draft_id"], draft["name"]
+            audit_pending = [j for j in audit_jobs if j["usable"] and j["cached"] is None]
         elif kind in ("literature_synthesis", "paper_comparison"):
             label = required(input_, "question").strip()
             if len(label) > 2000:
@@ -479,7 +510,12 @@ class Worker:
         else:
             raise RpcError(-32601, "METHOD_NOT_FOUND", "refresh_data", "This task is not available in the local integration worker.")
         synthesis = kind in ("literature_synthesis", "paper_comparison")
-        live = synthesis or (kind == "reading_qa" and self.dsh is not None)
+        audit = kind == "citation_audit"
+        live = synthesis or (kind == "reading_qa" and self.dsh is not None) or (
+            audit and bool(audit_pending) and self.dsh is not None and bool(self.dsh.key))
+        if audit:
+            task_data["audit_sources"] = {j["job_id"]: j["source"]["source_version_id"] for j in audit_pending} if live else {}
+
         fingerprint = encode([task_data, ENDPOINT if live else "local-fixture", MODEL if live else ""])
         if method == "task.prepare":
             cid = identifier()
@@ -492,6 +528,9 @@ class Worker:
             if live and kind == "reading_qa" and any(s["requested_scope"] == "full_text" for s in input_["sources"]):
                 transfers = [{"endpoint": ENDPOINT, "purpose": "Answer using selected sources",
                               "data_categories": ["Research question and excerpts from the selected papers"]}]
+            if audit:
+                transfers = [{"endpoint": ENDPOINT, "purpose": "Check cited claims against selected papers",
+                              "data_categories": ["Selected manuscript sentences and cited full-text excerpts"]}] if live else []
             if synthesis:
                 transfers = [{"endpoint": ENDPOINT,
                               "purpose": ("Compare selected papers" if kind == "paper_comparison"
@@ -562,6 +601,14 @@ class Worker:
             task_id = self.jobs.get()
             if task_id is None:
                 return
+            if isinstance(task_id, tuple):
+                if self.closing.is_set():
+                    return
+                try:
+                    self.citations.index(task_id[1])
+                except LiteratureError as error:
+                    print(f"PaperTrace citation indexing: {error.reason}", file=sys.stderr)
+                continue
             with self.lock:
                 if self.closing.is_set():
                     return
@@ -570,18 +617,22 @@ class Worker:
                     continue
                 task["status"] = "running"
                 discovery = task["kind"] == "discovery"
-                live = not discovery and self.dsh is not None
+                audit = task["kind"] == "citation_audit"
+                live = audit or (not discovery and self.dsh is not None)
                 if live:
                     signal = threading.Event()
                     self.inflight[task_id] = signal
                 with self.db:
                     event = self.emit(task, "task.progress", {
                         "stage": "searching" if discovery else "reading",
-                        "message": "Reading with DeepSeek Harness." if live else "Running local contract sample."
+                        "message": "Checking citations." if audit else (
+                            "Reading with DeepSeek Harness." if live else "Running local contract sample.")
                     })
                 self.send_events([event])
             if live:
-                if task["kind"] in ("literature_synthesis", "paper_comparison"):
+                if audit:
+                    self.citations.run(task, signal)
+                elif task["kind"] in ("literature_synthesis", "paper_comparison"):
                     self.research.run(task, signal)
                 else:
                     self.run_dsh(task, signal)

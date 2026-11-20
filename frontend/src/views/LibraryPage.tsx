@@ -1,3 +1,4 @@
+import { pickPdfs, pdfInput } from '../api/pdf'
 import { count, useLanguage } from '../i18n'
 import { useState } from 'react'
 import { PageHead, Dialog } from '../components/PageHead'
@@ -23,7 +24,7 @@ export function LibraryPage() {
   const [topic, setTopic] = useState(''),
     [tag, setTag] = useState('')
   const [review, setReview] = useState<Review>(),
-    [files, setFiles] = useState<Picked[]>()
+    [files, setFiles] = useState<(Picked & { pdf?: File })[]>()
   const [target, setTarget] = useState<string>()
   const [impact, setImpact] = useState<Impact & { ids: string[]; purge: boolean }>(),
     [clear, setClear] = useState(false)
@@ -40,11 +41,36 @@ export function LibraryPage() {
   const checked = chosen.filter((id) => rows.some((p) => p.paper_id === id))
   const ids = checked.length ? checked : paper ? [paper.paper_id] : []
   async function pick(paper_id?: string) {
+    if (!demo) {
+      const selected = await pickPdfs(!paper_id)
+      if (!selected.length) return
+      const permitted = paper_id ? rows.find((row) => row.paper_id === paper_id)?.topic_ids ?? [] : topics.map((t) => t.id)
+      const nextTopic = permitted.includes(topic) ? topic : permitted[0]
+      if (!nextTopic) { report(new Error(tr('Select a topic to import PDFs.'))); return }
+      setTopic(nextTopic)
+      setTarget(paper_id)
+      setFiles(selected.map((pdf) => ({ file_id: crypto.randomUUID(), name: pdf.name, pdf })))
+      return
+    }
     const picked = await api.call('file.pick', { purpose: 'papers' })
     if (picked.files.length) {
       setTarget(paper_id)
       setFiles(picked.files)
     }
+  }
+  async function importRealPdf() {
+    if (!files || !topic) return
+    const result: string[] = []
+    for (const file of files) {
+      if (!file.pdf) continue
+      try {
+        const item = await write('library.import_pdf', { topic_id: topic, paper_id: target, ...await pdfInput(file.pdf) })
+        result.push(file.name + ' · ' + tr(item.duplicate ? 'Already in library' :
+          item.available_scope === 'metadata' ? 'Text unavailable' : 'Imported'))
+      } catch (error) { result.push(file.name + ' · ' + (error instanceof Error ? error.message : tr('Import failed'))) }
+    }
+    setFeedback(result.join(' · '))
+    setFiles(undefined)
   }
   async function preview(purge: boolean) {
     const result = await api.call('library.impact', { paper_ids: ids })
@@ -333,10 +359,16 @@ export function LibraryPage() {
           {files.map((f) => (
             <p key={f.file_id}>{f.name}</p>
           ))}
-          <p>{topics.find((t) => t.id === topic)?.title ?? tr('Personal library')}</p>
+          {demo ? <p>{topics.find((t) => t.id === topic)?.title ?? tr('Personal library')}</p> :
+            <select aria-label={tr('Research topic')} value={topic} onChange={(event) => setTopic(event.currentTarget.value)}>
+              {topics.filter((item) => !target || rows.find((row) => row.paper_id === target)?.topic_ids.includes(item.id))
+                .map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+            </select>}
           <button
             className="primary"
+            disabled={busy}
             onClick={() => {
+              if (!demo) { void importRealPdf(); return }
               void prepare({
                 kind: 'paper_import',
                 input: {
@@ -348,7 +380,7 @@ export function LibraryPage() {
               setFiles(undefined)
             }}
           >
-            {tr('Review import scope')}
+            {tr(demo ? 'Review import scope' : 'Import papers')}
           </button>
         </Dialog>
       )}

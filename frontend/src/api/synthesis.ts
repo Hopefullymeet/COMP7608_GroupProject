@@ -53,7 +53,14 @@ export type SynthesisTask = Topic & {
   kind: 'literature_synthesis'
   input: { question: string; source_versions: string[] }
 }
+export type ReferenceList = {
+  pending_versions: string[]
+  items: { key: string; title: string; text: string; citing_version_id: string; citing_title: string;
+    target_version_id?: string; target_title?: string; status: 'matched' | 'ambiguous' | 'unmatched';
+    mentions: { page: number; quote: string }[] }[]
+}
 export type SynthesisMethods = {
+  'literature.refs': [Topic & { source_version_id: string; direction?: 'outgoing' | 'incoming' }, ReferenceList]
   'library.import_pdf': [
     Topic & Write & { paper_id?: string } & ({ path: string } | { name: string; content: string }),
     Version & { paper_id: string; duplicate: boolean },

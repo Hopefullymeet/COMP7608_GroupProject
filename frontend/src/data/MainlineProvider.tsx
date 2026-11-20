@@ -1,3 +1,4 @@
+import { pickPdfs, pdfInput } from '../api/pdf'
 import { useLanguage } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Dialog } from '../components/PageHead'
@@ -126,7 +127,7 @@ export function MainlineProvider({
 }) {
   const workspace = useWorkspace()
   const [readVersions, selectVersions] = useState<string[]>([])
-  const [files, setFiles] = useState<Picked[]>([])
+  const [files, setFiles] = useState<(Picked & { pdf?: File | string })[]>([])
   const config = useRead('services.get', {})
   const { tr } = useLanguage()
   const activity = useRead('workspace.activity', {})
@@ -194,6 +195,12 @@ export function MainlineProvider({
     const listener = getCurrentWebview().onDragDropEvent((e) => {
       if (!valid || e.payload.type !== 'drop') return
       const paths = e.payload.paths
+      if (!demo) {
+        setFiles((old) => [...old, ...paths.filter((path) => path.toLowerCase().endsWith('.pdf')).map((path) => ({
+          file_id: path, name: path.split(/[\\/]/).at(-1) ?? path, pdf: path,
+        }))])
+        return
+      }
       void workspace
         .write('file.stage_drop', { paths })
         .then(({ files }) => {
@@ -206,7 +213,7 @@ export function MainlineProvider({
       valid = false
       void listener.then((stop) => stop()).catch(() => {})
     }
-  }, [api, view.route.view])
+  }, [api, demo, view.route.view])
 
   async function refreshLibrary(topic_id: string) {
     const { items } = await api.call('library.list', { topic_id })
@@ -494,14 +501,19 @@ export function MainlineProvider({
       )
       creation.current = undefined
       rememberSession(topicId, session_id)
-      openTopic(topicId, 'discover', session_id, title)
-      if (files.length) {
-        await workspace.prepare({
-          kind: 'paper_import',
-          input: { topic_id: topicId, files: files.map((f) => f.file_id) },
-        })
-        setFiles([])
+      openTopic(topicId, !demo && files.length ? 'synthesis' : 'discover', session_id, title)
+      if (demo && files.length) {
+        await workspace.prepare({ kind: 'paper_import', input: { topic_id: topicId, files: files.map((f) => f.file_id) } })
+      } else if (files.length) {
+        const errors: string[] = []
+        for (const file of files) {
+          if (!file.pdf) continue
+          try { await workspace.write('library.import_pdf', { topic_id: topicId, ...await pdfInput(file.pdf) }) }
+          catch (error) { errors.push(file.name + ': ' + errorText(error)) }
+        }
+        if (errors.length) setError(errors.join(' '))
       }
+      setFiles([])
     })
   }
 
@@ -880,8 +892,13 @@ export function MainlineProvider({
       })),
       attachFiles: (incoming) => {
         void status(async () => {
+          if (!demo) {
+            const picked = incoming?.length ? incoming : await pickPdfs()
+            setFiles((old) => [...old, ...picked.map((file) => ({ file_id: operation(), name: file.name, pdf: file }))])
+            return
+          }
           const selected =
-            demo && incoming?.length
+            incoming?.length
               ? incoming.map((f) => ({ file_id: f.name, name: f.name }))
               : (await api.call('file.pick', { purpose: 'papers' })).files
           setFiles((old) => [...old, ...selected.filter((f) => !old.some((o) => o.file_id === f.file_id))])

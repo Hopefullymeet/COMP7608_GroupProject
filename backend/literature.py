@@ -34,6 +34,14 @@ def init_corpus(db):
             passage_id UNINDEXED, version_id UNINDEXED, page UNINDEXED,
             ordinal UNINDEXED, text, tokenize='unicode61'
         );
+        CREATE TABLE IF NOT EXISTS passage_lookup (
+            passage_id TEXT PRIMARY KEY, version_id TEXT NOT NULL, page INTEGER NOT NULL,
+            ordinal INTEGER NOT NULL, fts_rowid INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS passage_page ON passage_lookup(version_id, page, ordinal);
+        INSERT OR IGNORE INTO passage_lookup
+            SELECT passage_id, version_id, page, ordinal, rowid FROM paper_passages
+            WHERE NOT EXISTS (SELECT 1 FROM passage_lookup);
         CREATE TABLE IF NOT EXISTS wiki_evidence (
             topic_id TEXT NOT NULL, item_id TEXT NOT NULL, version_id TEXT NOT NULL,
             PRIMARY KEY (topic_id, item_id, version_id)

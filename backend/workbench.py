@@ -3,6 +3,7 @@
 from collections import Counter
 
 from dsh import DshFailure
+from citations import parse_pdf_index, save_index
 from literature import (LiteratureError, digest, entry_anchors, extract_pdf, make_passages,
                         pdf_content, render_pdf_page, synthesis_result)
 
@@ -23,7 +24,10 @@ class Workbench:
         if paper and topic not in paper["topic_ids"]:
             raise LiteratureError("NOT_FOUND", "Paper is outside the selected topic.", "refresh_data", -32001)
 
-        previous = host.db.execute("SELECT version_id FROM pdf_files WHERE digest = ?", (checksum,)).fetchall()
+        previous = host.db.execute("""
+            SELECT p.version_id FROM pdf_files p JOIN records r ON r.kind = 'source' AND r.id = p.version_id
+            WHERE p.digest = ?
+        """, (checksum,)).fetchall()
         for (version,) in previous:
             source = host.get("source", version)
             if source["paper_id"] == paper_id or not paper_id:
@@ -51,15 +55,21 @@ class Workbench:
                                      "page_count": len(pages), "available_scope": scope, "passages": []})
         host.db.execute("INSERT INTO pdf_files VALUES (?, ?, ?)", (version, checksum, content))
         host.db.executemany("INSERT INTO paper_passages VALUES (?, ?, ?, ?, ?)", passages)
+        if passages:
+            first = host.db.execute("SELECT last_insert_rowid()").fetchone()[0] - len(passages) + 1
+            host.db.executemany("INSERT INTO passage_lookup VALUES (?, ?, ?, ?, ?)",
+                                ((*p[:4], first + i) for i, p in enumerate(passages)))
+        save_index(host.db, version, parse_pdf_index(content, pages))
         return {"paper_id": paper_id, **record, "duplicate": False}
 
     def document(self, source, passage_id=None):
-        query = "SELECT passage_id, page, text FROM paper_passages WHERE version_id = ?"
+        query = """SELECT lookup.passage_id, lookup.page, paper_passages.text FROM passage_lookup AS lookup
+                   JOIN paper_passages ON paper_passages.rowid = lookup.fts_rowid WHERE lookup.version_id = ?"""
         args = (source["source_version_id"],)
         if passage_id:
-            query += " AND passage_id = ?"
+            query += " AND lookup.passage_id = ?"
             args += (passage_id,)
-        rows = self.worker.db.execute(query + " ORDER BY page, ordinal", args)
+        rows = self.worker.db.execute(query + " ORDER BY lookup.page, lookup.ordinal", args)
         passages = [{"passage_id": pid, "page": page, "section": f"PDF · page {page}", "text": body}
                     for pid, page, body in rows]
         if not passages:
@@ -178,6 +188,12 @@ class Workbench:
             sources.append({"source_version_id": version, "paper_id": source["paper_id"], "title": paper["title"],
                             "available_scope": scope, "passages": source["passages"]})
         versions = {s["source_version_id"] for s in sources}
+        for source in sources:
+            refs = host.citations.refs(topic, source["source_version_id"])["items"]
+            source["relations"] = [{"target_version_id": item["target_version_id"],
+                                    "target_title": item["target_title"],
+                                    "mentions": item["mentions"][:2]} for item in refs
+                                   if item["target_version_id"] in versions]
         leads = []
         for item in self.wiki(topic)["items"]:
             entry = item["entry"]

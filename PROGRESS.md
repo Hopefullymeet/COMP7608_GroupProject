@@ -12,8 +12,10 @@
 
 - [主题文献综合](docs/contracts/literature-synthesis.md)接通 PDF 导入、原文定位、两篇比较、DSH 多论文提纲和 Wiki 审阅。六篇公开 PDF 导入及页级位置已核对。固定检索、Agent 补读和带 Wiki 的实验入口已具备。
 
+- [离线引用与 PDF 稿件回查](docs/contracts/pdf-citations.md)接通主题内引用查询、书目映射、逐句检查及 Markdown / BibTeX 输出。六篇公开论文已验证入库与本地定位。
+
 ## 下一步
 
-- 前端按[并行开发交接](docs/product-plan/Frontend_Handoff_ZH.md)推进统一导入、原文阅读和提纲导出，联调基线已纳入上游中文界面。
+- 前端按[并行开发交接](docs/product-plan/Frontend_Handoff_ZH.md)推进页内证据高亮和阅读体验，联调基线已纳入上游中文界面。
 
 - 配置 DeepSeek 运行三组质量对照并人工复核。继续接入外部论文发现、稿件读写、授权撤销和备份恢复。[技术交接包](docs/deliverables/PaperTrace_Handoff_20261109/)

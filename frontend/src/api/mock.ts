@@ -497,6 +497,7 @@ export function createMock(): Client {
     ...research.handlers,
     ...citation.handlers,
     'library.import_pdf': () => { throw new Error('PDF import requires the desktop workspace.') },
+    'literature.refs': () => ({ items: [], pending_versions: [] }),
     'source.page': () => { throw new Error('PDF rendering requires the desktop workspace.') },
     'synthesis.list': () => ({ items: [] }),
     'synthesis.wiki': () => ({ revision: '', items: [] }),

@@ -64,3 +64,11 @@ python3 -B backend/evaluate_synthesis.py /path/to/corpus --output synthesis-eval
 ```
 
 可用 `PAPERTRACE_TEST_DSH_CLI` 指向已构建的 DSH，运行 `test_dsh_research.py` 中的本机回环测试。这个测试检查真实工具注册、模型接口传输、证据回读及 Wiki 复用，模型回复来自可复现的测试服务。
+
+## 离线查引用与检查 PDF 稿件
+
+在主题 **Synthesize** 的论文旁打开 **Paper references**，可在没有模型连接时查看双向引用和原页。已有论文在工作区开启后后台补建引用索引。
+
+在 **Citation check** 导入 PDF 稿件，核对系统找到的参考文献对应关系，选择句子后启动回查。接受有原文依据的结果后可以保存进主题 Wiki 或导出为 Markdown 与 BibTeX。原 PDF 和历史判断按版本保留。可选 GROBID 及具体接口见[PDF 引用契约](../docs/contracts/pdf-citations.md)。
+
+PaperTrace 配置为模型提供四个只读工具，分别查询引用、搜索全文、读取上下文和查阅主题 Wiki。用同一个 DSH 构建和本机模拟模型服务，各冷启动三次。启动到首次模型请求的中位数由 285 毫秒变为 291 毫秒，采样峰值内存的中位数由约 133 MiB 变为 153 MiB。由于这组实测没有显示资源收益，本轮保留 SDK 和构建依赖。这组对照测的是运行配置，模型核查质量需要用标注样例另行评估。

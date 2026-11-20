@@ -22,9 +22,16 @@ class ScriptedProvider(BaseHTTPRequestHandler):
         messages = request["messages"]
         prompt = next(block["text"] for m in messages if m["role"] == "user"
                       for block in m["content"] if isinstance(block, dict) and block["type"] == "text")
-        sources = json.loads(prompt.split("\nPapers: ", 1)[1].split("\nQuestion:", 1)[0])
+        metadata, _, rest = prompt.split("\nPapers: ", 1)[1].partition("\nChecks: ")
+        checks = json.loads(rest) if rest else []
+        sources = json.loads(metadata.split("\nQuestion:", 1)[0])
         version = sources[0]["source_version_id"]
         available = {t["name"] for t in request.get("tools", [])}
+        if hasattr(self.server, "observed_tools"):
+            self.server.observed_tools.append(available)
+        if hasattr(self.server, "first_request") and self.server.first_request is None:
+            import time
+            self.server.first_request = time.monotonic()
         results = [b for m in messages for b in m["content"]
                    if isinstance(b, dict) and b["type"] == "tool_result"]
 
@@ -53,7 +60,10 @@ class ScriptedProvider(BaseHTTPRequestHandler):
             ]}
             if "wiki_search" in names:
                 point["prior_id"] = content(results[0])[0]["id"]
-            block = {"type": "text", "text": json.dumps({"points": [point], "relations": [], "gaps": []})}
+            response = ({"checks": [{"id": check["id"], "status": "supported", "limit": "Fixture",
+                                     "evidence": citations} for check in checks]} if checks else
+                        {"points": [point], "relations": [], "gaps": []})
+            block = {"type": "text", "text": json.dumps(response)}
         stop = "tool_use" if block["type"] == "tool_use" else "end_turn"
         events = [("message_start", {"message": {"id": "msg_loopback", "type": "message",
                                                "role": "assistant", "model": "loopback", "content": [],
@@ -85,6 +95,7 @@ class DshResearchTest(unittest.TestCase):
         try:
             fixture.setUp()
             with ThreadingHTTPServer(("127.0.0.1", 0), ScriptedProvider) as provider:
+                provider.observed_tools = []
                 server = threading.Thread(target=provider.serve_forever, daemon=True)
                 server.start()
                 try:
@@ -105,6 +116,17 @@ class DshResearchTest(unittest.TestCase):
                     followup = fixture.call("synthesis.list", topic_id=fixture.topic)["items"][0]
                     self.assertEqual(followup["trace"][0]["title"], "wiki_search")
                     self.assertEqual(followup["points"][0]["prior_id"], point["id"])
+                    expected_tools = {"paper_search", "paper_read", "wiki_search", "paper_refs"}
+                    self.assertTrue(all(tools == expected_tools for tools in provider.observed_tools), provider.observed_tools)
+                    version = fixture.versions[0]
+                    raw, seen, trace, usage, issue = dsh.audit(
+                        [{"id": "0", "source_version_id": version, "claim": "The paper defines the benchmark."}],
+                        [{"source_version_id": version, "title": "Alpha", "available_scope": "full_text"}],
+                        threading.Event(),
+                    )
+                    self.assertIsNone(issue)
+                    self.assertEqual(raw["checks"][0]["id"], "0")
+                    self.assertIn(raw["checks"][0]["evidence"][0]["id"], seen)
                 finally:
                     provider.shutdown()
                     server.join()
