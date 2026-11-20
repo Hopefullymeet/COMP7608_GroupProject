@@ -1,8 +1,10 @@
 # 当前进度
 
-更新：2026-11-19。项目进入正式开发阶段。
+更新：2026-11-20。项目进入正式开发阶段。
 
 ## 已完成
+
+- [测试基线](docs/测试基线.md)覆盖现有契约范围、首条主线验收用例与评估口径。
 
 - 已提交 Group 52 Proposal，完成 [MVP 设计草案](docs/PaperTrace_MVP_Design.md)及[项目书、技术书与设计交接包](docs/deliverables/PaperTrace_Handoff_20261109/)。
 - 视觉原型（`visual-prototype`）已通过评审，覆盖论文发现、阅读问答、证据定位、比较及工作区页面。演示使用示例数据，范围见[原型说明](prototype/AGENTS.md)。
