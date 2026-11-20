@@ -13,6 +13,7 @@ use std::{
 use tauri::ipc::Channel;
 
 const WORKER: &[u8] = include_bytes!("../../../backend/papertrace.py");
+const DSH: &[u8] = include_bytes!("../../../backend/dsh.py");
 type Reply = Result<Value, String>;
 
 struct Pending {
@@ -36,25 +37,29 @@ struct Worker {
 impl Worker {
     fn start(directory: &Path) -> Result<Self, String> {
         fs::create_dir_all(directory).map_err(|error| error.to_string())?;
-        let runtime = directory.join("runtime");
-        fs::create_dir_all(&runtime).map_err(|error| error.to_string())?;
         let mut hash = DefaultHasher::new();
         WORKER.hash(&mut hash);
-        let script = runtime.join(format!("worker-{:016x}.py", hash.finish()));
-        match fs::OpenOptions::new().write(true).create_new(true).open(&script) {
-            Ok(mut file) => file.write_all(WORKER).map_err(|error| error.to_string())?,
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                if fs::read(&script).ok().as_deref() != Some(WORKER) {
-                    return Err("The embedded worker file does not match this build.".into());
+        DSH.hash(&mut hash);
+        let runtime = directory.join("runtime").join(format!("{:016x}", hash.finish()));
+        fs::create_dir_all(&runtime).map_err(|error| error.to_string())?;
+        let script = runtime.join("papertrace.py");
+        for (path, contents) in [(&script, WORKER), (&runtime.join("dsh.py"), DSH)] {
+            match fs::OpenOptions::new().write(true).create_new(true).open(path) {
+                Ok(mut file) => file.write_all(contents).map_err(|error| error.to_string())?,
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    if fs::read(path).ok().as_deref() != Some(contents) {
+                        return Err("The embedded worker file does not match this build.".into());
+                    }
                 }
+                Err(error) => return Err(error.to_string()),
             }
-            Err(error) => return Err(error.to_string()),
         }
         let python = std::env::var_os("PAPERTRACE_PYTHON").unwrap_or_else(|| {
             if cfg!(windows) { "python" } else { "python3" }.into()
         });
         let mut command = Command::new(python);
         command
+            .arg("-B")
             .arg("-u")
             .arg(&script)
             .arg(directory)

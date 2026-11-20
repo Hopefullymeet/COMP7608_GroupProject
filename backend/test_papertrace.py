@@ -9,6 +9,25 @@ import threading
 import unittest
 
 from papertrace import Worker
+from dsh import read_json_answer
+
+
+class EvidenceTest(unittest.TestCase):
+    def test_only_observed_exact_quotes_can_be_linked(self):
+        seen = {"p1": {"text": "The conclusion is excluded."}}
+        text = json.dumps({"sentences": [
+            {"text": "A direct result.", "evidence": [
+                {"id": "p1", "quote": "The conclusion is excluded."},
+                {"id": "p1", "quote": "The introduction is excluded."},
+                {"id": "p2", "quote": "The conclusion is excluded."},
+            ]},
+            {"text": "An unsupported result.", "evidence": []},
+        ]})
+        rows = read_json_answer(text, seen)
+        self.assertEqual(rows[0]["references"], [
+            {"passage": seen["p1"], "quote": "The conclusion is excluded."}
+        ])
+        self.assertEqual(rows[1]["references"], [])
 
 
 class Client:

@@ -9,6 +9,8 @@ import sys
 import threading
 from uuid import uuid4
 
+from dsh import Dsh, DshFailure, ENDPOINT, MODEL
+
 
 def encode(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -85,6 +87,9 @@ class Worker:
         """)
         self.send = send
         self.lock = threading.RLock()
+        self.dsh = Dsh.configured(directory.resolve())
+        self.inflight = {}
+        self.closing = threading.Event()
         self.subscriptions = set()
         self.jobs = queue.Queue()
         with self.db:
@@ -237,6 +242,9 @@ class Worker:
             if task["status"] in ("queued", "running"):
                 event = self.finish(task, "cancelled")
                 after.append(lambda: self.send_events([event]))
+                signal = self.inflight.get(task["task_id"])
+                if signal:
+                    after.append(signal.set)
             return {"task_id": task["task_id"], "status": task["status"]}
         if method == "task.history":
             topic = self.topic(params) if "topic_id" in params else None
@@ -296,8 +304,12 @@ class Worker:
                 raise missing("Evidence does not belong to that answer.")
             return {"anchor": anchor["value"], "source": self.get("source", anchor["value"]["source_version_id"])}
         if method == "services.get":
-            return {"revision": "local-contract", "model_id": "", "models": [], "budget": {
-                "calls": 0, "tokens": 0, "minutes": 1, "cost": 0,
+            models = [{
+                "id": MODEL, "label": "DeepSeek Harness", "model": MODEL, "endpoint": ENDPOINT,
+                "local": False, "credential_configured": bool(self.dsh.key),
+            }] if self.dsh else []
+            return {"revision": "local-contract", "model_id": MODEL if models else "", "models": models, "budget": {
+                "calls": 4 if models else 0, "tokens": 3200 if models else 0, "minutes": 1.5 if models else 1, "cost": 0,
             }, "ask_before_overage": True, "services": []}
         if method == "workspace.activity":
             if "topic_id" in params:
@@ -397,11 +409,17 @@ class Worker:
                 self.source(version, topic, required(item, "paper_id"))
         else:
             raise RpcError(-32601, "METHOD_NOT_FOUND", "refresh_data", "This task is not available in the local integration worker.")
-        fingerprint = encode(task_data)
+        live = kind == "reading_qa" and self.dsh is not None
+        fingerprint = encode([task_data, ENDPOINT if live else "local-fixture", MODEL if live else ""])
         if method == "task.prepare":
             cid = identifier()
             self.put("confirmation", cid, {"fingerprint": fingerprint, "used": False})
-            return {"confirmation_id": cid, "transfers": []}
+            transfers = [{
+                "endpoint": ENDPOINT,
+                "purpose": "Answer the question using DeepSeek Harness and approved abstract passages",
+                "data_categories": ["Research question", "Approved passage IDs and abstract excerpts"],
+            }] if live else []
+            return {"confirmation_id": cid, "transfers": transfers}
         cid = required(params, "confirmation_id")
         try:
             confirmation = self.get("confirmation", cid)
@@ -463,16 +481,26 @@ class Worker:
             if task_id is None:
                 return
             with self.lock:
+                if self.closing.is_set():
+                    return
                 task = self.get("task", task_id)
                 if task["status"] != "queued":
                     continue
                 task["status"] = "running"
                 discovery = task["kind"] == "discovery"
+                live = not discovery and self.dsh is not None
+                if live:
+                    signal = threading.Event()
+                    self.inflight[task_id] = signal
                 with self.db:
                     event = self.emit(task, "task.progress", {
-                        "stage": "searching" if discovery else "reading", "message": "Running local contract sample."
+                        "stage": "searching" if discovery else "reading",
+                        "message": "Reading with DeepSeek Harness." if live else "Running local contract sample."
                     })
                 self.send_events([event])
+            if live:
+                self.run_dsh(task, signal)
+                continue
             with self.lock:
                 task = self.get("task", task_id)
                 if task["status"] != "running":
@@ -487,6 +515,63 @@ class Worker:
                             "reason": "TEMPORARILY_UNAVAILABLE", "retryable": True, "next_action": "retry"
                         })]
                 self.send_events(events)
+
+    def run_dsh(self, task, signal):
+        task_id = task["task_id"]
+        try:
+            with self.lock:
+                if signal.is_set():
+                    return
+                sources = [self.source(item["source_version_id"], task["topic_id"], item["paper_id"])
+                           for item in task["input"]["sources"]]
+            claims, seen = self.dsh.answer(task["input"]["question"], sources, signal)
+            with self.lock:
+                task = self.get("task", task_id)
+                if task["status"] != "running":
+                    return
+                with self.db:
+                    message_id = identifier()
+                    sentences = []
+                    for claim in claims:
+                        anchors = [self.store_anchor(task, message_id, ref["passage"], ref["quote"])
+                                   for ref in claim["references"]]
+                        sentences.append({"text": claim["text"], "anchor_ids": anchors,
+                                          "assessment": "supported" if anchors else "evidence_not_established"})
+                    read_versions = {passage["source_version_id"] for passage in seen.values()}
+                    reads = [{"source_version_id": source["source_version_id"],
+                              "read_scope": "abstract" if source["source_version_id"] in read_versions else "none"}
+                             for source in sources]
+                    events = self.persist_reading(task, message_id, sentences, reads, {
+                        "kind": "tool", "title": "Read with DeepSeek Harness",
+                        "detail": f"Read {len(seen)} approved passage(s) using paper_read.",
+                    })
+                self.send_events(events)
+        except DshFailure as error:
+            self.fail_dsh(task_id, error.issue)
+        except Exception as error:
+            print(f"PaperTrace DSH task: {type(error).__name__}", file=sys.stderr)
+            self.fail_dsh(task_id, {"reason": "MODEL_UNAVAILABLE", "retryable": True, "next_action": "retry"})
+        finally:
+            with self.lock:
+                self.inflight.pop(task_id, None)
+
+    def fail_dsh(self, task_id, issue):
+        with self.lock:
+            task = self.get("task", task_id)
+            if task["status"] != "running":
+                return
+            with self.db:
+                event = self.finish(task, "failed", issue=issue)
+            self.send_events([event])
+
+    def store_anchor(self, task, message_id, passage, quote):
+        aid = identifier()
+        anchor = {"anchor_id": aid, "paper_id": passage["paper_id"],
+                  "source_version_id": passage["source_version_id"], "read_scope": "abstract", "quote": quote,
+                  "location": {"view": "abstract", "precision": "paragraph",
+                               "passage_id": passage["passage_id"], "text_excerpt": passage["text"]}}
+        self.put("anchor", aid, {"topic_id": task["topic_id"], "message_id": message_id, "value": anchor})
+        return aid
 
     def run_discovery(self, task):
         input_ = task["input"]
@@ -520,25 +605,27 @@ class Worker:
             for passage in source["passages"]:
                 if QUOTE not in passage["text"]:
                     continue
-                aid = identifier()
-                anchor = {"anchor_id": aid, "paper_id": source["paper_id"], "source_version_id": vid,
-                          "read_scope": "abstract", "quote": QUOTE, "location": {
-                              "view": "abstract", "precision": "paragraph", "passage_id": passage["passage_id"],
-                              "text_excerpt": passage["text"],
-                          }}
-                self.put("anchor", aid, {"topic_id": task["topic_id"], "message_id": message_id, "value": anchor})
+                aid = self.store_anchor(task, message_id, {
+                    **passage, "paper_id": source["paper_id"], "source_version_id": vid,
+                }, QUOTE)
                 sentences.append({"text": "The PubMedQA fixture uses the corresponding abstract without its conclusion.",
                                   "assessment": "supported", "anchor_ids": [aid]})
                 break
         if not sentences:
             sentences.append({"text": "The local sample did not establish a supporting passage.",
                               "assessment": "evidence_not_established", "anchor_ids": []})
+        return self.persist_reading(task, message_id, sentences, reads, {
+            "kind": "tool", "title": "Read saved abstract", "detail": "Checked the local fixture passage.",
+        })
+
+    def persist_reading(self, task, message_id, sentences, reads, step):
+        input_ = task["input"]
         answer = {"scope_id": task["scope_id"], "message_id": message_id, "read_sources": reads, "sentences": sentences}
         session = self.get("session", task["session_id"])
         session["turns"].append({"task_id": task["task_id"], "question": input_["question"], "answer": answer})
         session["updated_at"] = now()
         self.put("session", session["session_id"], session)
-        task["steps"] = [{"kind": "tool", "title": "Read saved abstract", "detail": "Checked the local fixture passage."}]
+        task["steps"] = [step]
         delta = self.emit(task, "answer.delta", {"text": " ".join(s["text"] for s in sentences)})
         if any(s["requested_scope"] == "full_text" for s in input_["sources"]):
             final = self.finish(task, "partial", result=answer, issue={
@@ -549,6 +636,10 @@ class Worker:
         return [delta, final]
 
     def close(self):
+        with self.lock:
+            self.closing.set()
+            for cancellation in self.inflight.values():
+                cancellation.set()
         self.jobs.put(None)
         self.runner.join()
         self.db.close()
