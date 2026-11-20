@@ -1,8 +1,10 @@
+import { useLanguage } from '../i18n'
 import { useEffect, useState } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { Icon } from './Icon'
 
 export function WindowControls() {
+  const { tr } = useLanguage()
   const [maximized, setMaximized] = useState(false)
 
   useEffect(() => {
@@ -21,14 +23,14 @@ export function WindowControls() {
   }, [])
 
   const window = getCurrentWindow()
-  const resizeLabel = maximized ? 'Restore window' : 'Maximize window'
+  const resizeLabel = tr(maximized ? 'Restore window' : 'Maximize window')
   return (
-    <div className="window-controls" role="group" aria-label="Window controls" data-tauri-drag-region="false">
-      <button type="button" className="icon-btn" aria-label="Minimize window" title="Minimize window"
+    <div className="window-controls" role="group" aria-label={tr('Window controls')} data-tauri-drag-region="false">
+      <button type="button" className="icon-btn" aria-label={tr('Minimize window')} title={tr('Minimize window')}
         onClick={() => { void window.minimize().catch(console.error) }}><Icon name="minimize" size={16} /></button>
       <button type="button" className="icon-btn" aria-label={resizeLabel} title={resizeLabel}
         onClick={() => { void window.toggleMaximize().catch(console.error) }}><Icon name={maximized ? 'restore' : 'maximize'} size={14} /></button>
-      <button type="button" className="icon-btn window-close" aria-label="Close window" title="Close window"
+      <button type="button" className="icon-btn window-close" aria-label={tr('Close window')} title={tr('Close window')}
         onClick={() => { void window.close().catch(console.error) }}><Icon name="x" size={16} /></button>
     </div>
   )

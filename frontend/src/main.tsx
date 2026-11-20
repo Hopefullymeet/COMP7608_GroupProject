@@ -12,6 +12,7 @@ import { createDesktop, isTauri } from './api/desktop'
 import { createMock } from './api/mock'
 import { MainlineProvider } from './data/MainlineProvider'
 import { WindowControls } from './components/WindowControls'
+import { LanguageProvider } from './i18n'
 import './styles.css'
 import './pages.css'
 import './mainline.css'
@@ -23,8 +24,10 @@ const api = useRpc ? createDesktop() : demo ? createMock() : null
 const app = <App liveResearch={useRpc} comparison={api?<ComparePage/>:undefined} pages={api ? { library:<LibraryPage/>, wiki:useRpc ? <TopicWikiPage/> : <WikiPage/>, check:<CitationPage/>,settings:<ServicesPage/> } : undefined} windowControls={desktop ? <WindowControls /> : undefined} />
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <StoreProvider>
-      {api ? <WorkspaceProvider api={api} demo={demo}><MainlineProvider api={api} demo={demo}>{app}</MainlineProvider></WorkspaceProvider> : app}
-    </StoreProvider>
+    <LanguageProvider>
+      <StoreProvider>
+        {api ? <WorkspaceProvider api={api} demo={demo}><MainlineProvider api={api} demo={demo}>{app}</MainlineProvider></WorkspaceProvider> : app}
+      </StoreProvider>
+    </LanguageProvider>
   </StrictMode>,
 )

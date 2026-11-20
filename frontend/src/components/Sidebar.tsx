@@ -1,6 +1,8 @@
+import { useLanguage } from '../i18n'
 import { useState } from 'react'
 import { hasMessages, sessionsOf, useStore, type Page } from '../data/store'
 import { Icon } from './Icon'
+import { LanguagePicker } from './LanguagePicker'
 import { Logo } from './Logo'
 
 const PAGES: { page: Page; icon: string; label: string }[] = [
@@ -16,15 +18,17 @@ const SESSION_LIMIT = 4
 const RECENT_LIMIT = 5
 
 function ShowMore({ hidden, open, onToggle }: { hidden: number; open: boolean; onToggle: () => void }) {
+  const { tr } = useLanguage()
   return (
     <button className="side-more" onClick={onToggle} aria-expanded={open}>
       <Icon name={open ? 'chevronDown' : 'chevronRight'} size={13} />
-      {open ? 'Show less' : `Show ${hidden} more`}
+      {open ? tr('Show less') : tr('Show {0} more', hidden)}
     </button>
   )
 }
 
 export function Sidebar() {
+  const { tr } = useLanguage()
   const { state, act } = useStore()
   const [filter, setFilter] = useState('')
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
@@ -52,30 +56,30 @@ export function Sidebar() {
         <Logo />
         <span>
           <strong>PaperTrace</strong>
-          <small>Research workspace</small>
+          <small>{tr('Research workspace')}</small>
         </span>
       </button>
 
       <label className="side-search">
         <Icon name="search" size={15} />
-        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search" aria-label="Search topics and sessions" />
+        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={tr('Search')} aria-label={tr('Search topics and sessions')} />
       </label>
 
-      <nav className="side-nav" aria-label="Workspace">
+      <nav className="side-nav" aria-label={tr('Workspace')}>
         <button className="side-item" onClick={() => { setFilter(''); act.newTopic() }}>
-          <Icon name="plus" size={15} /> <span className="grow">New topic</span>
+          <Icon name="plus" size={15} /> <span className="grow">{tr('New topic')}</span>
         </button>
         {PAGES.filter(p=>!state.mainline || state.mainline.pages?.includes(p.page)).map((l) => (
           <button key={l.page} className={`side-item ${route.view === l.page ? 'active' : ''}`} aria-current={route.view === l.page ? 'page' : undefined}
             onClick={() => act.navigate({ view: l.page })}>
-            <Icon name={l.icon} size={15} /> <span className="grow">{l.label}</span>
-            {!state.mainline && l.page === 'library' && state.dupReview === 'pending' && <span className="side-badge" title="1 import needs review">1</span>}
+            <Icon name={l.icon} size={15} /> <span className="grow">{tr(l.label)}</span>
+            {!state.mainline && l.page === 'library' && state.dupReview === 'pending' && <span className="side-badge" title={tr('1 import needs review')}>1</span>}
           </button>
         ))}
       </nav>
 
-      <nav className="side-section" aria-label="Topics">
-        <div className="side-label">Topics</div>
+      <nav className="side-section" aria-label={tr('Topics')}>
+        <div className="side-label">{tr('Topics')}</div>
         {shownTopics.map((t) => {
           const open = isOpen(t.id)
           const all = sessionsOf(state, t.id).filter((s) => !q || match(t.title) || match(s.title))
@@ -88,11 +92,11 @@ export function Sidebar() {
                   <span className="topic-name">{t.title}</span>
                 </button>
                 <button className="topic-new" onClick={() => { if (t.scripted) act.newSession(t.id); else act.enterTopic(t.id); setExpanded((e) => ({ ...e, [t.id]: true })) }}
-                  title={`New session in ${t.title}`} aria-label={`New session in ${t.title}`}>
+                  title={tr('New session in {0}', t.title)} aria-label={tr('New session in {0}', t.title)}>
                   <Icon name="plus" size={14} />
                 </button>
                 {<button className="side-delete" onClick={() => act.deleteTopic(t.id)}
-                  title={`Delete topic: ${t.title}`} aria-label={`Delete topic: ${t.title}`}>
+                  title={tr('Delete topic: {0}', t.title)} aria-label={tr('Delete topic: {0}', t.title)}>
                   <Icon name="trash" size={14} />
                 </button>}
               </div>
@@ -100,17 +104,17 @@ export function Sidebar() {
                 <div className="session-list">
                   {sessions.map((s) => (
                     <div key={s.id} className={`session-item ${activeSession === s.id ? 'active' : ''}`}>
-                      <button className="session-open" onClick={() => act.openSession(s.id)} title={s.title}>
-                        <span className="grow">{s.title}</span>
-                        <small>{s.updated}</small>
+                      <button className="session-open" onClick={() => act.openSession(s.id)} title={tr(s.title)}>
+                        <span className="grow">{tr(s.title)}</span>
+                        <small>{tr(s.updated)}</small>
                       </button>
                       {<button className="side-delete" onClick={() => act.deleteSession(s.id)}
-                        title={`Delete session: ${s.title}`} aria-label={`Delete session: ${s.title}`}>
+                        title={tr('Delete session: {0}', s.title)} aria-label={tr('Delete session: {0}', s.title)}>
                         <Icon name="trash" size={14} />
                       </button>}
                     </div>
                   ))}
-                  {all.length === 0 && <div className="side-empty">No sessions yet</div>}
+                  {all.length === 0 && <div className="side-empty">{tr('No sessions yet')}</div>}
                   {!q && all.length > SESSION_LIMIT && (
                     <ShowMore hidden={all.length - SESSION_LIMIT} open={!!allSessions[t.id]}
                       onToggle={() => setAllSessions((m) => ({ ...m, [t.id]: !m[t.id] }))} />
@@ -123,20 +127,20 @@ export function Sidebar() {
         {!q && topics.length > TOPIC_LIMIT && (
           <ShowMore hidden={topics.length - TOPIC_LIMIT} open={allTopics} onToggle={() => setAllTopics((v) => !v)} />
         )}
-        {topics.length === 0 && <div className="side-empty">{filter ? 'Nothing matches “'+filter+'”.' : 'No topics yet.'}</div>}
+        {topics.length === 0 && <div className="side-empty">{filter ? tr('Nothing matches “{0}”.', filter) : tr('No topics yet.')}</div>}
       </nav>
 
       {!q && (
         <div className="side-section">
-          <div className="side-label">Recent sessions</div>
+          <div className="side-label">{tr('Recent sessions')}</div>
           {recents.map((s) => (
             <div key={s.id} className={`side-session ${activeSession === s.id ? 'active' : ''}`}>
-              <button className="recent-open" onClick={() => act.openSession(s.id)} title={s.title}>
-                <span>{s.title}</span>
-                <small>{state.topics.find((t) => t.id === s.topicId)?.title} · {s.updated}</small>
+              <button className="recent-open" onClick={() => act.openSession(s.id)} title={tr(s.title)}>
+                <span>{tr(s.title)}</span>
+                <small>{state.topics.find((t) => t.id === s.topicId)?.title} · {tr(s.updated)}</small>
               </button>
               {<button className="side-delete" onClick={() => act.deleteSession(s.id)}
-                title={`Delete session: ${s.title}`} aria-label={`Delete session: ${s.title}`}>
+                title={tr('Delete session: {0}', s.title)} aria-label={tr('Delete session: {0}', s.title)}>
                 <Icon name="trash" size={14} />
               </button>}
             </div>
@@ -145,9 +149,10 @@ export function Sidebar() {
       )}
 
       <div className="side-foot">
-        {(!state.mainline || state.mainline.demo) && <span className="proto-badge">{state.mainline ? "Contract demo · mock data" : "Prototype · mock data"}</span>}
-        {(!state.mainline || state.mainline.demo) && <small>Local workspace · nothing leaves this page</small>}
+        {(!state.mainline || state.mainline.demo) && <span className="proto-badge">{state.mainline ? tr('Contract demo · mock data') : tr('Prototype · mock data')}</span>}
+        {(!state.mainline || state.mainline.demo) && <small>{tr('Local workspace · nothing leaves this page')}</small>}
       </div>
+      <LanguagePicker />
     </aside>
   )
 }

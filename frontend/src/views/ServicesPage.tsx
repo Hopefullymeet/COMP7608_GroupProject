@@ -1,3 +1,4 @@
+import { useLanguage, type Message } from '../i18n'
 import { useEffect, useState } from 'react'
 import { Dialog, PageHead } from '../components/PageHead'
 import { Icon } from '../components/Icon'
@@ -5,9 +6,10 @@ import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import type { Config, Offer, ServiceMethods } from '../api/services'
 
 function SettingsForm({ config }: { config: Config }) {
+  const { tr } = useLanguage()
   const { write, busy, report, demo } = useWorkspace()
   const [draft, set] = useState(config),
-    [test, setTest] = useState('')
+    [test, setTest] = useState<Message>()
   const selected = draft.models.find((m) => m.id === draft.model_id) ?? draft.models[0]
   const dirty = JSON.stringify(draft) !== JSON.stringify(config)
   const budgetFields = [
@@ -35,17 +37,17 @@ function SettingsForm({ config }: { config: Config }) {
   }
   const tryService = (id: string) =>
     void write('services.test', { id })
-      .then((r) => setTest((r.ok ? 'Passed · ' : 'Failed · ') + r.message))
+      .then((r) => setTest([r.ok ? 'Passed · {0}' : 'Failed · {0}', r.message]))
       .catch(report)
   return (
     <>
       <section className="set-section">
         <div className="set-intro">
-          <h2>Model</h2>
-          <p>Choose the model and destination for new tasks.</p>
+          <h2>{tr('Model')}</h2>
+          <p>{tr('Choose the model and destination for new tasks.')}</p>
         </div>
         <div className="set-body">
-          <div className="model-list" role="radiogroup" aria-label="Model provider">
+          <div className="model-list" role="radiogroup" aria-label={tr('Model provider')}>
             {draft.models.map((m) => (
               <label key={m.id} className={'model-card' + (selected?.id === m.id ? ' on' : '')}>
                 <input
@@ -54,12 +56,12 @@ function SettingsForm({ config }: { config: Config }) {
                   checked={selected?.id === m.id}
                   onChange={() => {
                     set({ ...draft, model_id: m.id })
-                    setTest('')
+                    setTest(undefined)
                   }}
                 />
                 <span className="radio" aria-hidden="true" />
-                <strong className="grow">{m.label}</strong>
-                <span className="tag">{m.local ? 'Local' : 'Remote'}</span>
+                <strong className="grow">{tr(m.label)}</strong>
+                <span className="tag">{m.local ? tr('Local') : tr('Remote')}</span>
               </label>
             ))}
           </div>
@@ -68,7 +70,7 @@ function SettingsForm({ config }: { config: Config }) {
               <div className="form-grid">
                 {(['endpoint', 'model'] as const).map((k) => (
                   <label className="set-field" key={k}>
-                    {k === 'model' ? 'Model ID' : 'Endpoint base URL'}
+                    {k === 'model' ? tr('Model ID') : tr('Endpoint base URL')}
                     <input
                       className="text-field"
                       aria-invalid={
@@ -93,7 +95,7 @@ function SettingsForm({ config }: { config: Config }) {
                   disabled={dirty || busy}
                   onClick={() => tryService(selected.id)}
                 >
-                  Test connection
+                  {tr('Test connection')}
                 </button>
                 {!selected.local && (
                   <button
@@ -101,7 +103,7 @@ function SettingsForm({ config }: { config: Config }) {
                     disabled={demo || busy}
                     onClick={() => void write('services.credentials', { id: selected.id }).catch(report)}
                   >
-                    Manage system credentials
+                    {tr('Manage system credentials')}
                   </button>
                 )}
               </div>
@@ -109,21 +111,21 @@ function SettingsForm({ config }: { config: Config }) {
           )}
           <p className="fine">
             {demo
-              ? 'The fixture tests configuration locally.'
-              : 'Credentials are managed in the system keychain.'}
+              ? tr('The fixture tests configuration locally.')
+              : tr('Credentials are managed in the system keychain.')}
           </p>
         </div>
       </section>
       <section className="set-section">
         <div className="set-intro">
-          <h2>Task budget</h2>
-          <p>Limits apply per task.</p>
+          <h2>{tr('Task budget')}</h2>
+          <p>{tr('Limits apply per task.')}</p>
         </div>
         <div className="set-body">
           <div className="budget-grid">
             {budgetFields.map(([k, label]) => (
               <label className="budget" key={k}>
-                {label}
+                {tr(label)}
                 <input
                   type="number"
                   min="0"
@@ -142,14 +144,14 @@ function SettingsForm({ config }: { config: Config }) {
               checked={draft.ask_before_overage}
               onChange={(e) => set({ ...draft, ask_before_overage: e.target.checked })}
             />
-            Ask before exceeding a limit
+            {tr('Ask before exceeding a limit')}
           </label>
         </div>
       </section>
       {(['search', 'parser'] as const).map((kind) => (
         <section className="set-section" key={kind}>
           <div className="set-intro">
-            <h2>{kind === 'search' ? 'Literature search' : 'PDF tools'}</h2>
+            <h2>{kind === 'search' ? tr('Literature search') : tr('PDF tools')}</h2>
           </div>
           <div className="set-body">
             {draft.services
@@ -159,7 +161,7 @@ function SettingsForm({ config }: { config: Config }) {
                   <button
                     type="button"
                     role="switch"
-                    aria-label={'Use ' + s.label}
+                    aria-label={tr('Use {0}', s.label)}
                     aria-checked={s.enabled}
                     className={'switch' + (s.enabled ? ' on' : '')}
                     onClick={() =>
@@ -175,17 +177,17 @@ function SettingsForm({ config }: { config: Config }) {
                   </button>
                   <div className="grow">
                     <strong>{s.label}</strong>
-                    <small>{s.status}</small>
+                    <small>{tr(s.status)}</small>
                     <div className="field-chips">
                       {s.fields.map((f) => (
                         <span className="tag" key={f}>
-                          {f}
+                          {tr(f)}
                         </span>
                       ))}
                     </div>
                   </div>
                   <button className="ghost-btn sm" disabled={dirty || busy} onClick={() => tryService(s.id)}>
-                    Test
+                    {tr('Test')}
                   </button>
                 </div>
               ))}
@@ -198,21 +200,21 @@ function SettingsForm({ config }: { config: Config }) {
           disabled={!valid || !dirty || busy}
           onClick={() => void save().catch(report)}
         >
-          Save settings
+          {tr('Save settings')}
         </button>
         {dirty && (
           <button className="ghost-btn" onClick={() => set(config)}>
-            Discard edits
+            {tr('Discard edits')}
           </button>
         )}
         {!valid && (
           <span className="set-error" role="alert">
-            Check model endpoints, IDs and budget limits.
+            {tr('Check model endpoints, IDs and budget limits.')}
           </span>
         )}
         {test && (
           <span className="record-meta" role="status">
-            {test}
+            {tr(test[0], tr(String(test[1])))}
           </span>
         )}
       </div>
@@ -220,10 +222,11 @@ function SettingsForm({ config }: { config: Config }) {
   )
 }
 function AccessAndBackup() {
+  const { tr } = useLanguage()
   const { api, write, busy, report } = useWorkspace()
   const { grants, offers } = useRead('access.list', {}) ?? { grants: [], offers: [] }
   const [offer, choose] = useState<Offer>(),
-    [result, setResult] = useState('')
+    [result, setResult] = useState<Message>()
   const [inspection, setInspection] = useState<ServiceMethods['backup.inspect'][1]>()
   async function inspect() {
     const { files } = await api.call('file.pick', { purpose: 'backup' })
@@ -233,11 +236,11 @@ function AccessAndBackup() {
     <>
       <section className="set-section">
         <div className="set-intro">
-          <h2>External Agent access</h2>
+          <h2>{tr('External Agent access')}</h2>
         </div>
         <div className="set-body">
           {!offers.length && !grants.length && (
-            <p className="usage">No active task has requested read-only access.</p>
+            <p className="usage">{tr('No active task has requested read-only access.')}</p>
           )}
           {offers
             .filter((o) => !grants.some((g) => g.offer_id === o.offer_id && g.status === 'active'))
@@ -246,7 +249,7 @@ function AccessAndBackup() {
                 <Icon name="shield" size={17} />
                 <strong className="grow">{o.purpose}</strong>
                 <button className="ghost-btn" onClick={() => choose(o)}>
-                  Review access
+                  {tr('Review access')}
                 </button>
               </div>
             ))}
@@ -257,13 +260,13 @@ function AccessAndBackup() {
                 <strong className="target-material">{g.endpoint}</strong>
                 <small>{g.source_versions.join(', ')}</small>
               </div>
-              <span className={`tag ${g.status === 'active' ? 'ok' : ''}`}>{g.status}</span>
+              <span className={`tag ${g.status === 'active' ? 'ok' : ''}`}>{tr(g.status)}</span>
               {g.status === 'active' && (
                 <button
                   className="ghost-btn"
                   onClick={() => void write('access.revoke', { grant_id: g.grant_id }).catch(report)}
                 >
-                  Revoke access
+                  {tr('Revoke access')}
                 </button>
               )}
             </div>
@@ -272,8 +275,8 @@ function AccessAndBackup() {
       </section>
       <section className="set-section">
         <div className="set-intro">
-          <h2>Backup and restore</h2>
-          <p>Verify the material manifest before restoring a workspace.</p>
+          <h2>{tr('Backup and restore')}</h2>
+          <p>{tr('Verify the material manifest before restoring a workspace.')}</p>
         </div>
         <div className="set-body">
           <div className="set-controls">
@@ -282,30 +285,30 @@ function AccessAndBackup() {
               disabled={busy}
               onClick={() =>
                 void write('backup.create', {})
-                  .then((r) => setResult(r.saved ? 'Saved ' + r.name : 'Backup cancelled.'))
+                  .then((r) => setResult(r.saved ? ['Saved {0}', r.name] : ['Backup cancelled.']))
                   .catch(report)
               }
             >
-              Create backup
+              {tr('Create backup')}
             </button>
             <button className="ghost-btn" disabled={busy} onClick={() => void inspect().catch(report)}>
-              Inspect backup
+              {tr('Inspect backup')}
             </button>
           </div>
           {result && (
             <p className="record-meta" role="status">
-              {result}
+              {tr(...result)}
             </p>
           )}
         </div>
       </section>
       {offer && (
-        <Dialog title="Grant read-only access?" onClose={() => choose(undefined)}>
+        <Dialog title={tr('Grant read-only access?')} onClose={() => choose(undefined)}>
           <p>
             {offer.endpoint} · {offer.purpose}
           </p>
-          <p>Versions · {offer.source_versions.join(', ')}</p>
-          <p>{offer.estimated_usage} · Expires when this task ends.</p>
+          <p>{tr('Versions ·')}{' '}{offer.source_versions.join(', ')}</p>
+          <p>{offer.estimated_usage}{' '}{tr('· Expires when this task ends.')}</p>
           <button
             className="primary"
             onClick={() =>
@@ -314,17 +317,17 @@ function AccessAndBackup() {
                 .catch(report)
             }
           >
-            Grant read-only access
+            {tr('Grant read-only access')}
           </button>
         </Dialog>
       )}
       {inspection && (
-        <Dialog title="Review backup" onClose={() => setInspection(undefined)}>
+        <Dialog title={tr('Review backup')} onClose={() => setInspection(undefined)}>
           <p>{inspection.summary}</p>
           {inspection.issues.map((i) => (
             <p key={i}>{i}</p>
           ))}
-          <p>Restoring replaces the current workspace with the verified snapshot.</p>
+          <p>{tr('Restoring replaces the current workspace with the verified snapshot.')}</p>
           <button
             className="danger"
             disabled={!inspection.valid || busy}
@@ -336,7 +339,7 @@ function AccessAndBackup() {
                 .catch(report)
             }
           >
-            Restore verified backup
+            {tr('Restore verified backup')}
           </button>
         </Dialog>
       )}
@@ -344,6 +347,7 @@ function AccessAndBackup() {
   )
 }
 export function ServicesPage() {
+  const { tr } = useLanguage()
   const config = useRead('services.get', {})
   const { refresh } = useWorkspace()
   useEffect(() => {
@@ -354,9 +358,9 @@ export function ServicesPage() {
     <div className="page">
       <PageHead
         trace
-        title="Models & services"
+        title={tr('Models & services')}
         icon="settings"
-        sub="Model destinations, tools and workspace access"
+        sub={tr('Model destinations, tools and workspace access')}
       />
       <div className="page-body scroll settings">
         {config && <SettingsForm key={config.revision} config={config} />}

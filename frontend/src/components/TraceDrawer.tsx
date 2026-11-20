@@ -1,8 +1,9 @@
+import { count, useLanguage, type Translate } from '../i18n'
 import { useEffect, useState } from 'react'
 import { useStore } from '../data/store'
 import { SOURCE_NAMES, type Usage } from '../data/serviceSettings'
 import { Icon, Spinner } from './Icon'
-import { plural, scrollWithin } from './util'
+import { scrollWithin } from './util'
 import type { AgentRun, StepKind } from '../data/types'
 
 const KIND: Record<StepKind, { icon: string; label: string }> = {
@@ -13,11 +14,12 @@ const KIND: Record<StepKind, { icon: string; label: string }> = {
   stop: { icon: 'stop', label: 'Stop' },
 }
 
-function usageLabel(usage: Usage) {
-  return `${plural(usage.calls, 'model call')} · ${usage.tokens.toLocaleString()} tokens · ${(usage.ms / 1000).toFixed(1)} s · $${usage.cost.toFixed(4)}`
+function usageLabel(tr: Translate, usage: Usage) {
+  return tr('{0} · {1} tokens · {2} s · ${3}', count(tr, usage.calls, 'model call'), usage.tokens.toLocaleString(), (usage.ms / 1000).toFixed(1), usage.cost.toFixed(4))
 }
 
 function RunCard({ run, open, onToggle }: { run: AgentRun; open: boolean; onToggle: () => void }) {
+  const { tr } = useLanguage()
   const {state}=useStore()
   const tokens = run.steps.reduce((n, s) => n + (s.tokens ?? 0), 0)
   const ms = run.steps.reduce((n, s) => n + (s.ms ?? 0), 0)
@@ -27,10 +29,10 @@ function RunCard({ run, open, onToggle }: { run: AgentRun; open: boolean; onTogg
       <button className="run-head" onClick={onToggle} aria-expanded={open}>
         <Icon name={open ? 'chevronDown' : 'chevronRight'} size={14} />
         <span className="grow">
-          <small>{run.task}</small>
+          <small>{tr(run.task)}</small>
           <strong>{run.label}</strong>
         </span>
-        <span className={`run-chip ${run.status}`}>{run.limit ? 'Paused' : run.status === 'running' ? <><Spinner /> Running</> : run.status === 'partial' ? 'Partial' : run.status==='failed'?'Failed':run.status==='cancelled'?'Cancelled':'Done'}</span>
+        <span className={`run-chip ${run.status}`}>{run.limit ? tr('Paused') : run.status === 'running' ? <><Spinner />{' '}{tr('Running')}</> : run.status === 'partial' ? tr('Partial') : run.status==='failed'?tr('Failed'):run.status==='cancelled'?tr('Cancelled'):tr('Done')}</span>
       </button>
       {open && (
         <>
@@ -39,10 +41,10 @@ function RunCard({ run, open, onToggle }: { run: AgentRun; open: boolean; onTogg
               <li key={s.id} className={`step ${s.kind}`}>
                 <span className="step-icon"><Icon name={KIND[s.kind].icon} size={13} /></span>
                 <div>
-                  <small>{KIND[s.kind].label}</small>
-                  <strong>{s.title}</strong>
+                  <small>{tr(KIND[s.kind].label)}</small>
+                  <strong>{tr(s.title)}</strong>
                   {s.call && <code>{s.call}</code>}
-                  {s.detail && <p>{s.detail}</p>}
+                  {s.detail && <p>{tr(s.detail)}</p>}
                 </div>
               </li>
             ))}
@@ -50,13 +52,13 @@ function RunCard({ run, open, onToggle }: { run: AgentRun; open: boolean; onTogg
           <div className="run-foot">
             {run.summary && <p>{run.summary}</p>}
             {config && <>
-              <p>{config.model} · {config.destination}</p>
-              {config.sources.length > 0 && <p>Search sources: {config.sources.map((id) => SOURCE_NAMES[id]).join(', ')}</p>}
-              <p>Budget: {plural(config.budget.calls, 'call')} · {config.budget.tokens.toLocaleString()} tokens · {config.budget.minutes} min · ${config.budget.cost}</p>
+              <p>{config.model} · {tr(config.destination)}</p>
+              {config.sources.length > 0 && <p>{tr('Search sources:')}{' '}{config.sources.map((id) => SOURCE_NAMES[id]).join(', ')}</p>}
+              <p>{tr('Budget:')}{' '}{count(tr, config.budget.calls, 'call')} · {config.budget.tokens.toLocaleString()}{' '}{tr('tokens ·')}{' '}{config.budget.minutes}{' '}{tr('min · $')}{config.budget.cost}</p>
             </>}
-            {run.estimate && <p>Estimated (demo): {usageLabel(run.estimate)}</p>}
-            {run.usage ? <span>{state.mainline&&!state.mainline.demo?'Used':'Used (demo)'} · {usageLabel(run.usage)}</span>
-              : state.mainline?<span>{plural(run.steps.length,'step')} · Usage unavailable</span> : <span>{plural(run.steps.length, 'step')} · ~{tokens.toLocaleString()} tokens · {(ms / 1000).toFixed(1)} s <em>(mock)</em></span>}
+            {run.estimate && <p>{tr('Estimated (demo):')}{' '}{usageLabel(tr, run.estimate)}</p>}
+            {run.usage ? <span>{state.mainline&&!state.mainline.demo?tr('Used'):tr('Used (demo)')} · {usageLabel(tr, run.usage)}</span>
+              : state.mainline?<span>{count(tr, run.steps.length,'step')}{' '}{tr('· Usage unavailable')}</span> : <span>{count(tr, run.steps.length, 'step')} · ~{tokens.toLocaleString()}{' '}{tr('tokens ·')}{' '}{(ms / 1000).toFixed(1)}{' '}{tr('s')}{' '}<em>{tr('(mock)')}</em></span>}
           </div>
         </>
       )}
@@ -65,6 +67,7 @@ function RunCard({ run, open, onToggle }: { run: AgentRun; open: boolean; onTogg
 }
 
 export function TraceDrawer() {
+  const { tr } = useLanguage()
   const { state, act } = useStore()
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const { open, focus } = state.trace
@@ -80,17 +83,17 @@ export function TraceDrawer() {
   }, [open, focus])
 
   return (
-    <aside className={`drawer ${open ? 'open' : ''}`} aria-hidden={!open} aria-label="Agent trace">
+    <aside className={`drawer ${open ? 'open' : ''}`} aria-hidden={!open} aria-label={tr('Agent trace')}>
       <div className="drawer-head">
         <div>
-          <h2>Agent trace</h2>
-          <small>What the agent planned, called, saw and decided</small>
+          <h2>{tr('Agent trace')}</h2>
+          <small>{tr('What the agent planned, called, saw and decided')}</small>
         </div>
-        <button className="icon-btn" onClick={() => act.showTrace(false)} aria-label="Close trace"><Icon name="x" /></button>
+        <button className="icon-btn" onClick={() => act.showTrace(false)} aria-label={tr('Close trace')}><Icon name="x" /></button>
       </div>
       <div className="drawer-body scroll">
         {runIds.length === 0 && <p className="muted-text pad">{state.route.view === 'check'
-          ? 'No checks for this manuscript yet.' : 'No runs yet. Start a search, ask a question or run a comparison.'}</p>}
+          ? tr('No checks for this manuscript yet.') : tr('No runs yet. Start a search, ask a question or run a comparison.')}</p>}
         {runIds.map((id, i) => {
           const run = state.runs[id]
           const isOpen = collapsed[id] === undefined ? i === 0 || id === focus : !collapsed[id]

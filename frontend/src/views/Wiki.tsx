@@ -1,3 +1,4 @@
+import { count, useLanguage } from '../i18n'
 import { useId, useRef, useState } from 'react'
 import { useStore, wikiComparisonRows, wikiEvidenceAvailable } from '../data/store'
 import { DEMO_TOPIC, EVIDENCE, PAPERS } from '../data/fixtures'
@@ -5,7 +6,6 @@ import { reviewWikiProposal } from '../data/wiki'
 import { Icon, Spinner } from '../components/Icon'
 import { PageHead } from '../components/PageHead'
 import { SourceChip } from '../components/SourceChip'
-import { plural } from '../components/util'
 import type { EvidenceAnchor, WikiPage, WikiProposal, WikiRelation } from '../data/types'
 
 const REL_STATUS = {
@@ -22,19 +22,21 @@ function noteBelongsToPage(note: EvidenceAnchor, page: WikiPage) {
 }
 
 function PaperLink({ paperId }: { paperId: string }) {
+  const { tr } = useLanguage()
   const { state, act } = useStore()
   const page = state.wiki.pages.find((p) => p.paperId === paperId)
   const title = PAPERS[paperId].title
   if (page && page.id !== state.wiki.active) {
-    return <button className="link-btn" onClick={() => act.openWikiPage(page.id)} aria-label={'Open ' + title + ' Wiki page'}>{title}</button>
+    return <button className="link-btn" onClick={() => act.openWikiPage(page.id)} aria-label={tr('Open {0} Wiki page', title)}>{title}</button>
   }
   if (state.library.includes(paperId)) {
-    return <button className="link-btn" onClick={() => act.navigate({ view: 'library', paperId })} aria-label={'Open ' + title + ' in Library'}>{title}</button>
+    return <button className="link-btn" onClick={() => act.navigate({ view: 'library', paperId })} aria-label={tr('Open {0} in Library', title)}>{title}</button>
   }
   return <strong>{title}</strong>
 }
 
 function Relations({ relations, prefix, added }: { relations: WikiRelation[]; prefix: string; added: boolean }) {
+  const { tr } = useLanguage()
   const { state } = useStore()
   return (
     <ul className="relations">
@@ -46,12 +48,12 @@ function Relations({ relations, prefix, added }: { relations: WikiRelation[]; pr
             {added && <span className="gutter" aria-hidden="true">+</span>}
             <span className="rel">
               <PaperLink paperId={r.fromPaperId} />
-              <span className="rel-type">{r.type} <Icon name="arrowRight" size={12} /></span>
+              <span className="rel-type">{tr(r.type)} <Icon name="arrowRight" size={12} /></span>
               <PaperLink paperId={r.toPaperId} />
             </span>
             <span className="rel-src">{r.evidenceIds.map((id) => <SourceChip fullTitle key={id} evidenceId={id} anchor={prefix + '-' + r.id + '-' + id} />)}</span>
             <span className={'tag ' + (unavailable ? 'warn' : verification.tone)}>
-              {unavailable ? verification.label + ' · source unavailable' : verification.label}
+              {tr(verification.label)}{unavailable && tr(' · source unavailable')}
             </span>
           </li>
         )
@@ -63,22 +65,23 @@ function Relations({ relations, prefix, added }: { relations: WikiRelation[]; pr
 function PageItems({ page, prefix, added = false, showEmpty = false }: {
   page: WikiPage; prefix: string; added?: boolean; showEmpty?: boolean
 }) {
+  const { tr } = useLanguage()
   const { state } = useStore()
   return (
     <>
       {!!page.statements.length && <>
-        <h3>Statements</h3>
+        <h3>{tr('Statements')}</h3>
         <ul className="statements">
           {page.statements.map((st) => (
             <li key={st.id} className={added ? 'diff-add' : ''}>
               {added && <span className="gutter" aria-hidden="true">+</span>}
               <div className="grow">
                 <p>{st.excerpt && st.evidenceIds.some((id) => state.purgedPapers[EVIDENCE[id]?.paperId]?.clearExcerpts)
-                  ? 'Saved excerpt cleared' : st.text}</p>
+                  ? tr('Saved excerpt cleared') : st.text}</p>
                 <div className="stmt-meta">
                   {st.evidenceIds.map((id) => <SourceChip fullTitle key={id} evidenceId={id} anchor={prefix + '-' + st.id + '-' + id} />)}
-                  {st.evidenceIds.some((id) => !wikiEvidenceAvailable(state, id)) && <span className="tag warn">Historical · source unavailable</span>}
-                  <span className={'author' + (st.author === 'You' ? ' you' : '')}>{st.author}</span>
+                  {st.evidenceIds.some((id) => !wikiEvidenceAvailable(state, id)) && <span className="tag warn">{tr('Historical · source unavailable')}</span>}
+                  <span className={'author' + (st.author === 'You' ? ' you' : '')}>{tr(st.author)}</span>
                 </div>
               </div>
             </li>
@@ -87,14 +90,14 @@ function PageItems({ page, prefix, added = false, showEmpty = false }: {
       </>}
 
       {(page.relations.length > 0 || showEmpty) && <>
-        <h3>Relations</h3>
+        <h3>{tr('Relations')}</h3>
         {page.relations.length ? <Relations relations={page.relations} prefix={prefix} added={added} />
-          : <p className="muted-text">No relations yet.</p>}
+          : <p className="muted-text">{tr('No relations yet.')}</p>}
       </>}
 
       {page.questions.map((question) => (
         <section key={question.id}>
-          <h3>{question.kind === 'comparison-gap' ? 'Comparison limitation' : 'Open disagreement'}</h3>
+          <h3>{question.kind === 'comparison-gap' ? tr('Comparison limitation') : tr('Open disagreement')}</h3>
           <div className={'dispute' + (added ? ' diff-add-box' : '')}>
             <strong>{question.claim}</strong>
             <div className="sides">
@@ -114,6 +117,7 @@ function PageItems({ page, prefix, added = false, showEmpty = false }: {
 }
 
 function DraftPreview({ proposal }: { proposal: WikiProposal }) {
+  const { tr } = useLanguage()
   const { state, act } = useStore()
   const review = reviewWikiProposal(proposal, state.wiki.pages, (id) => wikiEvidenceAvailable(state, id))
   const additions = review.changes.reduce((n, change) => n + change.count, 0)
@@ -123,15 +127,15 @@ function DraftPreview({ proposal }: { proposal: WikiProposal }) {
       <div className="draft-banner wiki-draft-banner">
         <Icon name="eye" size={16} />
         <div className="grow">
-          <strong>Review Wiki draft</strong>
-          <p>{plural(additions, 'addition')}{review.unchanged > 0 && ' · ' + review.unchanged + ' already in the Wiki'}</p>
+          <strong>{tr('Review Wiki draft')}</strong>
+          <p>{count(tr, additions, 'addition')}{review.unchanged > 0 && tr(' · {0} already in the Wiki', review.unchanged)}</p>
         </div>
-        <button className="ghost-btn" onClick={act.discardWiki}>{additions ? 'Discard' : 'Close draft'}</button>
-        <button className="primary" disabled={!additions} onClick={act.acceptWiki}><Icon name="check" size={15} /> Accept into wiki</button>
+        <button className="ghost-btn" onClick={act.discardWiki}>{additions ? tr('Discard') : tr('Close draft')}</button>
+        <button className="primary" disabled={!additions} onClick={act.acceptWiki}><Icon name="check" size={15} />{' '}{tr('Accept into wiki')}</button>
       </div>
 
       <details className="wiki-review-details">
-        <summary>Selected materials · {plural(proposal.inputs.noteIds.length, 'note')}{proposal.inputs.comparisonEvidenceIds.length > 0 && ' · 1 comparison'}</summary>
+        <summary>{tr('Selected materials ·')}{' '}{count(tr, proposal.inputs.noteIds.length, 'note')}{proposal.inputs.comparisonEvidenceIds.length > 0 && tr(' · 1 comparison')}</summary>
         <div className="stmt-meta">
           {proposal.inputs.noteIds.map((id) => <SourceChip fullTitle key={id} evidenceId={id} anchor={'draft-input-' + id} />)}
           {proposal.inputs.comparisonEvidenceIds.length > 0 && <span className="tag wiki-comparison-label">{COMPARISON_TITLE}</span>}
@@ -141,29 +145,29 @@ function DraftPreview({ proposal }: { proposal: WikiProposal }) {
       {(review.blocked > 0 || missingSources.length > 0) && <div className="wiki-source-warning" role="status">
         <Icon name="alert" size={16} />
         <div>
-          <strong>Selected sources are unavailable</strong>
-          <p>{plural(review.blocked, 'proposed addition')} blocked.
-            {missingSources.some((id) => state.trash.some((paper) => paper.paperId === EVIDENCE[id].paperId)) && ' You can restore papers still in Trash from Library.'}</p>
+          <strong>{tr('Selected sources are unavailable')}</strong>
+          <p>{count(tr, review.blocked, 'proposed addition')}{' '}{tr('blocked.')}
+            {missingSources.some((id) => state.trash.some((paper) => paper.paperId === EVIDENCE[id].paperId)) && tr(' You can restore papers still in Trash from Library.')}</p>
           <div className="stmt-meta">{missingSources.map((id) => <SourceChip fullTitle key={id} evidenceId={id} anchor={'draft-missing-' + id} />)}</div>
         </div>
       </div>}
 
       {!review.changes.length && <div className="placeholder" role="status">
         <Icon name={review.blocked ? 'alert' : 'check'} size={22} />
-        <p>{review.blocked ? 'No additions can be accepted with the available sources.' : 'No new changes. These additions are already in the Wiki.'}</p>
+        <p>{review.blocked ? tr('No additions can be accepted with the available sources.') : tr('No new changes. These additions are already in the Wiki.')}</p>
       </div>}
 
       {review.changes.map(({ current, proposed }) => (
         <article key={proposed.id} className="wiki-page wiki-diff">
-          <p className="eyebrow">{current ? 'Update existing page' : 'New concept page'}</p>
+          <p className="eyebrow">{current ? tr('Update existing page') : tr('New concept page')}</p>
           <h2 className={current ? '' : 'diff-add-title'}>{proposed.title}</h2>
           {current ? (
             <details className="wiki-review-details">
-              <summary>Existing content · {plural(current.statements.length, 'statement')} · {plural(current.relations.length, 'relation')}</summary>
+              <summary>{tr('Existing content ·')}{' '}{count(tr, current.statements.length, 'statement')} · {count(tr, current.relations.length, 'relation')}</summary>
               <PageItems page={current} prefix={'before-' + current.id} />
             </details>
           ) : <p className="wiki-summary">{proposed.summary}</p>}
-          <p className="wiki-add-label">Proposed additions</p>
+          <p className="wiki-add-label">{tr('Proposed additions')}</p>
           <PageItems page={proposed} prefix={'after-' + proposed.id} added />
         </article>
       ))}
@@ -172,6 +176,7 @@ function DraftPreview({ proposal }: { proposal: WikiProposal }) {
 }
 
 export function Wiki() {
+  const { tr } = useLanguage()
   const { state, act } = useStore()
   const w = state.wiki
   const [selectedNotes, setSelectedNotes] = useState<string[]>([])
@@ -221,18 +226,18 @@ export function Wiki() {
 
   return (
     <div className="page">
-      <PageHead icon="wiki" title="Evidence wiki" sub="Choose source material and review the changes before adding them to the Wiki." trace>
+      <PageHead icon="wiki" title={tr('Evidence wiki')} sub={tr('Choose source material and review the changes before adding them to the Wiki.')} trace>
         {w.status === 'running'
-          ? <span className="status-line"><Spinner /> {lastStep?.title ?? 'Planning…'}</span>
+          ? <span className="status-line"><Spinner /> {lastStep?.title ?? tr('Planning…')}</span>
           : <button className="primary" disabled={locked || !canDraft} onClick={() => act.runWikiDraft(availableNotes, includeComparison)}>
-              <Icon name="wiki" size={15} /> Draft from selected materials
+              <Icon name="wiki" size={15} />{' '}{tr('Draft from selected materials')}
             </button>}
       </PageHead>
 
       <div className="page-body wiki-grid">
         <aside className="wiki-nav">
-          <nav aria-label="Wiki pages">
-            <h2 className="side-label">Wiki pages</h2>
+          <nav aria-label={tr('Wiki pages')}>
+            <h2 className="side-label">{tr('Wiki pages')}</h2>
             <div onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) closePages() }}
               onKeyDown={(e) => {
                 if (e.key !== 'Escape' || !pagesOpen) return
@@ -243,7 +248,7 @@ export function Wiki() {
               }}>
               <label className="field-search wiki-page-search">
                 <Icon name="search" size={15} />
-                <input type="search" aria-label="Search Wiki pages" aria-controls={resultsId} placeholder="Search Wiki pages…" value={pageQuery}
+                <input type="search" aria-label={tr('Search Wiki pages')} aria-controls={resultsId} placeholder={tr('Search Wiki pages…')} value={pageQuery}
                   onFocus={() => setPagesOpen(true)} onClick={() => setPagesOpen(true)}
                   onChange={(e) => { setPageQuery(e.target.value); setPagesOpen(true) }}
                   onKeyDown={(e) => {
@@ -260,12 +265,12 @@ export function Wiki() {
               <button ref={pagesToggle} className="side-more" aria-expanded={pagesOpen} aria-controls={resultsId}
                 onClick={() => { if (pagesOpen) closePages(); else setPagesOpen(true) }}>
                 <Icon name={pagesOpen ? 'chevronDown' : 'chevronRight'} size={13} />
-                {pagesOpen ? 'Show less' : 'Show more'}
+                {pagesOpen ? tr('Show less') : tr('Show more')}
               </button>
               <div id={resultsId} className={'wiki-page-results' + (pagesOpen ? ' open' : '')} aria-hidden={!pagesOpen}>
                 <div className="wiki-page-results-inner">
                   {pageTerms.length > 0 && <p className="nav-note muted-text wiki-search-result" role="status">
-                    {matchingPages.length ? plural(matchingPages.length, 'matching page') : 'No Wiki pages match.'}
+                    {matchingPages.length ? count(tr, matchingPages.length, 'matching page') : tr('No Wiki pages match.')}
                   </p>}
                   <ul className="wiki-page-list">
                     {otherPages.map((p) => (
@@ -273,7 +278,7 @@ export function Wiki() {
                         <button className="wiki-link" title={p.title} tabIndex={pagesOpen ? undefined : -1} onClick={() => selectPage(p.id)}>
                           <Icon name={p.paperId ? 'file' : 'wiki'} size={14} />
                           <span className="grow wiki-page-title">{p.title}</span>
-                          <small title={plural(p.statements.length, 'statement')}>{p.statements.length}</small>
+                          <small title={count(tr, p.statements.length, 'statement')}>{p.statements.length}</small>
                         </button>
                       </li>
                     ))}
@@ -285,7 +290,7 @@ export function Wiki() {
               <button className={'wiki-link' + (browsingUnfiled ? ' on' : '')} aria-current={browsingUnfiled ? 'page' : undefined}
                 onClick={() => act.openWikiPage(UNFILED_NOTES)}>
                 <Icon name="note" size={14} />
-                <span className="grow">Notes without a page</span>
+                <span className="grow">{tr('Notes without a page')}</span>
                 <small>{unfiledNotes.length}</small>
               </button>
             )}
@@ -293,19 +298,19 @@ export function Wiki() {
               <button className={'wiki-link draft' + (draftActive ? ' on' : '')}
                 aria-current={draftActive ? 'page' : undefined} onClick={() => act.openWikiPage('draft')}>
                 {w.status === 'running' ? <Spinner /> : <Icon name="plus" size={14} />}
-                <span className="grow">Agent draft</span>
-                <span className="tag accent">{w.status === 'running' ? 'Preparing' : 'Review'}</span>
+                <span className="grow">{tr('Agent draft')}</span>
+                <span className="tag accent">{w.status === 'running' ? tr('Preparing') : tr('Review')}</span>
               </button>
             )}
           </nav>
 
-          <section className="wiki-materials" aria-label="Draft materials">
-            <h2 className="side-label">Draft materials</h2>
-            <p className="wiki-selection-note">{plural(selected.length, 'note')} selected{selectionIncludesComparison && ' · 1 comparison'}{hiddenSelections > 0 && ' · ' + hiddenSelections + ' elsewhere'}</p>
-            <h3 className="side-label">Saved notes</h3>
-            {notes.length === 0 ? <p className="nav-note muted-text">Save a source as a note in{' '}
-              {state.topics.some((topic) => topic.id === DEMO_TOPIC) ? <button className="link-btn" onClick={() => act.enterTopic(DEMO_TOPIC)}>Read &amp; ask</button> : 'Read & ask'}{' '}
-              to use it here.</p> : visibleNotes.length === 0 ? <p className="nav-note muted-text">{draftActive ? 'No saved notes in this draft.' : 'No saved notes for this page.'}</p> : visibleNotes.map((e) => {
+          <section className="wiki-materials" aria-label={tr('Draft materials')}>
+            <h2 className="side-label">{tr('Draft materials')}</h2>
+            <p className="wiki-selection-note">{count(tr, selected.length, 'note')}{' '}{tr('selected')}{selectionIncludesComparison && tr(' · 1 comparison')}{hiddenSelections > 0 && tr(' · {0} elsewhere', hiddenSelections)}</p>
+            <h3 className="side-label">{tr('Saved notes')}</h3>
+            {notes.length === 0 ? <p className="nav-note muted-text">{tr('Save a source as a note in')}{' '}
+              {state.topics.some((topic) => topic.id === DEMO_TOPIC) ? <button className="link-btn" onClick={() => act.enterTopic(DEMO_TOPIC)}>{tr('Read & ask')}</button> : tr('Read & ask')}{' '}
+              {tr('to use it here.')}</p> : visibleNotes.length === 0 ? <p className="nav-note muted-text">{draftActive ? tr('No saved notes in this draft.') : tr('No saved notes for this page.')}</p> : visibleNotes.map((e) => {
               const available = wikiEvidenceAvailable(state, e.id)
               return (
                 <div key={e.id} className={'note-item' + (selected.includes(e.id) ? ' selected' : '')}>
@@ -316,47 +321,47 @@ export function Wiki() {
                   </label>
                   <div className="stmt-meta">
                     <SourceChip fullTitle evidenceId={e.id} anchor={'saved-note-' + e.id} />
-                    {!available && <small>Historical note</small>}
+                    {!available && <small>{tr('Historical note')}</small>}
                   </div>
                 </div>
               )
             })}
             {state.comparison.status === 'done' && <>
-              <h3 className="side-label">Comparison</h3>
+              <h3 className="side-label">{tr('Comparison')}</h3>
               <div className={'note-item' + (selectionIncludesComparison ? ' selected' : '')}>
                 <label>
                   <input type="checkbox" checked={selectionIncludesComparison} disabled={locked || !canIncludeComparison}
                     onChange={(e) => setIncludeComparison(e.target.checked)} />
                   <span>{COMPARISON_TITLE}</span>
                 </label>
-                <small>{canIncludeComparison ? 'Use the sourced comparison rows' : 'Comparison sources unavailable'}</small>
+                <small>{canIncludeComparison ? tr('Use the sourced comparison rows') : tr('Comparison sources unavailable')}</small>
               </div>
             </>}
           </section>
         </aside>
 
-        <div className="wiki-main scroll" aria-label="Wiki content">
-          {draftActive && w.status === 'running' && <div className="placeholder" role="status"><Spinner /><p>Preparing a draft from your selection.</p></div>}
+        <div className="wiki-main scroll" aria-label={tr('Wiki content')}>
+          {draftActive && w.status === 'running' && <div className="placeholder" role="status"><Spinner /><p>{tr('Preparing a draft from your selection.')}</p></div>}
           {reviewReady && <DraftPreview proposal={reviewReady} />}
           {browsingUnfiled && <article className="wiki-page">
-            <h2>Notes without a page</h2>
-            <p className="wiki-summary">Select notes in the sidebar to use them in a Wiki draft.</p>
+            <h2>{tr('Notes without a page')}</h2>
+            <p className="wiki-summary">{tr('Select notes in the sidebar to use them in a Wiki draft.')}</p>
           </article>}
           {!draftActive && !browsingUnfiled && <>
-            {w.discarded && <div className="review-done" role="status"><Icon name="x" size={14} /> Draft closed.</div>}
+            {w.discarded && <div className="review-done" role="status"><Icon name="x" size={14} />{' '}{tr('Draft closed.')}</div>}
             <article className="wiki-page">
-              <p className="eyebrow">{page.kind} page</p>
+              <p className="eyebrow">{tr('{0} page', tr(page.kind))}</p>
               <h2>{page.title}</h2>
               {linkedPaper && <div className="wiki-paper-link">
                 {state.library.includes(linkedPaper.id) ? (
                   <button className="link-btn" onClick={() => act.navigate({ view: 'library', paperId: linkedPaper.id })}>
-                    Open in Library <Icon name="arrowRight" size={13} />
+                    {tr('Open in Library')}{' '}<Icon name="arrowRight" size={13} />
                   </button>
-                ) : <span>Source unavailable</span>}
+                ) : <span>{tr('Source unavailable')}</span>}
               </div>}
               <p className="wiki-summary">{page.summary}</p>
               <PageItems page={page} prefix={page.id} showEmpty />
-              <h3>History</h3>
+              <h3>{tr('History')}</h3>
               <ul className="revisions">
                 {page.revisions.map((r, i) => <li key={i}><span>{r.when}</span> <b>{r.who}</b> {r.what}</li>)}
               </ul>

@@ -1,3 +1,4 @@
+import { useLanguage } from '../i18n'
 import { useId, useState } from 'react'
 import { useStore } from '../data/store'
 import { addUsage, emptyUsage, enabledSources, modelErrors, SOURCE_NAMES } from '../data/serviceSettings'
@@ -22,6 +23,7 @@ function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
 }
 
 function BudgetInput({ field, value, onCommit }: { field: typeof BUDGET[number]; value: number; onCommit: (value: number) => void }) {
+  const { tr } = useLanguage()
   const [draft, setDraft] = useState<string | null>(null)
   const [error, setError] = useState(false)
   const id = useId()
@@ -43,8 +45,8 @@ function BudgetInput({ field, value, onCommit }: { field: typeof BUDGET[number];
 
   return (
     <div className="budget">
-      <label htmlFor={id}>{field.label}</label>
-      <input id={id} aria-label={field.label + ' ' + field.unit}
+      <label htmlFor={id}>{tr(field.label)}</label>
+      <input id={id} aria-label={tr(field.label) + ' ' + tr(field.unit)}
         inputMode={field.integer ? 'numeric' : 'decimal'} value={draft ?? value}
         aria-invalid={error} aria-describedby={error ? id + '-error' : undefined}
         onChange={(e) => { setDraft(e.target.value); setError(false) }}
@@ -52,15 +54,16 @@ function BudgetInput({ field, value, onCommit }: { field: typeof BUDGET[number];
           if (e.key === 'Enter') commit()
           if (e.key === 'Escape') { setDraft(null); setError(false) }
         }} />
-      <small>{field.unit}</small>
+      <small>{tr(field.unit)}</small>
       {error && <small className="set-error" id={id + '-error'} role="alert">
-        {field.integer ? 'Enter a whole number of 0 or more.' : 'Enter a number of 0 or more.'} Using {value}.
+        {field.integer ? tr('Enter a whole number of 0 or more.') : tr('Enter a number of 0 or more.')}{' '}{tr('Using')}{' '}{value}.
       </small>}
     </div>
   )
 }
 
 function ExternalAccess() {
+  const { tr } = useLanguage()
   const { state, act } = useStore()
   const [selected, setSelected] = useState('')
   const grant = state.externalGrant
@@ -71,31 +74,32 @@ function ExternalAccess() {
 
   return (
     <>
-      <div className="field-chips"><span className="tag">Demo research helper</span><span className="tag quiet">Simulated · read only</span></div>
+      <div className="field-chips"><span className="tag">{tr('Demo research helper')}</span><span className="tag quiet">{tr('Simulated · read only')}</span></div>
       {!grant && (eligible.length > 0 ? (
         <label className="set-field">
-          <span>Running task</span>
+          <span>{tr('Running task')}</span>
           <select className="lib-select" value={run?.id ?? ''} onChange={(e) => setSelected(e.target.value)}>
-            <option value="">Choose a task…</option>
+            <option value="">{tr('Choose a task…')}</option>
             {eligible.map((item) => <option key={item.id} value={item.id}>{item.task} · {item.label}</option>)}
           </select>
         </label>
-      ) : <p className="fine">Start a task with papers in scope to try read-only access.</p>)}
+      ) : <p className="fine">{tr('Start a task with papers in scope to try read-only access.')}</p>)}
       {run && <>
         {grant && <p className="dialog-text">{run.task} · {run.label}</p>}
-        <p className="dialog-text">The helper can suggest what to review using the titles of these papers.</p>
+        <p className="dialog-text">{tr('The helper can suggest what to review using the titles of these papers.')}</p>
         <ul className="dialog-list">{paperIds?.map((id) => <li key={id}>{PAPERS[id].title}</li>)}</ul>
-        <p className="fine">Access expires when the task ends. This demo sends nothing outside the app.</p>
+        <p className="fine">{tr('Access expires when the task ends. This demo sends nothing outside the app.')}</p>
         {grant ? <div className="set-controls">
-          <span role="status" className="tag accent">{grant.status === 'pending' ? 'Waiting for simulated reply' : 'Simulated reply in Agent trace'}</span>
-          <button className="ghost-btn sm" onClick={() => act.revokeExternal()}>Revoke access</button>
-        </div> : <div className="set-controls"><button className="ghost-btn sm accent" onClick={() => act.grantExternal(run.id)}>Grant read-only access</button></div>}
+          <span role="status" className="tag accent">{grant.status === 'pending' ? tr('Waiting for simulated reply') : tr('Simulated reply in Agent trace')}</span>
+          <button className="ghost-btn sm" onClick={() => act.revokeExternal()}>{tr('Revoke access')}</button>
+        </div> : <div className="set-controls"><button className="ghost-btn sm accent" onClick={() => act.grantExternal(run.id)}>{tr('Grant read-only access')}</button></div>}
       </>}
     </>
   )
 }
 
 export function Settings() {
+  const { tr } = useLanguage()
   const { state, act } = useStore()
   const s = state.settings
   const provider = s.model
@@ -108,62 +112,62 @@ export function Settings() {
 
   return (
     <div className="page">
-      <PageHead icon="settings" title="Models & services" sub="Configure the model, search sources and limits for new demo tasks." trace />
+      <PageHead icon="settings" title={tr('Models & services')} sub={tr('Configure the model, search sources and limits for new demo tasks.')} trace />
       <div className="page-body scroll settings">
         <section className="set-section">
           <div className="set-intro">
-            <h2>Model</h2>
-            <p>Tasks keep the model and destination selected at launch. The demo uses scripted responses.</p>
+            <h2>{tr('Model')}</h2>
+            <p>{tr('Tasks keep the model and destination selected at launch. The demo uses scripted responses.')}</p>
           </div>
           <div className="set-body">
-            <div className="model-list" role="radiogroup" aria-label="Model provider">
+            <div className="model-list" role="radiogroup" aria-label={tr('Model provider')}>
               {MODEL_OPTIONS.map((m) => (
                 <label key={m.id} className={'model-card' + (provider === m.id ? ' on' : '')}>
                   <input type="radio" name="provider" checked={provider === m.id} onChange={() => act.updateSettings({ model: m.id })} />
                   <span className="radio" aria-hidden="true" />
-                  <span className="grow"><strong>{m.name}</strong><small>{m.note}</small></span>
-                  <span className={'tag' + (m.id === 'local' ? ' ok' : '')}>{m.where}</span>
+                  <span className="grow"><strong>{tr(m.name)}</strong><small>{tr(m.note)}</small></span>
+                  <span className={'tag' + (m.id === 'local' ? ' ok' : '')}>{tr(m.where)}</span>
                 </label>
               ))}
             </div>
 
             <div className="set-model-fields">
               {provider === 'compatible' && <label className="set-field">
-                <span>Endpoint base URL</span>
-                <input aria-label="Endpoint base URL" inputMode="url" autoComplete="off" placeholder="https://example.org/v1" value={config.endpoint}
+                <span>{tr('Endpoint base URL')}</span>
+                <input aria-label={tr('Endpoint base URL')} inputMode="url" autoComplete="off" placeholder="https://example.org/v1" value={config.endpoint}
                   aria-invalid={!!errors.endpoint} aria-describedby={errors.endpoint ? 'model-endpoint-error' : undefined}
                   onChange={(e) => act.configureModel(provider, { endpoint: e.target.value })} />
-                {errors.endpoint && <small className="set-error" id="model-endpoint-error">{errors.endpoint}</small>}
+                {errors.endpoint && <small className="set-error" id="model-endpoint-error">{tr(errors.endpoint)}</small>}
               </label>}
               <label className="set-field">
-                <span>Model ID</span>
-                <input aria-label="Model ID" autoComplete="off" placeholder={provider === 'local' ? 'Name from Ollama' : 'Provider model ID'} value={config.modelId}
+                <span>{tr('Model ID')}</span>
+                <input aria-label={tr('Model ID')} autoComplete="off" placeholder={provider === 'local' ? tr('Name from Ollama') : tr('Provider model ID')} value={config.modelId}
                   aria-invalid={!!errors.modelId} aria-describedby={errors.modelId ? 'model-id-error' : undefined}
                   onChange={(e) => act.configureModel(provider, { modelId: e.target.value })} />
-                {errors.modelId && <small className="set-error" id="model-id-error">{errors.modelId}</small>}
+                {errors.modelId && <small className="set-error" id="model-id-error">{tr(errors.modelId)}</small>}
               </label>
             </div>
 
             <div className="key-row">
               <Icon name="lock" size={15} />
               <div className="grow">
-                <strong>{provider === 'local' ? 'Local Ollama requires no API key' : 'Credentials unavailable in this demo'}</strong>
-                <p>{provider === 'local' ? 'Model availability requires a running Ollama service.' : 'The desktop app manages credentials in the system keychain.'}</p>
+                <strong>{provider === 'local' ? tr('Local Ollama requires no API key') : tr('Credentials unavailable in this demo')}</strong>
+                <p>{provider === 'local' ? tr('Model availability requires a running Ollama service.') : tr('The desktop app manages credentials in the system keychain.')}</p>
               </div>
-              <button className="ghost-btn sm" disabled={!ready} onClick={() => act.testModel(provider)}>Test connection</button>
+              <button className="ghost-btn sm" disabled={!ready} onClick={() => act.testModel(provider)}>{tr('Test connection')}</button>
             </div>
             <p className="test-result" role="status"><Icon name="alert" size={14} /> {
-              !ready ? 'Complete the model configuration to simulate a test.'
-                : s.tested[provider] ? 'Configuration passed validation. No request was sent. Connectivity and model capabilities are unverified.'
-                  : 'The connection test checks configuration only in this demo.'
+              !ready ? tr('Complete the model configuration to simulate a test.')
+                : s.tested[provider] ? tr('Configuration passed validation. No request was sent. Connectivity and model capabilities are unverified.')
+                  : tr('The connection test checks configuration only in this demo.')
             }</p>
           </div>
         </section>
 
         <section className="set-section">
           <div className="set-intro">
-            <h2>Task budget</h2>
-            <p>Limits apply to new demo tasks. Zero allows no usage for that item.</p>
+            <h2>{tr('Task budget')}</h2>
+            <p>{tr('Limits apply to new demo tasks. Zero allows no usage for that item.')}</p>
           </div>
           <div className="set-body">
             <div className="budget-grid">
@@ -173,47 +177,47 @@ export function Settings() {
               ))}
             </div>
             <label className="switch-row">
-              <Switch on={s.askBeyond} onChange={(v) => act.updateSettings({ askBeyond: v })} label="Ask before going over a limit" />
-              <span><strong>Ask before going over a limit</strong><small>When off, the task stops and keeps the results so far.</small></span>
+              <Switch on={s.askBeyond} onChange={(v) => act.updateSettings({ askBeyond: v })} label={tr('Ask before going over a limit')} />
+              <span><strong>{tr('Ask before going over a limit')}</strong><small>{tr('When off, the task stops and keeps the results so far.')}</small></span>
             </label>
             <div className="usage">
-              <span>Workspace demo usage</span>{' '}
-              <b>{usage.calls}</b> model calls · <b>{usage.tokens.toLocaleString()}</b> tokens · {(usage.ms / 1000).toFixed(1)} s · ${usage.cost.toFixed(4)}{' '}
-              <em>(simulated)</em>
+              <span>{tr('Workspace demo usage')}</span>{' '}
+              <b>{usage.calls}</b>{' '}{tr('model calls ·')}{' '}<b>{usage.tokens.toLocaleString()}</b>{' '}{tr('tokens ·')}{' '}{(usage.ms / 1000).toFixed(1)}{' '}{tr('s · $')}{usage.cost.toFixed(4)}{' '}
+              <em>{tr('(simulated)')}</em>
             </div>
           </div>
         </section>
 
         <section className="set-section">
           <div className="set-intro">
-            <h2>Literature search</h2>
-            <p>Source changes apply to new searches. Earlier results remain available.</p>
+            <h2>{tr('Literature search')}</h2>
+            <p>{tr('Source changes apply to new searches. Earlier results remain available.')}</p>
           </div>
           <div className="set-body">
-            {searchSources.length === 0 && <p className="test-result" role="status"><Icon name="alert" size={14} /> Enable a source to run a new search.</p>}
+            {searchSources.length === 0 && <p className="test-result" role="status"><Icon name="alert" size={14} />{' '}{tr('Enable a source to run a new search.')}</p>}
             {SEARCH_SOURCES.map((src) => (
               <div key={src.id} className="source-row">
-                <Switch on={s.sources[src.id]} onChange={(v) => act.updateSettings({ sources: { ...s.sources, [src.id]: v } })} label={'Use ' + src.name} />
+                <Switch on={s.sources[src.id]} onChange={(v) => act.updateSettings({ sources: { ...s.sources, [src.id]: v } })} label={tr('Use {0}', src.name)} />
                 <div className="grow">
                   <strong>{src.name}</strong>
-                  <small>{src.note}</small>
-                  <div className="field-chips">{src.fields.map((f) => <span key={f} className="tag">{f}</span>)}</div>
+                  <small>{tr(src.note)}</small>
+                  <div className="field-chips">{src.fields.map((f) => <span key={f} className="tag">{tr(f)}</span>)}</div>
                 </div>
-                <span className="tag quiet">{s.sources[src.id] ? 'Enabled for new searches' : 'Off'}</span>
+                <span className="tag quiet">{s.sources[src.id] ? tr('Enabled for new searches') : tr('Off')}</span>
               </div>
             ))}
           </div>
         </section>
 
         <section className="set-section">
-          <div className="set-intro"><h2>PDF tools</h2><p>Parsers extract text. The viewer opens the original PDF.</p></div>
+          <div className="set-intro"><h2>{tr('PDF tools')}</h2><p>{tr('Parsers extract text. The viewer opens the original PDF.')}</p></div>
           <div className="set-body">
             {PARSERS.map((p) => (
               <div key={p.name} className="source-row">
                 <Icon name="file" size={16} />
-                <div className="grow"><strong>{p.name}</strong><small>{p.role}</small></div>
-                <span className="tag">{p.where}</span>
-                <span className="tag warn">{p.status}</span>
+                <div className="grow"><strong>{p.name}</strong><small>{tr(p.role)}</small></div>
+                <span className="tag">{tr(p.where)}</span>
+                <span className="tag warn">{tr(p.status)}</span>
               </div>
             ))}
           </div>
@@ -221,27 +225,27 @@ export function Settings() {
 
         <section className="set-section">
           <div className="set-intro">
-            <h2>Data destinations</h2>
-            <p>These are the planned destinations for real tasks. Demo runs send no network requests.</p>
+            <h2>{tr('Data destinations')}</h2>
+            <p>{tr('These are the planned destinations for real tasks. Demo runs send no network requests.')}</p>
           </div>
           <div className="set-body">
             <table className="flow-table">
-              <thead><tr><th>Service</th><th>Destination</th><th>Task data</th></tr></thead>
+              <thead><tr><th>{tr('Service')}</th><th>{tr('Destination')}</th><th>{tr('Task data')}</th></tr></thead>
               <tbody>
-                <tr><td>Model inference</td><td>{provider === 'compatible' ? (errors.endpoint ? 'Endpoint pending' : config.endpoint.trim()) : provider === 'local' ? 'On this device' : model.name}</td>
-                  <td>Question and selected material, such as relevant passages or draft sentences</td></tr>
-                {provider !== 'local' && <tr><td>Model authentication</td><td>Configured model endpoint</td><td>The desktop host attaches any stored credential to authenticate the request.</td></tr>}
-                <tr><td>Literature search</td><td>{searchSources.map((id) => SOURCE_NAMES[id]).join(', ') || 'Disabled'}</td>
-                  <td>{searchSources.length ? 'Search queries and filters' : 'No search data'}</td></tr>
-                <tr><td>External agents</td><td>{state.externalGrant ? 'Demo research helper (simulated)' : 'No active grant'}</td>
-                  <td>{state.externalGrant ? 'Paper titles for the authorized task' : 'No task data'}</td></tr>
+                <tr><td>{tr('Model inference')}</td><td>{provider === 'compatible' ? (errors.endpoint ? tr('Endpoint pending') : config.endpoint.trim()) : provider === 'local' ? tr('On this device') : model.name}</td>
+                  <td>{tr('Question and selected material, such as relevant passages or draft sentences')}</td></tr>
+                {provider !== 'local' && <tr><td>{tr('Model authentication')}</td><td>{tr('Configured model endpoint')}</td><td>{tr('The desktop host attaches any stored credential to authenticate the request.')}</td></tr>}
+                <tr><td>{tr('Literature search')}</td><td>{searchSources.map((id) => SOURCE_NAMES[id]).join(', ') || tr('Disabled')}</td>
+                  <td>{searchSources.length ? tr('Search queries and filters') : tr('No search data')}</td></tr>
+                <tr><td>{tr('External agents')}</td><td>{state.externalGrant ? tr('Demo research helper (simulated)') : tr('No active grant')}</td>
+                  <td>{state.externalGrant ? tr('Paper titles for the authorized task') : tr('No task data')}</td></tr>
               </tbody>
             </table>
           </div>
         </section>
 
         <section className="set-section">
-          <div className="set-intro"><h2>External agents</h2><p>Preview a revocable grant for one running task.</p></div>
+          <div className="set-intro"><h2>{tr('External agents')}</h2><p>{tr('Preview a revocable grant for one running task.')}</p></div>
           <div className="set-body"><ExternalAccess /></div>
         </section>
       </div>

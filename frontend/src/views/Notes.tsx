@@ -1,3 +1,4 @@
+import { useLanguage } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Dialog } from '../components/PageHead'
 import { Disclosure } from '../components/Disclosure'
@@ -6,6 +7,7 @@ import type { Located, Note } from '../api/library'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 
 export function EvidenceLink({ id }: { id: string }) {
+  const { tr } = useLanguage()
   const { api, report } = useWorkspace()
   const [item, setItem] = useState<Located>()
   const p = item?.source.passages.find((p) => p.passage_id === item.passage_id)
@@ -18,13 +20,13 @@ export function EvidenceLink({ id }: { id: string }) {
         className="src-btn"
         onClick={() => void api.call('evidence.open', { anchor_id: id }).then(setItem).catch(report)}
       >
-        <Icon name="quote" size={13} /> View source
+        <Icon name="quote" size={13} />{' '}{tr('View source')}
       </button>
       {item && (
-        <Dialog title="Source evidence" onClose={() => setItem(undefined)}>
+        <Dialog title={tr('Source evidence')} onClose={() => setItem(undefined)}>
           <p className="record-meta">
-            {item.source.source_version_id} · {item.read_scope.replace('_', ' ')} · {p?.section}
-            {p?.page ? ' · p. ' + p.page : ''}
+            {item.source.source_version_id} · {tr(item.read_scope.replace('_', ' '))} · {p?.section}
+            {p?.page ? tr(' · p. {0}', p.page) : ''}
           </p>
           <blockquote className="evidence-excerpt">{item.quote}</blockquote>
           <p>{p?.text}</p>
@@ -38,7 +40,7 @@ export function EvidenceLink({ id }: { id: string }) {
                   .catch(report)
               }
             >
-              Open original page
+              {tr('Open original page')}
             </button>
           ) : null}
         </Dialog>
@@ -47,6 +49,7 @@ export function EvidenceLink({ id }: { id: string }) {
   )
 }
 function Editor({ topic, note, close }: { topic: string; note?: Note; close: () => void }) {
+  const { tr } = useLanguage()
   const { write, report } = useWorkspace()
   const [text, setText] = useState(note?.text ?? ''),
     [anchors, setAnchors] = useState(note?.anchor_ids ?? [])
@@ -93,10 +96,10 @@ function Editor({ topic, note, close }: { topic: string; note?: Note; close: () 
   }, [text, anchors, report])
   const done = () => void save().then(close).catch(report)
   return (
-    <Dialog title="Research note" onClose={done}>
+    <Dialog title={tr('Research note')} onClose={done}>
       <textarea
         className="text-field"
-        aria-label="Note text"
+        aria-label={tr('Note text')}
         rows={6}
         value={text}
         onChange={(e) => {
@@ -110,7 +113,7 @@ function Editor({ topic, note, close }: { topic: string; note?: Note; close: () 
         ))}
       </div>
       <label className="set-field">
-        Insert source anchor
+        {tr('Insert source anchor')}
         <input className="text-field" value={add} onChange={(e) => setAdd(e.target.value)} />
       </label>
       <button
@@ -121,14 +124,14 @@ function Editor({ topic, note, close }: { topic: string; note?: Note; close: () 
           setAdd('')
         }}
       >
-        Insert
+        {tr('Insert')}
       </button>
       {previous.current?.history.map((h) => (
         <Disclosure
           className="record-history"
           key={h.revision}
           icon="clock"
-          title={<span title={h.revision}>Revision · {h.revision.slice(0, 8)}</span>}
+          title={<span title={h.revision}>{tr('Revision ·')}{' '}{h.revision.slice(0, 8)}</span>}
         >
           <div className="history-entries">
             <p>{h.text}</p>
@@ -139,45 +142,46 @@ function Editor({ topic, note, close }: { topic: string; note?: Note; close: () 
                 setAnchors(h.anchor_ids)
               }}
             >
-              Restore this version
+              {tr('Restore this version')}
             </button>
           </div>
         </Disclosure>
       ))}
       <div className="dialog-actions">
         <small className="record-meta" role="status">
-          {status}
+          {tr(status)}
         </small>
         <button className="primary" onClick={done}>
-          Done
+          {tr('Done')}
         </button>
       </div>
     </Dialog>
   )
 }
 export function Notes({ topic }: { topic: string }) {
+  const { tr } = useLanguage()
   const result = useRead('note.list', { topic_id: topic }, !!topic)
   const [edit, setEdit] = useState<Note | 'new'>(),
     [query, search] = useState('')
   return (
     <section className="card lib-detail">
-      <h2>Research notes</h2>
+      <h2>{tr('Research notes')}</h2>
       {!topic ? (
-        <p>Select a working topic to open its notes.</p>
+        <p>{tr('Select a working topic to open its notes.')}</p>
       ) : (
         <>
           <div className="lib-tools">
             <label className="field-search">
               <Icon name="search" size={16} />
               <input
-                aria-label="Search notes"
-                placeholder="Search text, session or source"
+                aria-label={tr('Search notes')}
+                placeholder={tr('Search text, session or source')}
                 value={query}
                 onChange={(e) => search(e.target.value)}
               />
             </label>
             <button className="primary" onClick={() => setEdit('new')}>
-              <Icon name="plus" size={14} /> New note
+              <Icon name="plus" size={14} />{' '}{tr('New note')}
             </button>
           </div>
           {result?.items
@@ -195,7 +199,7 @@ export function Notes({ topic }: { topic: string }) {
                     <EvidenceLink key={a} id={a} />
                   ))}
                   <button className="link-btn" onClick={() => setEdit(n)}>
-                    Edit note
+                    {tr('Edit note')}
                   </button>
                 </div>
               </article>
