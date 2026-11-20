@@ -1,3 +1,4 @@
+import { useLanguage } from '../i18n'
 import type { TaskInput } from '../api/contract'
 import type { Budget } from '../api/services'
 export function ScopeDetails({
@@ -5,6 +6,7 @@ export function ScopeDetails({
 }: {
   scope: { input: TaskInput; budget?: Budget; source_versions?: string[] }
 }) {
+  const { tr } = useLanguage()
   const { input, budget } = scope
   const versions =
     scope.source_versions ??
@@ -21,11 +23,11 @@ export function ScopeDetails({
         : []
   return (
     <div className="scope-detail">
-      {versions.length > 0 && <p>Source versions · {versions.join(', ')}</p>}
-      {chosen.length > 0 && <p>Selected material · {chosen.join(', ')}</p>}
+      {versions.length > 0 && <p>{tr('Source versions ·')}{' '}{versions.join(', ')}</p>}
+      {chosen.length > 0 && <p>{tr('Selected material ·')}{' '}{chosen.join(', ')}</p>}
       {'sentence_ids' in input.input && (
         <p>
-          Manuscript {input.input.version_id} · {input.input.sentence_ids.length} selected sentences
+          {tr('Manuscript')}{' '}{input.input.version_id} · {input.input.sentence_ids.length}{' '}{tr('selected sentences')}
         </p>
       )}
       {'selection' in input.input && input.input.selection && (
@@ -33,7 +35,7 @@ export function ScopeDetails({
       )}
       {budget && (
         <small>
-          Limits · {budget.calls} calls · {budget.tokens.toLocaleString()} tokens · {budget.minutes} min · USD{' '}
+          {tr('Limits ·')}{' '}{budget.calls}{' '}{tr('calls ·')}{' '}{budget.tokens.toLocaleString()}{' '}{tr('tokens ·')}{' '}{budget.minutes}{' '}{tr('min · USD')}{' '}
           {budget.cost}
         </small>
       )}

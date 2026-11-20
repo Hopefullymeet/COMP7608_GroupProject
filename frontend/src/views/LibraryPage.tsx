@@ -1,3 +1,4 @@
+import { count, useLanguage } from '../i18n'
 import { useState } from 'react'
 import { PageHead, Dialog } from '../components/PageHead'
 import { Icon } from '../components/Icon'
@@ -7,6 +8,7 @@ import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { Notes } from './Notes'
 
 export function LibraryPage() {
+  const { tr } = useLanguage()
   const { state, act } = useStore()
   const { api, write, prepare, busy, report, demo } = useWorkspace()
   const catalog = useRead('library.catalog', {})
@@ -56,9 +58,9 @@ export function LibraryPage() {
   }
   return (
     <div className="page library-page">
-      <PageHead trace icon="library" title="Library" sub="Papers, versions and research notes">
+      <PageHead trace icon="library" title={tr('Library')} sub={tr('Papers, versions and research notes')}>
         <button className="primary" disabled={busy} onClick={() => void pick().catch(report)}>
-          <Icon name="plus" size={14} /> Import papers
+          <Icon name="plus" size={14} />{' '}{tr('Import papers')}
         </button>
       </PageHead>
       <div className="page-body scroll">
@@ -66,7 +68,7 @@ export function LibraryPage() {
           <div className="seg">
             {['Papers', 'Trash', 'Notes', 'Archived'].map((t) => (
               <button
-                key={t}
+                key=                {tr(t)}
                 className={t === tab ? 'on' : ''}
                 aria-pressed={t === tab}
                 onClick={() => {
@@ -75,17 +77,17 @@ export function LibraryPage() {
                   setFeedback('')
                 }}
               >
-                {t}
+                                {tr(t)}
               </button>
             ))}
           </div>
           <select
-            aria-label="Working topic"
+            aria-label={tr('Working topic')}
             className="lib-select"
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
           >
-            <option value="">Choose a topic</option>
+            <option value="">{tr('Choose a topic')}</option>
             {topics.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.title}
@@ -95,28 +97,28 @@ export function LibraryPage() {
         </div>
         {feedback && (
           <p className="review-done" role="status">
-            <Icon name="check" size={15} /> {feedback}
+            <Icon name="check" size={15} /> {tr(feedback)}
           </p>
         )}
         {tab === 'Notes' ? (
           <Notes key={topic} topic={topic} />
         ) : tab === 'Archived' ? (
           <section className="card result-card">
-            <h2>Archived topics and sessions</h2>
+            <h2>{tr('Archived topics and sessions')}</h2>
             {archived?.items.map((a) => (
               <div className="trash-row" key={a.id}>
                 <b className="grow">{a.title}</b>
-                <span className="tag">{a.kind}</span>
+                <span className="tag">{tr(a.kind)}</span>
                 <button
                   className="ghost-btn"
                   disabled={busy}
                   onClick={() => void write('workspace.unarchive', { id: a.id, kind: a.kind }).catch(report)}
                 >
-                  Restore
+                  {tr('Restore')}
                 </button>
               </div>
             ))}
-            {!archived?.items.length && <p>No archived items.</p>}
+            {!archived?.items.length && <p>{tr('No archived items.')}</p>}
           </section>
         ) : (
           <>
@@ -125,13 +127,13 @@ export function LibraryPage() {
                 <div key={r.review_id} className="review-banner">
                   <Icon name="alert" />
                   <div className="grow">
-                    <strong>Import needs your decision</strong>
+                    <strong>{tr('Import needs your decision')}</strong>
                     <p>
-                      {r.name} · {r.reason}
+                      {r.name} · {tr(r.reason)}
                     </p>
                   </div>
                   <button className="ghost-btn" onClick={() => setReview(r)}>
-                    Review import
+                    {tr('Review import')}
                   </button>
                 </div>
               ))}
@@ -139,8 +141,8 @@ export function LibraryPage() {
               <label className="field-search">
                 <Icon name="search" />
                 <input
-                  aria-label="Search library"
-                  placeholder="Search title, author, identifier or tag"
+                  aria-label={tr('Search library')}
+                  placeholder={tr('Search title, author, identifier or tag')}
                   value={query}
                   onChange={(e) => {
                     search(e.target.value)
@@ -149,23 +151,23 @@ export function LibraryPage() {
                 />
               </label>
               <select
-                aria-label="Topic membership"
+                aria-label={tr('Topic membership')}
                 value={membership}
                 onChange={(e) => filterMembership(e.target.value)}
               >
-                <option value="all">Any membership</option>
-                <option value="linked">In a topic</option>
-                <option value="unfiled">Unfiled</option>
+                <option value="all">{tr('Any membership')}</option>
+                <option value="linked">{tr('In a topic')}</option>
+                <option value="unfiled">{tr('Unfiled')}</option>
               </select>
               <select
-                aria-label="Reading scope"
+                aria-label={tr('Reading scope')}
                 value={availability}
                 onChange={(e) => filterScope(e.target.value)}
               >
-                <option value="">Any text availability</option>
-                <option value="full_text">Full text</option>
-                <option value="abstract">Abstract</option>
-                <option value="metadata">Metadata only</option>
+                <option value="">{tr('Any text availability')}</option>
+                <option value="full_text">{tr('Full text')}</option>
+                <option value="abstract">{tr('Abstract')}</option>
+                <option value="metadata">{tr('Metadata only')}</option>
               </select>
               {ids.length > 0 &&
                 (tab === 'Trash' ? (
@@ -179,15 +181,15 @@ export function LibraryPage() {
                           .catch(report)
                       }
                     >
-                      Restore
+                      {tr('Restore')}
                     </button>
                     <button className="danger-link" onClick={() => void preview(true).catch(report)}>
-                      Delete permanently…
+                      {tr('Delete permanently…')}
                     </button>
                   </>
                 ) : (
                   <button className="ghost-btn" onClick={() => void preview(false).catch(report)}>
-                    Move to trash…
+                    {tr('Move to trash…')}
                   </button>
                 ))}
             </div>
@@ -197,7 +199,7 @@ export function LibraryPage() {
                   <div className={'lib-row' + (p === paper ? ' on' : '')} key={p.paper_id}>
                     <input
                       type="checkbox"
-                      aria-label={'Select ' + p.title}
+                      aria-label={tr('Select {0}', p.title)}
                       checked={checked.includes(p.paper_id)}
                       onChange={(e) =>
                         choose(
@@ -211,15 +213,15 @@ export function LibraryPage() {
                       <strong>{p.title}</strong>
                       <small>{p.authors.join(', ') || p.identity}</small>
                       <span className="lib-chips">
-                        <span className="tag">{p.source_versions[0].available_scope.replace('_', ' ')}</span>
+                        <span className="tag">{tr(p.source_versions[0].available_scope.replace('_', ' '))}</span>
                         <span className="tag">
                           {p.topic_ids.length
-                            ? p.topic_ids.length + (p.topic_ids.length === 1 ? ' topic' : ' topics')
-                            : 'Unfiled'}
+                            ? count(tr, p.topic_ids.length, 'topic')
+                            : tr('Unfiled')}
                         </span>
                         {p.tags.map((t) => (
-                          <span className="tag" key={t}>
-                            #{t}
+                          <span className="tag" key=                {tr(t)}>
+                            #                {tr(t)}
                           </span>
                         ))}
                       </span>
@@ -227,11 +229,11 @@ export function LibraryPage() {
                   </div>
                 ))}
                 {!shown.length && (
-                  <p className="pad">{catalog ? 'No matching papers.' : 'Loading library…'}</p>
+                  <p className="pad">{catalog ? tr('No matching papers.') : tr('Loading library…')}</p>
                 )}
                 {shown.length > limit && (
                   <button className="link-btn lib-more" onClick={() => more(limit + 30)}>
-                    Show more papers
+                    {tr('Show more papers')}
                   </button>
                 )}
               </section>
@@ -239,10 +241,10 @@ export function LibraryPage() {
                 <aside className="card lib-detail">
                   <h2>{paper.title}</h2>
                   <p className="record-meta">{paper.identity}</p>
-                  <h3>Files and versions</h3>
+                  <h3>{tr('Files and versions')}</h3>
                   {paper.files.map((f) => (
                     <p key={f.source_version_id}>
-                      {f.name} · {f.role}{' '}
+                      {f.name} · {tr(f.role.replaceAll('_', ' '))}{' '}
                       <small title={f.source_version_id}>
                         {f.source_version_id.length > 12
                           ? f.source_version_id.slice(0, 8)
@@ -269,13 +271,13 @@ export function LibraryPage() {
                             })
                           }
                         >
-                          Open in reader
+                          {tr('Open in reader')}
                         </button>
                       )}
                       <button className="link-btn" onClick={() => void pick(paper.paper_id).catch(report)}>
-                        Add material version
+                        {tr('Add material version')}
                       </button>
-                      <h3>Topics</h3>
+                      <h3>{tr('Topics')}</h3>
                       {paper.topic_ids.map((id) => (
                         <button key={id} className="link-btn" onClick={() => act.openTopic(id, 'read')}>
                           {topics.find((t) => t.id === id)?.title ?? id}
@@ -287,22 +289,22 @@ export function LibraryPage() {
                           disabled={!topic || busy}
                           onClick={() => organize('link', topic)}
                         >
-                          Add to topic
+                          {tr('Add to topic')}
                         </button>
                         <button
                           className="ghost-btn sm"
                           disabled={!topic || busy}
                           onClick={() => organize('unlink', topic)}
                         >
-                          Remove from topic
+                          {tr('Remove from topic')}
                         </button>
                       </div>
-                      <h3>Tags</h3>
+                      <h3>{tr('Tags')}</h3>
                       <input
                         className="text-field"
-                        aria-label="Tag"
+                        aria-label={tr('Tag')}
                         value={tag}
-                        placeholder="Tag name"
+                        placeholder={tr('Tag name')}
                         onChange={(e) => setTag(e.target.value)}
                       />
                       <div className="lib-tools">
@@ -313,7 +315,7 @@ export function LibraryPage() {
                             disabled={!tag.trim() || busy}
                             onClick={() => organize(a, tag.trim())}
                           >
-                            {a === 'tag' ? 'Add tag' : 'Remove tag'}
+                            {a === 'tag' ? tr('Add tag') : tr('Remove tag')}
                           </button>
                         ))}
                       </div>
@@ -326,12 +328,12 @@ export function LibraryPage() {
         )}
       </div>
       {files && (
-        <Dialog title="Import papers" onClose={() => setFiles(undefined)}>
-          <p>{demo ? 'Sample material selected for the contract demo.' : 'Review the selected material.'}</p>
+        <Dialog title={tr('Import papers')} onClose={() => setFiles(undefined)}>
+          <p>{demo ? tr('Sample material selected for the contract demo.') : tr('Review the selected material.')}</p>
           {files.map((f) => (
             <p key={f.file_id}>{f.name}</p>
           ))}
-          <p>{topics.find((t) => t.id === topic)?.title ?? 'Personal library'}</p>
+          <p>{topics.find((t) => t.id === topic)?.title ?? tr('Personal library')}</p>
           <button
             className="primary"
             onClick={() => {
@@ -346,15 +348,15 @@ export function LibraryPage() {
               setFiles(undefined)
             }}
           >
-            Review import scope
+            {tr('Review import scope')}
           </button>
         </Dialog>
       )}
       {review && (
-        <Dialog title="Review a possible duplicate" onClose={() => setReview(undefined)}>
-          <p>Incoming · {review.name}</p>
-          <p>Existing · {catalog?.papers.find((p) => p.paper_id === review.paper_id)?.title ?? 'In trash'}</p>
-          <p>{review.reason}</p>
+        <Dialog title={tr('Review a possible duplicate')} onClose={() => setReview(undefined)}>
+          <p>{tr('Incoming ·')}{' '}{review.name}</p>
+          <p>{tr('Existing ·')}{' '}{catalog?.papers.find((p) => p.paper_id === review.paper_id)?.title ?? tr('In trash')}</p>
+          <p>{tr(review.reason)}</p>
           <div className="dialog-actions">
             {(['separate', 'link'] as const).map((decision) => (
               <button
@@ -370,7 +372,7 @@ export function LibraryPage() {
                     .catch(report)
                 }
               >
-                {decision === 'link' ? 'Link as another version' : 'Keep separate'}
+                {decision === 'link' ? tr('Link as another version') : tr('Keep separate')}
               </button>
             ))}
           </div>
@@ -378,7 +380,7 @@ export function LibraryPage() {
       )}
       {impact && (
         <Dialog
-          title={impact.purge ? 'Permanently delete selected papers?' : 'Move selected papers to trash?'}
+          title={impact.purge ? tr('Permanently delete selected papers?') : tr('Move selected papers to trash?')}
           onClose={() => setImpact(undefined)}
         >
           {rows
@@ -388,22 +390,21 @@ export function LibraryPage() {
                 <b>{p.title}</b>
               </p>
             ))}
-          <h3>Affected records</h3>
+          <h3>{tr('Affected records')}</h3>
           {impact.references.map((r, i) => (
             <p key={i}>
-              {r.kind} · {r.label}
+              {tr(r.kind)} · {r.label}
             </p>
           ))}
-          {!impact.references.length && <p>No linked records.</p>}
+          {!impact.references.length && <p>{tr('No linked records.')}</p>}
           {impact.purge && (
             <label className="check-row">
-              <input type="checkbox" checked={clear} onChange={(e) => setClear(e.target.checked)} /> Also
-              clear saved excerpts
+              <input type="checkbox" checked={clear} onChange={(e) => setClear(e.target.checked)} />{' '}{tr('Also clear saved excerpts')}
             </label>
           )}
           <div className="dialog-actions">
             <button className="ghost-btn" onClick={() => setImpact(undefined)}>
-              Cancel
+              {tr('Cancel')}
             </button>
             <button
               className="danger"
@@ -422,7 +423,7 @@ export function LibraryPage() {
                   .catch(report)
               }}
             >
-              {impact.purge ? 'Delete permanently' : 'Move to trash'}
+              {impact.purge ? tr('Delete permanently') : tr('Move to trash')}
             </button>
           </div>
         </Dialog>

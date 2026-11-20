@@ -1,3 +1,4 @@
+import { useLanguage } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Dialog } from '../components/PageHead'
 import { baseState, StoreContext, useStore } from './store'
@@ -127,6 +128,7 @@ export function MainlineProvider({
   const [readVersions, selectVersions] = useState<string[]>([])
   const [files, setFiles] = useState<Picked[]>([])
   const config = useRead('services.get', {})
+  const { tr } = useLanguage()
   const activity = useRead('workspace.activity', {})
   const selection = useRef<{ source_version_id: string; passage_id: string; quote: string }>()
   const { act: prototypeActions } = useStore()
@@ -797,7 +799,7 @@ export function MainlineProvider({
     })
   }
   function archive(kind: 'topic' | 'session', id: string) {
-    if (!window.confirm('Archive this ' + kind + '? You can restore it from Library.')) return
+    if (!window.confirm(tr(kind === 'topic' ? 'Archive this topic? You can restore it from Library.' : 'Archive this session? You can restore it from Library.'))) return
     void status(async () => {
       await workspace.write('workspace.archive', { kind, id })
       if (id === topic || id === session) goHome()
@@ -1020,56 +1022,56 @@ export function MainlineProvider({
       {activeTask.task && (
         <div className="mainline-task-actions">
           <button className="ghost-btn sm" disabled={activeTask.busy} onClick={activeTask.cancel}>
-            Cancel task
+            {tr('Cancel task')}
           </button>
           <button className="ghost-btn sm" onClick={activeTask.reconnect}>
-            Reconnect
+            {tr('Reconnect')}
           </button>
         </div>
       )}
       {confirmation?.confirmation && (
-        <Dialog title="Confirm data transfer" onClose={confirmation.dismiss}>
+        <Dialog title={tr('Confirm data transfer')} onClose={confirmation.dismiss}>
           <p className="dialog-text">
             {taskInput?.kind === 'reading_qa'
-              ? 'Review the destinations before asking.'
-              : 'Review the destinations before searching.'}
+              ? tr('Review the destinations before asking.')
+              : tr('Review the destinations before searching.')}
           </p>
           <ScopeDetails scope={confirmation.confirmation} />
           {confirmation.confirmation.transfers.map((transfer, index) => (
             <p className="dialog-text" key={index}>
-              <strong>{transfer.purpose}</strong>
+              <strong>{tr(transfer.purpose)}</strong>
               <br />
               {transfer.endpoint}
               <br />
-              {transfer.data_categories.join(', ')}
+              {transfer.data_categories.map((category) => tr(category)).join(', ')}
             </p>
           ))}
-          {confirmation.error && <p role="alert">{confirmation.error}</p>}
+          {confirmation.error && <p role="alert">{tr(confirmation.error)}</p>}
           <div className="dialog-actions">
             <button className="ghost-btn" disabled={confirmation.busy} onClick={confirmation.dismiss}>
-              Cancel
+              {tr('Cancel')}
             </button>
             <button className="primary" disabled={confirmation.busy} onClick={confirmation.start}>
-              Confirm and start
+              {tr('Confirm and start')}
             </button>
           </div>
         </Dialog>
       )}
       {!confirmation && notice && (
         <Dialog
-          title="Workspace notice"
+          title={tr('Workspace notice')}
           onClose={() => {
             setError('')
             dismiss(taskError)
           }}
         >
           <p className="dialog-text" role="status">
-            {notice}
+            {tr(notice)}
           </p>
           <div className="dialog-actions">
             {!ready && !initializing && (
               <button className="primary" onClick={() => void initialize()}>
-                Retry connection
+                {tr('Retry connection')}
               </button>
             )}
             {activeTask.connectionError && (
@@ -1080,7 +1082,7 @@ export function MainlineProvider({
                   activeTask.reconnect()
                 }}
               >
-                Reconnect
+                {tr('Reconnect')}
               </button>
             )}
             <button
@@ -1090,7 +1092,7 @@ export function MainlineProvider({
                 dismiss(taskError)
               }}
             >
-              Close
+              {tr('Close')}
             </button>
           </div>
         </Dialog>
@@ -1098,7 +1100,7 @@ export function MainlineProvider({
       {!ready && !initializing && !notice && (
         <div className="mainline-task-actions">
           <button className="ghost-btn" onClick={() => void initialize()}>
-            Retry connection
+            {tr('Retry connection')}
           </button>
         </div>
       )}

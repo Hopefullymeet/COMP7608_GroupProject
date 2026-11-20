@@ -1,3 +1,4 @@
+import { useLanguage } from './i18n'
 import type { ReactNode } from 'react'
 import { useStore } from './data/store'
 import { Sidebar } from './components/Sidebar'
@@ -12,6 +13,7 @@ import { Check } from './views/Check'
 import { Settings } from './views/Settings'
 
 export function App({ windowControls, pages, comparison }: { windowControls?: ReactNode; pages?: Partial<Record<'library'|'wiki'|'check'|'settings',ReactNode>>; comparison?:ReactNode }) {
+  const { tr } = useLanguage()
   const { state, act } = useStore()
   const r = state.route
   const waiting = state.runOrder.map((id) => state.runs[id]).find((run) => run.limit)
@@ -31,18 +33,18 @@ export function App({ windowControls, pages, comparison }: { windowControls?: Re
       </main>
       <TraceDrawer />
       <EvidencePopover />
-      {waiting ? <Dialog key={waiting.id} title="Task budget reached" onClose={() => act.resolveBudget(waiting.id, false)}>
-        <p className="dialog-text">{waiting.task} is paused. The next step would exceed the limit for {waiting.limit}.</p>
-        <p className="dialog-text">You can stop and keep the results so far, or allow this run to exceed its budget.</p>
+      {waiting ? <Dialog key={waiting.id} title={tr('Task budget reached')} onClose={() => act.resolveBudget(waiting.id, false)}>
+        <p className="dialog-text">{tr('{0} is paused. The next step would exceed the limit for {1}.', tr(waiting.task), waiting.limit?.split(', ').map((limit) => tr(limit)).join(', '))}</p>
+        <p className="dialog-text">{tr('You can stop and keep the results so far, or allow this run to exceed its budget.')}</p>
         <div className="dialog-actions">
-          <button className="ghost-btn" onClick={() => act.resolveBudget(waiting.id, false)}>Stop task</button>
-          <button className="primary" onClick={() => act.resolveBudget(waiting.id, true)}>Continue this run</button>
+          <button className="ghost-btn" onClick={() => act.resolveBudget(waiting.id, false)}>{tr('Stop task')}</button>
+          <button className="primary" onClick={() => act.resolveBudget(waiting.id, true)}>{tr('Continue this run')}</button>
         </div>
-      </Dialog> : state.settingsNotice && <Dialog title="Task setup needed" onClose={act.clearSettingsNotice}>
-        <p className="dialog-text">{state.settingsNotice}</p>
+      </Dialog> : state.settingsNotice && <Dialog title={tr('Task setup needed')} onClose={act.clearSettingsNotice}>
+        <p className="dialog-text">{tr(state.settingsNotice)}</p>
         <div className="dialog-actions">
-          <button className="ghost-btn" onClick={act.clearSettingsNotice}>Close</button>
-          <button className="primary" onClick={() => { act.clearSettingsNotice(); act.navigate({ view: 'settings' }) }}>Open Models &amp; services</button>
+          <button className="ghost-btn" onClick={act.clearSettingsNotice}>{tr('Close')}</button>
+          <button className="primary" onClick={() => { act.clearSettingsNotice(); act.navigate({ view: 'settings' }) }}>{tr('Open Models & services')}</button>
         </div>
       </Dialog>}
     </div>

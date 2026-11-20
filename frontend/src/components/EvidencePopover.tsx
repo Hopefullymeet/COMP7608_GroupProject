@@ -1,3 +1,4 @@
+import { useLanguage } from '../i18n'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { evidenceFor, paperFor, sourceStatus, useStore } from '../data/store'
 import { Icon } from './Icon'
@@ -6,6 +7,7 @@ import { scrollWithin } from './util'
 const W = 360
 
 export function EvidencePopover() {
+  const { tr } = useLanguage()
   const { state, act } = useStore()
   const active = state.activeEvidence
   const ref = useRef<HTMLDivElement>(null)
@@ -59,26 +61,26 @@ export function EvidencePopover() {
   const cleared = state.purgedPapers[paper.id]?.clearExcerpts
 
   return (
-    <div ref={ref} className="evidence" role="dialog" aria-label="Evidence"
+    <div ref={ref} className="evidence" role="dialog" aria-label={tr('Evidence')}
       style={{ width: W, top: pos?.top ?? -9999, left: pos?.left ?? -9999, visibility: pos ? 'visible' : 'hidden' }}>
       <div className="ev-head">
-        <span>{state.route.view === 'wiki' ? paper.title : paper.short} · {passage?.section}{(passage?.page??0)>0 && <> · PDF p. {passage?.page}</>}</span>
-        <button className="icon-btn sm" onClick={() => act.closeEvidence()} aria-label="Close"><Icon name="x" size={14} /></button>
+        <span>{state.route.view === 'wiki' ? paper.title : paper.short} · {passage?.section}{(passage?.page??0)>0 && <>{' '}{tr('· PDF p.')}{' '}{passage?.page}</>}</span>
+        <button className="icon-btn sm" onClick={() => act.closeEvidence()} aria-label={tr('Close')}><Icon name="x" size={14} /></button>
       </div>
       {!cleared && <blockquote>“{ev.quote}”</blockquote>}
-      <p className="ev-scope"><Icon name="eye" size={13} /> {status === 'available' ? ev.scope
-        : cleared ? 'Source permanently deleted. Its excerpt was cleared.'
-        : status === 'in trash' ? 'Source in trash. This excerpt is available for historical reference.'
-        : 'Source permanently deleted. This excerpt is available for historical reference.'}</p>
+      <p className="ev-scope"><Icon name="eye" size={13} /> {status === 'available' ? tr(ev.scope)
+        : cleared ? tr('Source permanently deleted. Its excerpt was cleared.')
+        : status === 'in trash' ? tr('Source in trash. This excerpt is available for historical reference.')
+        : tr('Source permanently deleted. This excerpt is available for historical reference.')}</p>
       {status === 'available' && <><div className="ev-actions">
         <button className={cited ? 'toggle on' : 'toggle'} onClick={() => act.toggleCite(ev.id)}>
-          <Icon name={cited ? 'check' : 'quote'} size={14} /> {cited ? 'Citation picked' : 'Use as citation'}
+          <Icon name={cited ? 'check' : 'quote'} size={14} /> {cited ? tr('Citation picked') : tr('Use as citation')}
         </button>
         <button className={noted ? 'toggle on' : 'toggle'} onClick={() => act.toggleNote(ev.id)}>
-          <Icon name={noted ? 'check' : 'note'} size={14} /> {noted ? 'Saved to notes' : 'Save as note'}
+          <Icon name={noted ? 'check' : 'note'} size={14} /> {noted ? tr('Saved to notes') : tr('Save as note')}
         </button>
       </div>
-      <p className="ev-fine">Your choice is stored apart from the agent’s result. A picked citation is checked again against your draft before use.</p></>}
+      <p className="ev-fine">{tr('Your choice is stored apart from the agent’s result. A picked citation is checked again against your draft before use.')}</p></>}
     </div>
   )
 }

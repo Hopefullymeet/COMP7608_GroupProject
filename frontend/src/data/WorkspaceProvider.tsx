@@ -1,3 +1,4 @@
+import { useLanguage } from '../i18n'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Dialog } from '../components/PageHead'
 import { ScopeDetails } from '../components/ScopeDetails'
@@ -53,6 +54,7 @@ export function WorkspaceProvider({
   demo: boolean
   children: ReactNode
 }) {
+  const { tr } = useLanguage()
   const [tick, setTick] = useState(0)
   const [notice, setNotice] = useState('')
   const [pending, setPending] = useState(0)
@@ -100,49 +102,49 @@ export function WorkspaceProvider({
     <Context.Provider value={{ api, tick, report, refresh, write, prepare: task.prepare, demo, busy }}>
       {children}
       {task.confirmation && (
-        <Dialog title="Confirm task scope" onClose={task.dismiss}>
-          <p className="dialog-text">{task.confirmation.input.kind.replaceAll('_', ' ')}</p>
+        <Dialog title={tr('Confirm task scope')} onClose={task.dismiss}>
+          <p className="dialog-text">{tr(task.confirmation.input.kind.replaceAll('_', ' '))}</p>
           <ScopeDetails scope={task.confirmation} />
-          {task.confirmation.transfers.length === 0 && <p>All material stays in this workspace.</p>}
+          {task.confirmation.transfers.length === 0 && <p>{tr('All material stays in this workspace.')}</p>}
           {task.confirmation.transfers.map((t, i) => (
             <p key={i}>
-              <b>{t.purpose}</b>
+              <b>{tr(t.purpose)}</b>
               <br />
               {t.endpoint}
               <br />
-              {t.data_categories.join(', ')}
+              {t.data_categories.map((category) => tr(category)).join(', ')}
             </p>
           ))}
           <div className="dialog-actions">
             <button className="ghost-btn" onClick={task.dismiss}>
-              Cancel
+              {tr('Cancel')}
             </button>
             <button className="primary" disabled={task.busy} onClick={task.start}>
-              Confirm and start
+              {tr('Confirm and start')}
             </button>
           </div>
         </Dialog>
       )}
       {task.task && (
         <div className="mainline-task-actions" role="status">
-          {task.preview.progress || 'Task running'}
+          {tr(task.preview.progress || 'Task running')}
           <button className="ghost-btn sm" onClick={task.cancel}>
-            Cancel task
+            {tr('Cancel task')}
           </button>
           <button className="ghost-btn sm" onClick={task.reconnect}>
-            Reconnect
+            {tr('Reconnect')}
           </button>
         </div>
       )}
       {(notice || task.error || task.connectionError || task.status) && (
         <Dialog
-          title="Workspace notice"
+          title={tr('Workspace notice')}
           onClose={() => {
             setNotice('')
             task.clearNotice()
           }}
         >
-          <p role="alert">{notice || task.error || task.connectionError || task.status}</p>
+          <p role="alert">{tr(notice || task.error || task.connectionError || task.status)}</p>
           <button
             className="ghost-btn"
             onClick={() => {
@@ -150,7 +152,7 @@ export function WorkspaceProvider({
               task.clearNotice()
             }}
           >
-            Close
+            {tr('Close')}
           </button>
         </Dialog>
       )}

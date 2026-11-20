@@ -1,3 +1,4 @@
+import { useLanguage, type Message } from '../i18n'
 import { useState } from 'react'
 import { useStore } from '../data/store'
 import { Dialog, PageHead } from '../components/PageHead'
@@ -8,6 +9,7 @@ import { EvidenceLink } from './Notes'
 import { TopicSelect } from './ResearchPages'
 
 function Manuscripts({ topic }: { topic: string }) {
+  const { tr } = useLanguage()
   const { api, write, prepare, busy, report: err, demo } = useWorkspace()
   const items = useRead('draft.list', { topic_id: topic })?.items ?? []
   const papers = useRead('library.catalog', {})?.papers ?? []
@@ -26,7 +28,7 @@ function Manuscripts({ topic }: { topic: string }) {
     [apply, setApply] = useState<'citation' | 'wording' | 'both'>('both')
   const [format, setFormat] = useState<ExportFormat>('audit_report'),
     [pdfs, include] = useState(false),
-    [status, setStatus] = useState('')
+    [status, setStatus] = useState<Message>()
   const doc = items.find((d) => d.draft_id === docId) ?? items[0]
   const v = doc?.versions.find((v) => v.version_id === version) ?? doc?.versions[0]
   const report = v?.reports.find((r) => r.report_id === reportId) ?? v?.reports[0]
@@ -43,7 +45,7 @@ function Manuscripts({ topic }: { topic: string }) {
     pickVersion('')
     pickReport('')
     setSelected(null)
-    setStatus('')
+    setStatus(undefined)
   }
   const toggle = (ids: string[], id: string) =>
     ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]
@@ -85,7 +87,7 @@ function Manuscripts({ topic }: { topic: string }) {
       link.click()
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     }
-    setStatus(result.saved ? 'Exported ' + result.name : 'Export cancelled.')
+    setStatus(result.saved ? ['Exported {0}', result.name] : ['Export cancelled.'])
   }
   function review(f: Finding, decision: Decision) {
     if (!doc || !v || !report) return
@@ -102,11 +104,11 @@ function Manuscripts({ topic }: { topic: string }) {
     <>
       <div className="lib-tools">
         <button className="primary" onClick={() => create(true)}>
-          <Icon name="plus" size={14} /> Add manuscript
+          <Icon name="plus" size={14} />{' '}{tr('Add manuscript')}
         </button>
         {doc && (
           <>
-            <select aria-label="Manuscript" value={doc.draft_id} onChange={(e) => selectDoc(e.target.value)}>
+            <select aria-label={tr('Manuscript')} value={doc.draft_id} onChange={(e) => selectDoc(e.target.value)}>
               {items.map((d) => (
                 <option key={d.draft_id} value={d.draft_id}>
                   {d.name}
@@ -114,7 +116,7 @@ function Manuscripts({ topic }: { topic: string }) {
               ))}
             </select>
             <select
-              aria-label="Manuscript version"
+              aria-label={tr('Manuscript version')}
               value={v?.version_id}
               onChange={(e) => {
                 pickVersion(e.target.value)
@@ -124,8 +126,8 @@ function Manuscripts({ topic }: { topic: string }) {
             >
               {doc.versions.map((v, i) => (
                 <option key={v.version_id} value={v.version_id}>
-                  Version {doc.versions.length - i}
-                  {i ? '' : ' · current'}
+                  {tr('Version')}{' '}{doc.versions.length - i}
+                  {i ? '' : tr(' · current')}
                 </option>
               ))}
             </select>
@@ -137,7 +139,7 @@ function Manuscripts({ topic }: { topic: string }) {
           <section className="card result-card">
             <h2>{doc.name}</h2>
             <p className="record-meta" title={v.version_id}>
-              {doc.format} · {doc.write_mode} · Version {doc.versions.length - doc.versions.indexOf(v)}
+              {tr(doc.format)} · {tr(doc.write_mode)}{' '}{tr('· Version')}{' '}{doc.versions.length - doc.versions.indexOf(v)}
             </p>
             {v.warnings.map((w) => (
               <p className="gap-note" key={w}>
@@ -159,7 +161,7 @@ function Manuscripts({ topic }: { topic: string }) {
                 </label>
               ))}
             </div>
-            <h3>Source scope</h3>
+            <h3>{tr('Source scope')}</h3>
             <label className="check-row">
               <input
                 type="checkbox"
@@ -169,7 +171,7 @@ function Manuscripts({ topic }: { topic: string }) {
                   setSources(versions)
                 }}
               />
-              Include other papers from Library
+              {tr('Include other papers from Library')}
             </label>
             {available.length > 0 && (
               <div className="check-list">
@@ -183,7 +185,7 @@ function Manuscripts({ topic }: { topic: string }) {
                     <span>
                       <strong>{a.title}</strong>
                       <small title={a.id}>
-                        {a.scope.replaceAll('_', ' ')} · {a.id.slice(0, 8)}
+                        {tr(a.scope.replaceAll('_', ' '))} · {a.id.slice(0, 8)}
                       </small>
                     </span>
                   </label>
@@ -196,39 +198,38 @@ function Manuscripts({ topic }: { topic: string }) {
                 disabled={busy || !sentences.length}
                 onClick={() => task('citation_audit')}
               >
-                Run citation check
+                {tr('Run citation check')}
               </button>
               <button
                 className="ghost-btn"
                 disabled={busy || !sentences.length || !versions.length}
                 onClick={() => task('citation_suggest')}
               >
-                Find citation suggestions
+                {tr('Find citation suggestions')}
               </button>
             </div>
           </section>
           {!v.reports.some((r) => r.kind === 'citation_audit') && (
-            <p className="review-banner">This version needs an independent citation check.</p>
+            <p className="review-banner">{tr('This version needs an independent citation check.')}</p>
           )}
           {report && (
             <>
               <div className="lib-tools">
                 <select
-                  aria-label="Report"
+                  aria-label={tr('Report')}
                   value={report.report_id}
                   onChange={(e) => pickReport(e.target.value)}
                 >
                   {v.reports.map((r, i) => (
                     <option key={r.report_id} value={r.report_id}>
-                      {r.kind === 'citation_audit' ? 'Citation check' : 'Citation suggestions'} ·{' '}
+                      {r.kind === 'citation_audit' ? tr('Citation check') : tr('Citation suggestions')} ·{' '}
                       {v.reports.length - i}
                     </option>
                   ))}
                 </select>
                 <p className="record-meta">
-                  {report.complete ? 'Check complete' : 'Partial coverage'} · {report.model} ·{' '}
-                  {report.findings.filter((f) => f.decision).length}/{report.findings.length} findings
-                  reviewed
+                  {report.complete ? tr('Check complete') : tr('Partial coverage')} · {report.model} ·{' '}
+                  {report.findings.filter((f) => f.decision).length}/{report.findings.length}{' '}{tr('findings reviewed')}
                 </p>
               </div>
               {report.findings.map((f) => (
@@ -236,14 +237,14 @@ function Manuscripts({ topic }: { topic: string }) {
                   <h3>{v.sentences.find((s) => s.id === f.sentence_id)?.text}</h3>
                   <span className="tag">
                     {v.stale_sentence_ids?.includes(f.sentence_id)
-                      ? 'Source changed · recheck required'
+                      ? tr('Source changed · recheck required')
                       : report.kind === 'citation_suggest'
                         ? f.proposal
-                          ? 'Source found · awaiting your choice'
-                          : 'No suggestion'
+                          ? tr('Source found · awaiting your choice')
+                          : tr('No suggestion')
                         : f.claims.length && f.claims.every((c) => c.status === 'supported')
-                          ? 'Supported'
-                          : 'Coverage incomplete'}
+                          ? tr('Supported')
+                          : tr('Coverage incomplete')}
                   </span>
                   {f.claims.map((c, i) => (
                     <div className="research-record" key={i}>
@@ -251,7 +252,7 @@ function Manuscripts({ topic }: { topic: string }) {
                         <span
                           className={`tag ${c.status === 'supported' ? 'ok' : c.status === 'conflict' ? 'bad' : 'warn'}`}
                         >
-                          {c.status.replaceAll('_', ' ')}
+                          {tr(c.status.replaceAll('_', ' '))}
                         </span>{' '}
                         {c.text}
                       </p>
@@ -275,7 +276,7 @@ function Manuscripts({ topic }: { topic: string }) {
                           onClick={() => review(f, d)}
                         >
                           {f.decision === d ? '✓ ' : ''}
-                          {d} finding
+                          {tr(`${d} finding`)}
                         </button>
                       ))}
                     {f.proposal && v === doc.versions[0] && (
@@ -286,7 +287,7 @@ function Manuscripts({ topic }: { topic: string }) {
                           setApply('both')
                         }}
                       >
-                        Preview revision
+                        {tr('Preview revision')}
                       </button>
                     )}
                   </div>
@@ -297,17 +298,17 @@ function Manuscripts({ topic }: { topic: string }) {
         </>
       )}
       <section className="card result-card">
-        <h3>Export</h3>
+        <h3>{tr('Export')}</h3>
         <div className="lib-tools">
           <select
-            aria-label="Export format"
+            aria-label={tr('Export format')}
             value={format}
             onChange={(e) => setFormat(e.target.value as ExportFormat)}
           >
             {['manuscript', 'audit_report', 'notes', 'comparison_csv', 'bibliography', 'evidence'].map(
               (f) => (
                 <option key={f} value={f}>
-                  {f.replaceAll('_', ' ')}
+                  {tr(f.replaceAll('_', ' '))}
                 </option>
               ),
             )}
@@ -319,31 +320,31 @@ function Manuscripts({ topic }: { topic: string }) {
               checked={pdfs}
               onChange={(e) => include(e.target.checked)}
             />{' '}
-            Include original PDFs
+            {tr('Include original PDFs')}
           </label>
           <button
             className="ghost-btn"
             disabled={busy || (format === 'audit_report' && !report) || (format === 'manuscript' && !doc)}
             onClick={() => void download().catch(err)}
           >
-            Export file
+            {tr('Export file')}
           </button>
         </div>
-        <small role="status">{status}</small>
+        <small role="status">{status && tr(...status)}</small>
       </section>
       {creating && (
-        <Dialog title="Add manuscript" onClose={() => create(false)}>
+        <Dialog title={tr('Add manuscript')} onClose={() => create(false)}>
           <button className="ghost-btn" onClick={() => void pick().catch(err)}>
-            {demo ? 'Open sample manuscript' : 'Choose Markdown, LaTeX or Word file'}
+            {demo ? tr('Open sample manuscript') : tr('Choose Markdown, LaTeX or Word file')}
           </button>
           <label className="set-field">
-            Manuscript name
+            {tr('Manuscript name')}
             <input className="text-field" value={name} onChange={(e) => setName(e.target.value)} />
           </label>
           <label className="set-field">
-            Or paste Markdown
+            {tr('Or paste Markdown')}
             <textarea
-              aria-label="Manuscript text"
+              aria-label={tr('Manuscript text')}
               className="text-field"
               value={body}
               onChange={(e) => setBody(e.target.value)}
@@ -363,23 +364,23 @@ function Manuscripts({ topic }: { topic: string }) {
                 .catch(err)
             }
           >
-            Add draft
+            {tr('Add draft')}
           </button>
         </Dialog>
       )}
       {preview?.proposal && v && doc && report && (
-        <Dialog title="Preview manuscript revision" onClose={() => setPreview(undefined)}>
+        <Dialog title={tr('Preview manuscript revision')} onClose={() => setPreview(undefined)}>
           <div className="rewrite">
-            <p className="record-meta">Current sentence</p>
+            <p className="record-meta">{tr('Current sentence')}</p>
             <del>{original?.text}</del>
-            <p className="record-meta">Revised sentence</p>
+            <p className="record-meta">{tr('Revised sentence')}</p>
             <ins>{apply === 'citation' ? original?.text : preview.proposal.text}</ins>
           </div>
           <p>
-            Citation ·{' '}
-            {(apply === 'wording' ? (original?.cites ?? []) : preview.proposal.cites).join(', ') || 'None'}
+            {tr('Citation ·')}{' '}
+            {(apply === 'wording' ? (original?.cites ?? []) : preview.proposal.cites).join(', ') || tr('None')}
           </p>
-          {apply !== 'wording' && <p>Bibliography · {preview.proposal.bibliography.join('; ')}</p>}
+          {apply !== 'wording' && <p>{tr('Bibliography ·')}{' '}{preview.proposal.bibliography.join('; ')}</p>}
           <p>
             {preview.proposal.scope}{' '}
             {preview.proposal.anchor_ids.map((a) => (
@@ -387,13 +388,13 @@ function Manuscripts({ topic }: { topic: string }) {
             ))}
           </p>
           <select
-            aria-label="Apply changes"
+            aria-label={tr('Apply changes')}
             value={apply}
             onChange={(e) => setApply(e.target.value as typeof apply)}
           >
-            <option value="wording">Wording only</option>
-            <option value="citation">Citation only</option>
-            <option value="both">Wording and citation</option>
+            <option value="wording">{tr('Wording only')}</option>
+            <option value="citation">{tr('Citation only')}</option>
+            <option value="both">{tr('Wording and citation')}</option>
           </select>
           <button
             className="primary"
@@ -416,7 +417,7 @@ function Manuscripts({ topic }: { topic: string }) {
                 .catch(err)
             }
           >
-            Apply to new version
+            {tr('Apply to new version')}
           </button>
         </Dialog>
       )}
@@ -424,6 +425,7 @@ function Manuscripts({ topic }: { topic: string }) {
   )
 }
 export function CitationPage() {
+  const { tr } = useLanguage()
   const { state } = useStore(),
     [topic, setTopic] = useState(
       (state.route.view === 'check' && state.route.topicId) || state.topics[0]?.id || '',
@@ -432,14 +434,14 @@ export function CitationPage() {
     <div className="page">
       <PageHead
         trace
-        title="Citation check"
+        title={tr('Citation check')}
         icon="shield"
-        sub="Check a manuscript against its selected sources"
+        sub={tr('Check a manuscript against its selected sources')}
       >
         <TopicSelect value={topic} onChange={setTopic} />
       </PageHead>
       <div className="page-body scroll">
-        {topic ? <Manuscripts topic={topic} key={topic} /> : <p>Select a topic to add a manuscript.</p>}
+        {topic ? <Manuscripts topic={topic} key={topic} /> : <p>{tr('Select a topic to add a manuscript.')}</p>}
       </div>
     </div>
   )

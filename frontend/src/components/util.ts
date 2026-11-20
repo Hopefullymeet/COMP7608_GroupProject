@@ -6,5 +6,3 @@ export function scrollWithin(el: HTMLElement | null, containerSelector: string, 
   const target = block === 'start' ? offset - 8 : block === 'end' ? offset - box.clientHeight + el.offsetHeight : offset - box.clientHeight / 2
   box.scrollTo({ top: Math.max(0, target), behavior: 'smooth' })
 }
-
-export const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
