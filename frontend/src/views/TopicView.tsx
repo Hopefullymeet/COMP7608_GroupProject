@@ -5,14 +5,16 @@ import { Icon, Spinner } from '../components/Icon'
 import { Discover } from './Discover'
 import { Read } from './Read'
 import { Compare } from './Compare'
+import { LiteratureWorkbench } from './LiteratureWorkbench'
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'discover', label: 'Discover', icon: 'compass' },
   { id: 'read', label: 'Read & ask', icon: 'book' },
   { id: 'compare', label: 'Compare', icon: 'columns' },
+  { id: 'synthesis', label: 'Synthesize', icon: 'note' },
 ]
 
-export function TopicView({ topicId, tab, windowControls, comparison }: { topicId: string; tab: Tab; windowControls?: ReactNode; comparison?:ReactNode }) {
+export function TopicView({ topicId, tab, windowControls, comparison, liveResearch }: { topicId: string; tab: Tab; windowControls?: ReactNode; comparison?:ReactNode; liveResearch?:boolean }) {
   const { state, act } = useStore()
   const topic = state.topics.find((t) => t.id === topicId)
   if (!topic) return null
@@ -32,7 +34,7 @@ export function TopicView({ topicId, tab, windowControls, comparison }: { topicI
         </div>
         {topic.scripted && (
           <nav className="tabs" role="tablist">
-            {TABS.filter((t) => !state.mainline || !!comparison || t.id !== 'compare').map((t) => (
+            {TABS.filter((t) => t.id === 'synthesis' ? liveResearch : !state.mainline || (t.id !== 'compare' || !!comparison)).map((t) => (
               <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'on' : ''}
                 onClick={() => act.openTopic(topicId, t.id)}>
                 <Icon name={t.icon} size={15} /> {t.label}
@@ -88,7 +90,7 @@ export function TopicView({ topicId, tab, windowControls, comparison }: { topicI
             <p>The prototype only scripts <strong>Evidence in scientific QA</strong>. Other topics and their sessions only show how lists behave.</p>
             {state.topics.some((t) => t.id === DEMO_TOPIC) && <button className="primary" onClick={() => act.enterTopic(DEMO_TOPIC)}>Open the scripted topic</button>}
           </div>
-        ) : tab === 'discover' ? <Discover /> : tab === 'read' ? <Read /> : (comparison ?? <Compare />)}
+        ) : tab === 'synthesis' && liveResearch ? <LiteratureWorkbench key={topicId} topicId={topicId} /> : tab === 'discover' ? <Discover /> : tab === 'read' ? <Read /> : (comparison ?? <Compare />)}
       </div>
     </div>
   )

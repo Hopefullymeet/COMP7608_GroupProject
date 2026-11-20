@@ -715,6 +715,7 @@ export function MainlineProvider({
     paper_import: 'Import',
     wiki_draft: 'Wiki draft',
     paper_comparison: 'Comparison',
+    literature_synthesis: 'Literature synthesis',
     citation_audit: 'Citation check',
     citation_suggest: 'Citation suggestions',
     resume: 'Resume',

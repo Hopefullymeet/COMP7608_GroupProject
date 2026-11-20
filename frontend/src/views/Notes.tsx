@@ -9,6 +9,9 @@ export function EvidenceLink({ id }: { id: string }) {
   const { api, report } = useWorkspace()
   const [item, setItem] = useState<Located>()
   const p = item?.source.passages.find((p) => p.passage_id === item.passage_id)
+  const page = useRead('source.page', {
+    topic_id: item?.topic_id ?? '', source_version_id: item?.source.source_version_id ?? '', page: p?.page ?? 0,
+  }, Boolean(item?.topic_id && p?.page))
   return (
     <>
       <button
@@ -25,7 +28,8 @@ export function EvidenceLink({ id }: { id: string }) {
           </p>
           <blockquote className="evidence-excerpt">{item.quote}</blockquote>
           <p>{p?.text}</p>
-          {p?.page ? (
+          {page && <img className="evidence-pdf-page" src={'data:image/png;base64,' + page.png} alt={'Original PDF page ' + page.page} />}
+          {p?.page && !item.topic_id ? (
             <button
               className="ghost-btn"
               onClick={() =>

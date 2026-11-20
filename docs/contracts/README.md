@@ -6,6 +6,7 @@
 |---|---|
 | [services-workspace.md](services-workspace.md) | 服务配置、只读授权、持续检索、检查点与备份 |
 | [citation-export.md](citation-export.md) | 稿件、建议、回查、审阅、写回与导出 |
+| [literature-synthesis.md](literature-synthesis.md) | 主题 PDF 全文、跨论文证据提纲、Wiki 审阅与换版 |
 | [comparison-wiki.md](comparison-wiki.md) | 论文比较、概念与关系、草稿及逐项审阅 |
 | [library-reading.md](library-reading.md) | 资料导入、复核与回收、主题归档、全文与笔记 |
 | [protocol.md](protocol.md) | 共用协议：通信、标识、写入重试、任务与事件、通用错误、证据定位 |
@@ -32,6 +33,7 @@
 | 所有任务 | 历史、步骤及用量 | `task.history` | [已细化](protocol.md#41-工作区的任务记录) | |
 | 所有任务 | 查询、订阅或取消任务 | `task.get`、`task.subscribe`、`task.cancel` | [已细化](protocol.md#4-任务与事件) | [检查点恢复](services-workspace.md) |
 | Read & Ask 和 Library | 保存回答、编辑笔记、用作引用 | `note.list/save` | [已细化](library-reading.md) | |
+| Synthesize | PDF 导入、生成提纲、定位原文、采纳 Wiki | `library.import_pdf`、`literature_synthesis`、`synthesis.list/wiki/review`、`source.page` | [已实现](literature-synthesis.md) | 桌面 RPC 模式 |
 | Compare | 发起比较 | `task.start`（`paper_comparison`） | [已细化](comparison-wiki.md) | 终态读取完整表格 |
 | | 修订、保存或存为笔记 | `comparison.save`、`comparison.list`、`note.save` | [已细化](comparison-wiki.md) | |
 | Library | 浏览个人库 | `library.list` | [已细化](discover-read-locate.md#22-加入主题并读回-library) | 客户端分段显示 |

@@ -35,7 +35,7 @@ Tauri 从首次 RPC 开始启动 Python。默认将联调数据放在应用本�
 
 上例从当前前端工作树根目录启动，并假设项目目录内已有相邻的 DSH 源码副本、PATH 中已经使用 Node.js 24。调试应用也可以从带相同环境变量的终端启动。
 
-DeepSeek 模型为 `deepseek-flash`。问答确认对话框显示官方端点及发送内容。DSH 每条阅读任务使用独立进程和临时目录，只注册 `paper_read`，仅能取回本轮授权的摘要片段。引用需要在本轮实际读过的段落中逐字找到，语义支撑仍由模型判断。取消只中断当前任务进程。凭证通过环境继承，不写入工作区。
+DeepSeek 模型为 `deepseek-flash`。问答确认对话框显示官方端点及发送内容。DSH 每条任务使用独立进程和临时目录。摘要问答读取本轮确认的摘要。全文任务可以检索和补读本轮选定的论文。引用需要在本轮实际读过的段落中逐字找到，语义支撑仍由模型判断。取消只中断当前任务进程。凭证通过环境继承，不写入工作区。
 
 在首页输入研究问题（例如 `Which scientific QA datasets use paper abstracts?`）。提交后点 **Find papers**，确认范围并启动，选择 PubMedQA 加入主题。进入 **Read & ask**，询问 `What context does PubMedQA use?`，再点回答中的来源。退出并用同一工作区重开，核对主题、文献和历史回答。
 
@@ -46,4 +46,21 @@ python3 -B -m unittest discover -s backend -v
 pnpm --dir frontend test
 ```
 
-后端测试运行独立的 Python 子进程，验证写入幂等与冲突、确认绑定、订阅与补收、证据定位、重启恢复、取消和无效引句过滤。默认测试使用本地模式，无需联网或凭证。下一批接真实文献搜索和 PDF 全文导入。
+后端测试运行独立的 Python 子进程，验证写入幂等与冲突、确认绑定、订阅与补收、证据定位、重启恢复、取消和无效引句过滤。默认测试使用本地模式，无需联网或凭证。
+
+## 用一组论文搭提纲
+
+安装 Poppler，确保 `pdftotext` 与 `pdftoppm` 可调用。启动桌面 RPC 模式并配置 DSH 后，创建主题，进入 **Synthesize**，拖入 PDF 或点 **Add PDFs**。可选择 2–12 篇论文；单个 PDF 上限 16 MB、150 页。当前从 PDF 提取已有文字，扫描版需要先做 OCR。
+
+提出想写的研究问题并确认发送范围。生成后点击观点下的 **Source** 在右侧打开保存的 PDF 页。**Review for Wiki** 可逐项勾选采纳，证据仍可从 **Topic Wiki** 回到原文。某篇论文换版时，在该论文旁选择 **Add version**，Wiki 会提示复核依赖旧版的项目。
+
+### 六篇公开论文的对照实验
+
+从 `backend/evaluate_synthesis.py` 的 `PAPERS` 链接下载公开全文，保留相应的六个文件名。先用下列命令检查入库与人工标注的页级证据，再去掉 `--corpus-only` 启动三组模型对照。对照先要求审阅一组用于积累 Wiki 的种子结果。报告中的人工质量评分字段留空，供评估者根据列明的预期证据和误支持样例填写。
+
+```sh
+python3 -B backend/evaluate_synthesis.py /path/to/corpus --corpus-only
+python3 -B backend/evaluate_synthesis.py /path/to/corpus --output synthesis-evaluation.json
+```
+
+可用 `PAPERTRACE_TEST_DSH_CLI` 指向已构建的 DSH，运行 `test_dsh_research.py` 中的本机回环测试。这个测试检查真实工具注册、模型接口传输、证据回读及 Wiki 复用，模型回复来自可复现的测试服务。

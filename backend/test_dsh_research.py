@@ -1,0 +1,112 @@
+"""Optional pinned-DSH integration check with a deterministic loopback provider."""
+
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import json
+import os
+from pathlib import Path
+import threading
+import unittest
+
+from dsh import Dsh
+import test_literature
+
+
+class ScriptedProvider(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, format, *args):
+        pass
+
+    def do_POST(self):
+        request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        messages = request["messages"]
+        prompt = next(block["text"] for m in messages if m["role"] == "user"
+                      for block in m["content"] if isinstance(block, dict) and block["type"] == "text")
+        sources = json.loads(prompt.split("\nPapers: ", 1)[1].split("\nQuestion:", 1)[0])
+        version = sources[0]["source_version_id"]
+        available = {t["name"] for t in request.get("tools", [])}
+        results = [b for m in messages for b in m["content"]
+                   if isinstance(b, dict) and b["type"] == "tool_result"]
+
+        def tool(name, args):
+            return {"type": "tool_use", "id": "toolu_" + str(len(results)), "name": name, "input": args}
+
+        def content(result):
+            blocks = result["content"]
+            return json.loads(blocks if isinstance(blocks, str) else blocks[0]["text"])
+
+        names = [b["name"] for m in messages for b in m["content"]
+                 if isinstance(b, dict) and b["type"] == "tool_use"]
+        if not results and "Start with wiki_search" in prompt and "wiki_search" in available:
+            block = tool("wiki_search", {"query": "Evaluate evidence"})
+        elif "paper_search" not in names and "paper_search" in available:
+            block = tool("paper_search", {"query": "benchmark", "version": version})
+        elif "paper_read" not in names and "paper_read" in available:
+            block = tool("paper_read", {"ids": [content(results[-1])[0]["passage_id"]]})
+        else:
+            passages = content(results[-1]) if results else []
+            citations = [{"id": row["passage_id"], "quote": row["text"][:160]} for row in passages[:1]]
+            point = {"title": "Evaluate answers with evidence", "claims": [
+                {"text": "The first source defines an evaluation benchmark.", "assessment": "supported",
+                 "contributions": [{"version": version, "role": "Defines the benchmark", "assessment": "supported",
+                                    "evidence": citations}]},
+            ]}
+            if "wiki_search" in names:
+                point["prior_id"] = content(results[0])[0]["id"]
+            block = {"type": "text", "text": json.dumps({"points": [point], "relations": [], "gaps": []})}
+        stop = "tool_use" if block["type"] == "tool_use" else "end_turn"
+        events = [("message_start", {"message": {"id": "msg_loopback", "type": "message",
+                                               "role": "assistant", "model": "loopback", "content": [],
+                                               "stop_reason": None, "usage": {"input_tokens": 7, "output_tokens": 0}}})]
+        start = ({"type": "tool_use", "id": block["id"], "name": block["name"], "input": {}}
+                 if stop == "tool_use" else {"type": "text", "text": ""})
+        delta = ({"type": "input_json_delta", "partial_json": json.dumps(block["input"])}
+                 if stop == "tool_use" else {"type": "text_delta", "text": block["text"]})
+        events += [("content_block_start", {"index": 0, "content_block": start}),
+                   ("content_block_delta", {"index": 0, "delta": delta}),
+                   ("content_block_stop", {"index": 0}),
+                   ("message_delta", {"delta": {"stop_reason": stop, "stop_sequence": None},
+                                      "usage": {"output_tokens": 3}}),
+                   ("message_stop", {})]
+        body = "".join(f"event: {name}\ndata: {json.dumps({'type': name, **payload})}\n\n"
+                       for name, payload in events).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+@unittest.skipUnless(os.environ.get("PAPERTRACE_TEST_DSH_CLI"), "Set PAPERTRACE_TEST_DSH_CLI for the pinned SDK check")
+class DshResearchTest(unittest.TestCase):
+    def test_real_harness_search_read_and_reviewed_wiki(self):
+        # Reuse the real PDF setup and the same task/approval API as the desktop UI.
+        fixture = test_literature.LiteratureTest()
+        try:
+            fixture.setUp()
+            with ThreadingHTTPServer(("127.0.0.1", 0), ScriptedProvider) as provider:
+                server = threading.Thread(target=provider.serve_forever, daemon=True)
+                server.start()
+                try:
+                    worker = fixture.worker
+                    dsh = Dsh(os.environ.get("PAPERTRACE_DSH_NODE", "node"), os.environ["PAPERTRACE_TEST_DSH_CLI"],
+                              "loopback-fixture", Path(fixture.workspace.name))
+                    dsh.endpoint = f"http://127.0.0.1:{provider.server_port}"
+                    worker.dsh = dsh
+                    fixture.run_task(fixture.versions)
+                    outline = fixture.call("synthesis.list", topic_id=fixture.topic)["items"][0]
+                    self.assertEqual([row["title"] for row in outline["trace"]], ["paper_search", "paper_read"])
+                    point = outline["points"][0]
+                    self.assertEqual(point["claims"][0]["assessment"], "supported")
+                    self.assertGreater(outline["usage"]["input_tokens"], 0)
+                    fixture.call("synthesis.review", topic_id=fixture.topic, record_id=outline["record_id"],
+                                 base_revision="", item_ids=[point["id"]])
+                    fixture.run_task(fixture.versions)
+                    followup = fixture.call("synthesis.list", topic_id=fixture.topic)["items"][0]
+                    self.assertEqual(followup["trace"][0]["title"], "wiki_search")
+                    self.assertEqual(followup["points"][0]["prior_id"], point["id"])
+                finally:
+                    provider.shutdown()
+                    server.join()
+        finally:
+            fixture.doCleanups()

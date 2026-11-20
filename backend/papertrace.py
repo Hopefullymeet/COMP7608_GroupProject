@@ -10,6 +10,8 @@ import threading
 from uuid import uuid4
 
 from dsh import Dsh, DshFailure, ENDPOINT, MODEL
+from literature import LiteratureError, MAX_VERSIONS, digest, init_corpus
+from workbench import Workbench
 
 
 def encode(value):
@@ -65,8 +67,9 @@ def required(params, key):
 
 class Worker:
     writes = {
+        "comparison.save",
         "topic.create", "session.create", "task.prepare", "task.start", "task.cancel",
-        "candidate.decide", "reader.bookmark", "note.save",
+        "candidate.decide", "reader.bookmark", "note.save", "library.import_pdf", "synthesis.review",
     }
 
     def __init__(self, directory, send):
@@ -85,6 +88,8 @@ class Worker:
                 task_id TEXT NOT NULL, seq INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (task_id, seq)
             );
         """)
+        init_corpus(self.db)
+        self.research = Workbench(self, identifier)
         self.send = send
         self.lock = threading.RLock()
         self.dsh = Dsh.configured(directory.resolve())
@@ -162,6 +167,10 @@ class Worker:
                     raise invalid("params must be an object.")
                 with self.db:
                     response["result"] = self.call(request["method"], params, after)
+            except LiteratureError as failure:
+                after.clear()
+                issue = {"reason": failure.reason, "retryable": False, "next_action": failure.action}
+                response["error"] = {"code": failure.code, "message": str(failure), "data": issue}
             except RpcError as failure:
                 after.clear()
                 response["error"] = {"code": failure.code, "message": str(failure), "data": failure.issue}
@@ -177,6 +186,8 @@ class Worker:
         if method in self.writes:
             operation = required(params, "operation_id")
             fingerprint = encode(params)
+            if method == "library.import_pdf":
+                fingerprint = digest(fingerprint.encode("utf-8"))
             row = self.db.execute(
                 "SELECT params, result FROM operations WHERE method = ? AND id = ?", (method, operation)
             ).fetchone()
@@ -272,6 +283,35 @@ class Worker:
             return {"steps": [e["payload"] for (row,) in events if (e := json.loads(row))["type"] == "discovery.step"]}
         if method == "candidate.decide":
             return self.decide(params)
+        if method == "library.import_pdf":
+            return self.research.import_pdf(self.topic(params), params)
+        if method == "comparison.list":
+            topic = self.topic(params)
+            return {"items": [{key: value for key, value in row.items() if key != "topic_id"}
+                              for row in self.rows("comparison") if row["topic_id"] == topic]}
+        if method == "comparison.save":
+            return self.research.save_comparison(self.topic(params), params)
+        if method == "synthesis.list":
+            return self.research.results(self.topic(params))
+        if method == "synthesis.wiki":
+            return self.research.wiki(self.topic(params))
+        if method == "synthesis.review":
+            required(params, "record_id")
+            return self.research.review(self.topic(params), params)
+        if method in ("source.read", "source.page"):
+            source = self.source(required(params, "source_version_id"), self.topic(params))
+            return (self.research.document(source) if method == "source.read"
+                    else self.research.page(source, params.get("page")))
+        if method == "evidence.open":
+            anchor = self.get("anchor", required(params, "anchor_id"))
+            value = anchor["value"]
+            topic = self.topic(params) if "topic_id" in params else anchor["topic_id"]
+            if topic != anchor["topic_id"]:
+                raise missing("Evidence is outside the selected topic.")
+            source = self.source(value["source_version_id"], topic)
+            pid = value["location"]["passage_id"]
+            return {"anchor_id": value["anchor_id"], "topic_id": topic, "source": self.research.document(source, pid),
+                    "passage_id": pid, "quote": value["quote"], "read_scope": value["read_scope"]}
         if method in ("library.list", "library.catalog"):
             topic = self.topic(params) if "topic_id" in params else None
             papers = [p for p in self.rows("paper") if topic is None or topic in p["topic_ids"]]
@@ -290,7 +330,7 @@ class Worker:
                 except RpcError:
                     return {}
             pid = required(params, "passage_id")
-            if not any(p["passage_id"] == pid for p in source["passages"]):
+            if not self.research.document(source, pid)["passages"]:
                 raise missing("Passage was not found.")
             position = {"passage_id": pid}
             self.put("position", position_key, position)
@@ -302,7 +342,14 @@ class Worker:
             anchor = self.get("anchor", required(params, "anchor_id"))
             if anchor["topic_id"] != self.topic(params) or anchor["message_id"] != required(params, "message_id"):
                 raise missing("Evidence does not belong to that answer.")
-            return {"anchor": anchor["value"], "source": self.get("source", anchor["value"]["source_version_id"])}
+            value = anchor["value"]
+            source = self.get("source", value["source_version_id"])
+            if value["read_scope"] == "full_text":
+                pid = value["location"]["passage_id"]
+                return {"anchor_id": value["anchor_id"], "topic_id": anchor["topic_id"],
+                        "source": self.research.document(source), "passage_id": pid, "quote": value["quote"],
+                        "read_scope": "full_text"}
+            return {"anchor": value, "source": source}
         if method == "services.get":
             models = [{
                 "id": MODEL, "label": "DeepSeek Harness", "model": MODEL, "endpoint": ENDPOINT,
@@ -407,9 +454,32 @@ class Worker:
                     raise invalid("Duplicate version or invalid reading scope.")
                 seen.add(version)
                 self.source(version, topic, required(item, "paper_id"))
+        elif kind in ("literature_synthesis", "paper_comparison"):
+            label = required(input_, "question").strip()
+            if len(label) > 2000:
+                raise invalid("The research question must be at most 2000 characters.")
+            versions = input_.get("source_versions")
+            if (not isinstance(versions, list) or not 2 <= len(versions) <= MAX_VERSIONS
+                    or not all(isinstance(v, str) for v in versions) or len(set(versions)) != len(versions)):
+                raise invalid("Select two to twelve distinct paper versions.")
+            papers = {self.source(v, topic)["paper_id"] for v in versions}
+            if len(papers) != len(versions):
+                raise invalid("Select only one version per paper.")
+            if kind == "paper_comparison":
+                dims = input_.get("dimensions")
+                if (len(versions) != 2 or not isinstance(dims, list) or not 1 <= len(dims) <= 8
+                        or not all(isinstance(d, str) and 0 < len(d.strip()) <= 120 for d in dims)
+                        or len(set(dims)) != len(dims)):
+                    raise invalid("Select exactly two papers and one to eight distinct comparison dimensions.")
+            if input_.get("mode", "wiki") not in ("fixed", "agent", "wiki"):
+                raise invalid("Unknown synthesis mode.")
+            if not self.dsh or not self.dsh.key:
+                raise RpcError(-32015, "MODEL_UNAVAILABLE", "configure_service", "Configure DeepSeek Harness before synthesizing papers.")
+            target = topic
         else:
             raise RpcError(-32601, "METHOD_NOT_FOUND", "refresh_data", "This task is not available in the local integration worker.")
-        live = kind == "reading_qa" and self.dsh is not None
+        synthesis = kind in ("literature_synthesis", "paper_comparison")
+        live = synthesis or (kind == "reading_qa" and self.dsh is not None)
         fingerprint = encode([task_data, ENDPOINT if live else "local-fixture", MODEL if live else ""])
         if method == "task.prepare":
             cid = identifier()
@@ -419,6 +489,18 @@ class Worker:
                 "purpose": "Answer the question using DeepSeek Harness and approved abstract passages",
                 "data_categories": ["Research question", "Approved passage IDs and abstract excerpts"],
             }] if live else []
+            if live and kind == "reading_qa" and any(s["requested_scope"] == "full_text" for s in input_["sources"]):
+                transfers = [{"endpoint": ENDPOINT, "purpose": "Answer using selected sources",
+                              "data_categories": ["Research question and excerpts from the selected papers"]}]
+            if synthesis:
+                transfers = [{"endpoint": ENDPOINT,
+                              "purpose": ("Compare selected papers" if kind == "paper_comparison"
+                                          else "Build an evidence-based outline"),
+                              "data_categories": ["Research question, selected paper titles and excerpts",
+                                                  *(["Relevant reviewed Wiki entries"]
+                                                    if kind == "literature_synthesis" and input_.get("mode", "wiki") == "wiki"
+                                                    else [])]}]
+                return {"confirmation_id": cid, "transfers": transfers, "source_versions": input_["source_versions"]}
             return {"confirmation_id": cid, "transfers": transfers}
         cid = required(params, "confirmation_id")
         try:
@@ -499,7 +581,10 @@ class Worker:
                     })
                 self.send_events([event])
             if live:
-                self.run_dsh(task, signal)
+                if task["kind"] in ("literature_synthesis", "paper_comparison"):
+                    self.research.run(task, signal)
+                else:
+                    self.run_dsh(task, signal)
                 continue
             with self.lock:
                 task = self.get("task", task_id)
@@ -524,7 +609,13 @@ class Worker:
                     return
                 sources = [self.source(item["source_version_id"], task["topic_id"], item["paper_id"])
                            for item in task["input"]["sources"]]
-            claims, seen = self.dsh.answer(task["input"]["question"], sources, signal)
+                for source, selected in zip(sources, task["input"]["sources"]):
+                    source["title"] = self.get("paper", source["paper_id"])["title"]
+                    source["available_scope"] = ("full_text" if source.get("available_scope") == "full_text"
+                                                 and selected["requested_scope"] == "full_text" else "abstract")
+            has_pdf = any(source["available_scope"] == "full_text" for source in sources)
+            answer = self.dsh.answer_full_text if has_pdf else self.dsh.answer
+            claims, seen = answer(task["input"]["question"], sources, signal)
             with self.lock:
                 task = self.get("task", task_id)
                 if task["status"] != "running":
@@ -532,14 +623,17 @@ class Worker:
                 with self.db:
                     message_id = identifier()
                     sentences = []
+                    for passage in seen.values():
+                        source = self.source(passage["source_version_id"], task["topic_id"])
+                        passage["paper_id"] = source["paper_id"]
                     for claim in claims:
                         anchors = [self.store_anchor(task, message_id, ref["passage"], ref["quote"])
                                    for ref in claim["references"]]
                         sentences.append({"text": claim["text"], "anchor_ids": anchors,
                                           "assessment": "supported" if anchors else "evidence_not_established"})
-                    read_versions = {passage["source_version_id"] for passage in seen.values()}
+                    read_versions = {p["source_version_id"]: "full_text" if p.get("page") else "abstract" for p in seen.values()}
                     reads = [{"source_version_id": source["source_version_id"],
-                              "read_scope": "abstract" if source["source_version_id"] in read_versions else "none"}
+                              "read_scope": read_versions.get(source["source_version_id"], "none")}
                              for source in sources]
                     events = self.persist_reading(task, message_id, sentences, reads, {
                         "kind": "tool", "title": "Read with DeepSeek Harness",
@@ -566,10 +660,13 @@ class Worker:
 
     def store_anchor(self, task, message_id, passage, quote):
         aid = identifier()
+        pdf_page = passage.get("page")
         anchor = {"anchor_id": aid, "paper_id": passage["paper_id"],
-                  "source_version_id": passage["source_version_id"], "read_scope": "abstract", "quote": quote,
-                  "location": {"view": "abstract", "precision": "paragraph",
-                               "passage_id": passage["passage_id"], "text_excerpt": passage["text"]}}
+                  "source_version_id": passage["source_version_id"], "read_scope": "full_text" if pdf_page else "abstract",
+                  "quote": quote,
+                  "location": {"view": "pdf" if pdf_page else "abstract", "precision": "paragraph",
+                               "passage_id": passage["passage_id"], "text_excerpt": passage["text"],
+                               **({"page": pdf_page} if pdf_page else {})}}
         self.put("anchor", aid, {"topic_id": task["topic_id"], "message_id": message_id, "value": anchor})
         return aid
 
@@ -627,7 +724,8 @@ class Worker:
         self.put("session", session["session_id"], session)
         task["steps"] = [step]
         delta = self.emit(task, "answer.delta", {"text": " ".join(s["text"] for s in sentences)})
-        if any(s["requested_scope"] == "full_text" for s in input_["sources"]):
+        full_reads = {source["source_version_id"] for source in reads if source["read_scope"] == "full_text"}
+        if any(s["requested_scope"] == "full_text" and s["source_version_id"] not in full_reads for s in input_["sources"]):
             final = self.finish(task, "partial", result=answer, issue={
                 "reason": "FULL_TEXT_REQUIRED", "retryable": False, "next_action": "attach_full_text"
             })

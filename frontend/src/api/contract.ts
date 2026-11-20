@@ -1,3 +1,4 @@
+import type { SynthesisMethods, SynthesisTask } from './synthesis'
 import type { Budget, ServiceMethods, ResumeTask } from './services'
 import type { CitationTask, CitationMethods } from './citation'
 import type { ResearchTask, ResearchMethods } from './research'
@@ -42,12 +43,12 @@ export type MainTask = { topic_id: Id } & (
   { kind: 'discovery'; input: { query: string; filters?: { year_from?: number; year_to?: number; venue?:string } } | { previous_search_id: Id } } |
   { kind: 'reading_qa'; session_id: Id; input: { question: string; selection?: { source_version_id: Id; passage_id: Id; quote:string }; sources: NonEmpty<Source> } }
 )
-export type WorkspaceTask = ResumeTask | ImportTask | ResearchTask | CitationTask
+export type WorkspaceTask = ResumeTask | ImportTask | ResearchTask | CitationTask | SynthesisTask
 export type TaskInput = MainTask | WorkspaceTask
 export type Transfer = { endpoint: string; purpose: string; data_categories: NonEmpty<string> }
 export type Issue = { reason: string; retryable: boolean; next_action: string; details?: Record<string, unknown> }
 export type Start = { task_id: Id; run_id: Id; status: 'queued'; scope_id?: Id }
-type Result = Discovery | Reading | ImportResult | {record_id:string}
+type Result = Discovery | Reading | ImportResult | {record_id:string; kind?: 'literature_synthesis'}
 export type Finished =
   | { status: 'completed'; result: Result }
   | { status: 'partial'; result: Result; issue: Issue }
@@ -69,7 +70,7 @@ type InTopic = { topic_id: Id }
 type InSession = InTopic & { session_id: Id }
 type ForTask = { task_id: Id }
 type InSearch = InTopic & { search_id: Id }
-export type Methods = LibraryMethods & ResearchMethods & CitationMethods & ServiceMethods & {
+export type Methods = SynthesisMethods & LibraryMethods & ResearchMethods & CitationMethods & ServiceMethods & {
   'protocol.version': [Record<string, never>, { major: number; minor: number }]
   'topic.list': [Record<string, never>, { items: Topic[] }]
   'topic.create': [Write & { title: string }, InTopic]

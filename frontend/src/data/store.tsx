@@ -11,7 +11,7 @@ import type {
   TaskEvent, Topic, TrashItem, WikiPage, WikiProposal, Paper, EvidenceAnchor,
 } from './types'
 
-export type Tab = 'discover' | 'read' | 'compare'
+export type Tab = 'discover' | 'read' | 'compare' | 'synthesis'
 export type Page = 'library' | 'wiki' | 'check' | 'settings'
 export type Route = { view: 'home' } | { view: 'topic'; topicId: string; tab: Tab;sourceVersion?:string }
   | { view: 'library'; paperId?: string } | { view: Exclude<Page, 'library'>;topicId?:string;draftId?:string;sentenceId?:string }

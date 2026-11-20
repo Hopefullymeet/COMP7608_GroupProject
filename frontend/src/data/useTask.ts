@@ -52,7 +52,9 @@ export function useTask(api: Client, onFinished: (task: string, result: Finished
       setTask(undefined)
       setPreview(empty)
       setConnectionError('')
-      setStatus(result.status === 'cancelled' ? 'Task cancelled.' :
+      const synthesisPartial = result.status === 'partial' && 'record_id' in result.result &&
+        result.result.kind === 'literature_synthesis'
+      setStatus(synthesisPartial ? '' : result.status === 'cancelled' ? 'Task cancelled.' :
         'issue' in result ? `${result.status === 'partial' ? 'Partial result' : 'Task failed'} · ${errorText(new RpcError(result.issue.reason, result.issue))}` : '')
       finish.current(tracker.id, result)
     }

@@ -23,6 +23,7 @@ export type DocumentView = {
 }
 export type Located = {
   anchor_id: string
+  topic_id?: string
   source: DocumentView
   passage_id: string
   quote: string
@@ -65,7 +66,7 @@ export type LibraryMethods = {
   'source.original': [{ source_version_id: string; page?: number }, { opened: boolean }]
   'reader.position': [Position, { passage_id?: string }]
   'reader.bookmark': [Write & Position & { passage_id: string }, { passage_id: string }]
-  'evidence.open': [{ anchor_id: string }, Located]
+  'evidence.open': [{ anchor_id: string; topic_id?: string }, Located]
   'note.list': [{ topic_id: string }, { items: Note[] }]
   'note.save': [
     Write & {

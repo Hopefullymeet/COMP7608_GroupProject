@@ -13,6 +13,9 @@ use std::{
 use tauri::ipc::Channel;
 
 const WORKER: &[u8] = include_bytes!("../../../backend/papertrace.py");
+const LITERATURE: &[u8] = include_bytes!("../../../backend/literature.py");
+const WORKBENCH: &[u8] = include_bytes!("../../../backend/workbench.py");
+const RESEARCH_TOOLS: &[u8] = include_bytes!("../../../backend/research-tools.mjs");
 const DSH: &[u8] = include_bytes!("../../../backend/dsh.py");
 type Reply = Result<Value, String>;
 
@@ -40,10 +43,17 @@ impl Worker {
         let mut hash = DefaultHasher::new();
         WORKER.hash(&mut hash);
         DSH.hash(&mut hash);
+        LITERATURE.hash(&mut hash);
+        WORKBENCH.hash(&mut hash);
+        RESEARCH_TOOLS.hash(&mut hash);
         let runtime = directory.join("runtime").join(format!("{:016x}", hash.finish()));
         fs::create_dir_all(&runtime).map_err(|error| error.to_string())?;
         let script = runtime.join("papertrace.py");
-        for (path, contents) in [(&script, WORKER), (&runtime.join("dsh.py"), DSH)] {
+        for (path, contents) in [
+            (&script, WORKER), (&runtime.join("dsh.py"), DSH),
+            (&runtime.join("literature.py"), LITERATURE), (&runtime.join("workbench.py"), WORKBENCH),
+            (&runtime.join("research-tools.mjs"), RESEARCH_TOOLS),
+        ] {
             match fs::OpenOptions::new().write(true).create_new(true).open(path) {
                 Ok(mut file) => file.write_all(contents).map_err(|error| error.to_string())?,
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
