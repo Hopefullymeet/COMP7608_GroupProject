@@ -498,7 +498,8 @@ class CitationWorkspace:
                 doc, draft, jobs = self.jobs(topic, task["input"])
             pending = [j for j in jobs if j["usable"] and j["cached"] is None
                        and task.get("audit_sources", {}).get(j["job_id"]) == j["source"]["source_version_id"]]
-            if pending and host.dsh:
+            runtime = host.dsh_for_task(task)
+            if pending and runtime:
                 versions = {j["source"]["source_version_id"]: j["source"] for j in pending}
                 inputs = [{"id": j["job_id"], "claim": j["sentence"]["text"],
                            "source_version_id": j["source"]["source_version_id"]} for j in pending]
@@ -512,7 +513,7 @@ class CitationWorkspace:
                         host.send_events([event])
 
                 try:
-                    raw, seen, trace, usage, issue = host.dsh.audit(inputs, list(versions.values()), cancelled, progress)
+                    raw, seen, trace, usage, issue = runtime.audit(inputs, list(versions.values()), cancelled, progress)
                     rows = raw.get("checks") if isinstance(raw, dict) else None
                     if isinstance(rows, list):
                         judgments = {r["id"]: r for r in rows if isinstance(r, dict) and isinstance(r.get("id"), str)}
@@ -533,7 +534,8 @@ class CitationWorkspace:
                     findings.append(self.finding(task, report_id, j, judgments.get(j["job_id"]), seen))
                 complete = not issue and all(c["status"] != "blocked" for f in findings for c in f["claims"])
                 report = {"report_id": report_id, "kind": "citation_audit", "complete": complete,
-                          "model": MODEL if pending and host.dsh else "", "findings": findings, "usage": usage}
+                          "model": task.get("dsh_model", MODEL) if pending and runtime else "",
+                          "findings": findings, "usage": usage}
                 draft["reports"].insert(0, report)
                 host.put("pdf_draft", doc["draft_id"], doc)
                 current["steps"] = trace

@@ -1,10 +1,13 @@
 """Local PaperTrace v0.4 worker. Stdout is reserved for newline-delimited RPC."""
 
 import base64
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 import datetime
 import json
 from pathlib import Path
 import queue
+import re
 import sqlite3
 import sys
 import threading
@@ -74,6 +77,7 @@ class Worker:
         "topic.create", "topic.rename", "session.create", "session.rename", "task.prepare", "task.start", "task.cancel",
         "candidate.decide", "reader.bookmark", "note.save", "library.import_pdf", "library.set_alias", "synthesis.review",
         "reader.mark_save", "reader.mark_delete", "reader.answer_save", "reader.mark_to_wiki",
+        "services.save",
     }
 
     def __init__(self, directory, send):
@@ -99,6 +103,7 @@ class Worker:
         self.reader = Reader(self, identifier)
         self.send = send
         self.lock = threading.RLock()
+        self.service_test_lock = threading.Lock()
         self.dsh = Dsh.configured(directory.resolve())
         self.inflight = {}
         self.closing = threading.Event()
@@ -171,15 +176,19 @@ class Worker:
         rpc_id = request.get("id") if isinstance(request, dict) else None
         response = {"jsonrpc": "2.0", "id": rpc_id}
         after = []
-        with self.lock:
+        method = request.get("method") if isinstance(request, dict) else None
+        with nullcontext() if method == "services.test" else self.lock:
             try:
                 if not isinstance(rpc_id, str) or not isinstance(request.get("method"), str) or request.get("jsonrpc") != "2.0":
                     raise RpcError(-32600, "INVALID_REQUEST", "correct_request", "Expected a JSON-RPC 2.0 request.")
                 params = request.get("params", {})
                 if not isinstance(params, dict):
                     raise invalid("params must be an object.")
-                with self.db:
-                    response["result"] = self.call(request["method"], params, after)
+                if method == "services.test":
+                    response["result"] = self.test_service(params)
+                else:
+                    with self.db:
+                        response["result"] = self.call(method, params, after)
             except LiteratureError as failure:
                 after.clear()
                 issue = {"reason": failure.reason, "retryable": False, "next_action": failure.action}
@@ -195,23 +204,97 @@ class Worker:
             for action in after:
                 action()
 
+    def saved_operation(self, method, operation, fingerprint):
+        row = self.db.execute(
+            "SELECT params, result FROM operations WHERE method = ? AND id = ?", (method, operation)
+        ).fetchone()
+        if row is not None:
+            if row[0] != fingerprint:
+                raise RpcError(-32002, "OPERATION_CONFLICT", "use_new_operation_id", "Operation key already used with different parameters.")
+            return json.loads(row[1])
+
+    def save_operation(self, method, operation, fingerprint, result):
+        self.db.execute("INSERT INTO operations VALUES (?, ?, ?, ?)", (method, operation, fingerprint, encode(result)))
+
     def call(self, method, params, after):
         if method in self.writes:
             operation = required(params, "operation_id")
             fingerprint = encode(params)
-            if method in ("library.import_pdf", "draft.import"):
+            if method in ("library.import_pdf", "draft.import", "services.save"):
                 fingerprint = digest(fingerprint.encode("utf-8"))
-            row = self.db.execute(
-                "SELECT params, result FROM operations WHERE method = ? AND id = ?", (method, operation)
-            ).fetchone()
-            if row is not None:
-                if row[0] != fingerprint:
-                    raise RpcError(-32002, "OPERATION_CONFLICT", "use_new_operation_id", "Operation key already used with different parameters.")
-                return json.loads(row[1])
+            saved = self.saved_operation(method, operation, fingerprint)
+            if saved is not None:
+                return saved
             result = self.dispatch(method, params, after)
-            self.db.execute("INSERT INTO operations VALUES (?, ?, ?, ?)", (method, operation, fingerprint, encode(result)))
+            self.save_operation(method, operation, fingerprint, result)
             return result
         return self.dispatch(method, params, after)
+
+    def services_config(self):
+        stored = self.rows("service_config")
+        settings = stored[0] if stored else {"revision": "local-contract", "model": MODEL}
+        available = bool(self.dsh and self.dsh.key)
+        return {"revision": settings["revision"], "model_id": MODEL, "models": [{
+            "id": MODEL, "label": "DeepSeek Harness", "model": settings["model"], "endpoint": ENDPOINT,
+            "local": False, "credential_configured": available,
+        }], "budget": {
+            "calls": 4 if self.dsh else 0, "tokens": 3200 if self.dsh else 0,
+            "minutes": 1.5 if self.dsh else 1, "cost": 0,
+        }, "ask_before_overage": True, "services": []}
+
+    def save_services(self, params):
+        config = self.services_config()
+        if required(params, "base_revision") != config["revision"]:
+            raise RpcError(-32011, "STALE_REVISION", "refresh_data", "Settings changed. Reload and try again.")
+        models = params.get("models")
+        if (params.get("model_id") != MODEL or not isinstance(models, list) or len(models) != 1
+                or not isinstance(models[0], dict) or models[0].get("id") != MODEL):
+            raise invalid("Select the DeepSeek Harness provider.")
+        model = required(models[0], "model").strip()
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", model):
+            raise invalid("Use a model ID with up to 128 letters, digits, dots, underscores, or hyphens.")
+        if (models[0].get("endpoint") != ENDPOINT or params.get("services") != config["services"]
+                or params.get("budget") != config["budget"] or params.get("ask_before_overage") is not True):
+            raise RpcError(-32016, "SETTINGS_READ_ONLY", "correct_request", "Only the model ID can currently be edited.")
+        if model != config["models"][0]["model"]:
+            self.put("service_config", "active", {"revision": identifier(), "model": model})
+            config = self.services_config()
+        return config
+
+    def dsh_for_task(self, task):
+        model = task.get("dsh_model", MODEL)
+        return self.dsh.for_model(model) if isinstance(self.dsh, Dsh) else self.dsh
+
+    def test_service(self, params):
+        operation = required(params, "operation_id")
+        service_id = required(params, "id")
+        fingerprint = encode({"id": service_id})
+        with self.service_test_lock:
+            with self.lock:
+                saved = self.saved_operation("services.test", operation, fingerprint)
+                if saved is not None:
+                    return saved
+                if service_id != MODEL:
+                    raise missing("This service was not found.")
+                model = self.services_config()["models"][0]["model"]
+                runtime = self.dsh_for_task({"dsh_model": model})
+            if runtime is None:
+                result = {"ok": False, "message": "DeepSeek Harness is not configured in the desktop host."}
+            else:
+                try:
+                    runtime.probe(self.closing)
+                    result = {"ok": True, "message": f"{model} responded through DeepSeek Harness."}
+                except DshFailure as failure:
+                    message = {
+                        "SERVICE_AUTH_FAILED": "Check the DeepSeek API key in the desktop host.",
+                        "SERVICE_QUOTA_EXHAUSTED": "DeepSeek reported insufficient balance.",
+                        "SERVICE_RATE_LIMITED": "DeepSeek is rate limiting requests. Try again shortly.",
+                        "TASK_TIMEOUT": "DeepSeek Harness did not respond in time.",
+                    }.get(failure.issue["reason"], "DeepSeek Harness could not reach the saved model. Check the model ID and network.")
+                    result = {"ok": False, "message": message}
+            with self.lock, self.db:
+                self.save_operation("services.test", operation, fingerprint, result)
+            return result
 
     def dispatch(self, method, params, after):
         if method == "protocol.version":
@@ -451,13 +534,12 @@ class Worker:
                         "read_scope": "full_text"}
             return {"anchor": value, "source": source}
         if method == "services.get":
-            models = [{
-                "id": MODEL, "label": "DeepSeek Harness", "model": MODEL, "endpoint": ENDPOINT,
-                "local": False, "credential_configured": bool(self.dsh.key),
-            }] if self.dsh else []
-            return {"revision": "local-contract", "model_id": MODEL if models else "", "models": models, "budget": {
-                "calls": 4 if models else 0, "tokens": 3200 if models else 0, "minutes": 1.5 if models else 1, "cost": 0,
-            }, "ask_before_overage": True, "services": []}
+            return self.services_config()
+        if method == "services.save":
+            return self.save_services(params)
+        if method == "services.credentials":
+            raise RpcError(-32015, "CREDENTIALS_HOST_REQUIRED", "configure_service",
+                           "Configure the DeepSeek API key in the desktop host.")
         if method == "workspace.activity":
             if "topic_id" in params:
                 self.topic(params)
@@ -601,7 +683,8 @@ class Worker:
         if audit:
             task_data["audit_sources"] = {j["job_id"]: j["source"]["source_version_id"] for j in audit_pending} if live else {}
 
-        fingerprint = encode([task_data, ENDPOINT if live else "local-fixture", MODEL if live else ""])
+        model = self.services_config()["models"][0]["model"] if live else ""
+        fingerprint = encode([task_data, ENDPOINT if live else "local-fixture", model])
         if method == "task.prepare":
             cid = identifier()
             self.put("confirmation", cid, {"fingerprint": fingerprint, "used": False})
@@ -642,6 +725,8 @@ class Worker:
         tid = identifier()
         task = {**task_data, "target": target, "task_id": tid, "run_id": identifier(), "status": "queued",
                 "label": label, "steps": [], "last_event_seq": 0, "started_at": now()}
+        if live:
+            task["dsh_model"] = model
         if kind == "reading_qa":
             task["scope_id"] = identifier()
         confirmation["used"] = True
@@ -757,7 +842,8 @@ class Worker:
                     source["available_scope"] = ("full_text" if source.get("available_scope") == "full_text"
                                                  and selected["requested_scope"] == "full_text" else "abstract")
             has_pdf = any(source["available_scope"] == "full_text" for source in sources)
-            answer = self.dsh.answer_full_text if has_pdf else self.dsh.answer
+            runtime = self.dsh_for_task(task)
+            answer = runtime.answer_full_text if has_pdf else runtime.answer
             claims, seen = answer(task["input"]["question"], sources, signal)
             with self.lock:
                 task = self.get("task", task_id)
@@ -892,10 +978,14 @@ def main():
     sys.stdin.reconfigure(encoding="utf-8")
     sys.stdout.reconfigure(encoding="utf-8")
 
+    output_lock = threading.Lock()
+
     def send(message):
-        print(encode(message), flush=True)
+        with output_lock:
+            print(encode(message), flush=True)
 
     worker = Worker(Path(sys.argv[1]), send)
+    probes = ThreadPoolExecutor(max_workers=1)
     try:
         for line in sys.stdin:
             try:
@@ -903,8 +993,13 @@ def main():
             except ValueError:
                 send({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}})
                 continue
-            worker.process(request)
+            if isinstance(request, dict) and request.get("method") == "services.test":
+                probes.submit(worker.process, request)
+            else:
+                worker.process(request)
     finally:
+        worker.closing.set()
+        probes.shutdown(cancel_futures=True)
         worker.close()
 
 

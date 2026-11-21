@@ -226,7 +226,8 @@ class Workbench:
         try:
             with host.lock:
                 sources, wiki = self.scope(task)
-            if not host.dsh:
+            runtime = host.dsh_for_task(task)
+            if not runtime:
                 raise DshFailure("MODEL_UNAVAILABLE", False, "configure_service")
 
             def progress(name, detail):
@@ -240,7 +241,7 @@ class Workbench:
 
             dimensions = task["input"].get("dimensions") if task["kind"] == "paper_comparison" else None
             mode = "agent" if dimensions else task["input"].get("mode", "wiki")
-            raw, seen, trace, usage, issue = host.dsh.synthesize(
+            raw, seen, trace, usage, issue = runtime.synthesize(
                 task["input"]["question"], sources, wiki, cancelled, progress, mode=mode, dimensions=dimensions,
             )
             with host.lock:

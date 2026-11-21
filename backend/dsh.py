@@ -1,5 +1,6 @@
 """Run one scoped reading task with the pinned DeepSeek Harness SDK."""
 
+from copy import copy
 import json
 import os
 from pathlib import Path
@@ -75,7 +76,13 @@ class Dsh:
         self.cli = Path(cli).resolve()
         self.key = key
         self.endpoint = ENDPOINT
+        self.model = MODEL
         self.workspace = Path(workspace)
+
+    def for_model(self, model):
+        runtime = copy(self)
+        runtime.model = model
+        return runtime
 
     @classmethod
     def configured(cls, directory):
@@ -90,6 +97,14 @@ class Dsh:
             raise failure("SERVICE_AUTH_FAILED", False, "configure_service")
         if not self.cli.is_file():
             raise failure("MODEL_UNAVAILABLE", False, "configure_service")
+
+    def probe(self, cancelled):
+        self.check()
+        with tempfile.TemporaryDirectory(prefix="dsh-check-", dir=self.workspace) as folder:
+            root = Path(folder)
+            patch = root / "papertrace.patch.yml"
+            self.write_patch(patch, root, None)
+            self.run(root, patch, {}, "Reply with OK.", cancelled, probe=True)
 
     def answer(self, question, sources, cancelled, context="paper abstract passages"):
         self.check()
@@ -249,7 +264,7 @@ class Dsh:
             *([{"insert": [{"id": "papertrace-paper-tools", "name": str(plugin)}]}] if plugin else []),
         ]), encoding="utf-8")
 
-    def run(self, root, patch, passages, prompt, cancelled, research=False, progress=None):
+    def run(self, root, patch, passages, prompt, cancelled, research=False, progress=None, probe=False):
         env = {k: v for k, v in os.environ.items() if not k.startswith(("DSH_", "DEEPSEEK_", "PAPERTRACE_"))
                and k not in ("NODE_OPTIONS", "NODE_PATH", "NODE_EXTRA_CA_CERTS", "NODE_TLS_REJECT_UNAUTHORIZED")}
         env.update(DSH_HOME=str(root / "home"), DSH_TELEMETRY_DISABLED="1", DSH_PRIMARY_RUNTIME="",
@@ -277,7 +292,8 @@ class Dsh:
         reader = threading.Thread(target=read, daemon=True)
         reader.start()
         started = time.monotonic()
-        deadline = started + (180 if research else 90)
+        deadline = started + (8 if probe else 180 if research else 90)
+        max_tokens = 32 if probe else 5400 if research else 800
         calls, seen, text = {}, dict(passages) if research else {}, ""
         trace, step_count = [], 0
         limited = False
@@ -378,15 +394,19 @@ class Dsh:
 
         try:
             rpc("initialize", {"cwd": str(root), "provider": "deepseek-official",
-                               "model": MODEL, "maxTokens": 5400 if research else 800})
+                               "model": self.model, "maxTokens": max_tokens})
             rpc("session/prompt", {"sessionId": "reading", "contentBlocks": [{"type": "text", "text": prompt}]})
             rpc("session/wait", {"sessionId": "reading"})
             if issues & {"401", "403"}:
                 raise failure("SERVICE_AUTH_FAILED", False, "configure_service")
             if "402" in issues:
                 raise failure("SERVICE_QUOTA_EXHAUSTED", False, "check_quota")
+            if probe and "429" in issues:
+                raise failure("SERVICE_RATE_LIMITED", True, "retry")
             if reason not in ("completed",) or not text:
                 raise failure()
+            if probe:
+                return
             if research:
                 raw = json.loads(re.sub(r"\A```(?:json)?\s*|\s*```\Z", "", text.strip(), flags=re.IGNORECASE))
                 if not isinstance(raw, dict):

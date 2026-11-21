@@ -114,6 +114,30 @@ class ContractTest(unittest.TestCase):
             "task.start", operation_id=key, confirmation_id=confirmation["confirmation_id"], **params
         )
 
+    def test_service_configuration_uses_the_desktop_contract(self):
+        config = self.client.result("services.get")
+        provider = config["model_id"]
+        self.assertEqual(config["models"][0]["id"], provider)
+        self.assertNotIn("key", config["models"][0])
+        request = {k: v for k, v in config.items() if k != "revision"}
+        request.update(base_revision=config["revision"], operation_id="save-model")
+        request["models"][0]["model"] = "example-research-model"
+        tampered = {**request, "models": [{**request["models"][0], "endpoint": "https://example.invalid"}]}
+        self.assertEqual(self.client.call("services.save", **tampered)["error"]["data"]["reason"],
+                         "SETTINGS_READ_ONLY")
+        saved = self.client.result("services.save", **request)
+        self.assertNotEqual(saved["revision"], config["revision"])
+        self.assertEqual(saved["models"][0]["model"], "example-research-model")
+        self.assertEqual(self.client.result("services.save", **request), saved)
+        self.assertEqual(
+            self.client.call("services.save", **{**request, "operation_id": "old-revision"})["error"]["data"]["reason"],
+            "STALE_REVISION")
+        unchanged = {k: v for k, v in saved.items() if k != "revision"}
+        unchanged.update(base_revision=saved["revision"], operation_id="save-unchanged")
+        self.assertEqual(self.client.result("services.save", **unchanged), saved)
+        self.restart()
+        self.assertEqual(self.client.result("services.get"), saved)
+
     def test_topic_and_session_names_survive_restart(self):
         topic, session = self.context()
         topic_rename = {"operation_id": "topic-name", **topic, "title": "  文献研究  "}

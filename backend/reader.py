@@ -499,7 +499,8 @@ class Reader:
                     raise LiteratureError("NO_TEXT_IN_SELECTION", "This region has no readable text. Use an image question.", "correct_request")
                 paper = {"paper_id": source["paper_id"], "source_version_id": version,
                          "passages": [{"passage_id": "reader-selection", "page": page, "text": selected}]}
-                claims, _ = self.host.dsh.answer(question, [paper], cancelled, context="selected PDF text")
+                claims, _ = self.host.dsh_for_task(task).answer(
+                    question, [paper], cancelled, context="selected PDF text")
                 answer = "\n".join(claim["text"] for claim in claims)
             with self.host.lock, self.host.db:
                 current = self.host.get("task", key)

@@ -22,6 +22,10 @@ class ScriptedProvider(BaseHTTPRequestHandler):
         messages = request["messages"]
         prompt = next(block["text"] for m in messages if m["role"] == "user"
                       for block in m["content"] if isinstance(block, dict) and block["type"] == "text")
+        if prompt == "Reply with OK.":
+            self.server.probes.append((request["model"], request["max_tokens"], request.get("tools", [])))
+            self.respond({"type": "text", "text": "OK"})
+            return
         if "\nApproved passage IDs: " in prompt:
             results = [b for m in messages for b in m["content"]
                        if isinstance(b, dict) and b["type"] == "tool_result"]
@@ -42,6 +46,7 @@ class ScriptedProvider(BaseHTTPRequestHandler):
         available = {t["name"] for t in request.get("tools", [])}
         if hasattr(self.server, "observed_tools"):
             self.server.observed_tools.append(available)
+            self.server.research_models.append(request["model"])
         if hasattr(self.server, "first_request") and self.server.first_request is None:
             import time
             self.server.first_request = time.monotonic()
@@ -112,6 +117,8 @@ class DshResearchTest(unittest.TestCase):
             fixture.setUp()
             with ThreadingHTTPServer(("127.0.0.1", 0), ScriptedProvider) as provider:
                 provider.observed_tools = []
+                provider.probes = []
+                provider.research_models = []
                 server = threading.Thread(target=provider.serve_forever, daemon=True)
                 server.start()
                 try:
@@ -120,7 +127,24 @@ class DshResearchTest(unittest.TestCase):
                               "loopback-fixture", Path(fixture.workspace.name))
                     dsh.endpoint = f"http://127.0.0.1:{provider.server_port}"
                     worker.dsh = dsh
+                    task = {"kind": "literature_synthesis", "topic_id": fixture.topic,
+                            "input": {"source_versions": fixture.versions, "question": "How can answers be supported?"}}
+                    prepared = fixture.call("task.prepare", **task)
+                    config = fixture.call("services.get")
+                    revision = config.pop("revision")
+                    config["models"][0]["model"] = "deepseek-pro"
+                    fixture.call("services.save", base_revision=revision, **config)
+                    fixture.call("task.start", confirmation_id=prepared["confirmation_id"],
+                                 error="CONFIRMATION_REQUIRED", **task)
+                    for _ in range(2):
+                        self.assertTrue(worker.test_service({
+                            "id": config["model_id"], "operation_id": "probe-1",
+                        })["ok"])
+                    self.assertEqual(provider.probes, [("deepseek-pro", 32, [])])
+                    self.assertEqual(dsh.model, "deepseek-flash")
                     fixture.run_task(fixture.versions)
+                    self.assertTrue(provider.research_models)
+                    self.assertEqual(set(provider.research_models), {"deepseek-pro"})
                     outline = fixture.call("synthesis.list", topic_id=fixture.topic)["items"][0]
                     self.assertEqual([row["title"] for row in outline["trace"]], ["paper_search", "paper_read"])
                     point = outline["points"][0]
