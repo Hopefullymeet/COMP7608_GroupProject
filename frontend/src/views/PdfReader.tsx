@@ -176,13 +176,11 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
   const [ratios, setRatios] = useState<Record<number, number>>({})
   const [current, setCurrent] = useState(page)
   const [renderRange, setRenderRange] = useState([1, 3])
-  const [pagesOpen, setPagesOpen] = useState(true)
   const [jumpValue, setJumpValue] = useState<string>()
   const [annotationsOpen, setAnnotationsOpen] = useState(false)
   const [highlight, setHighlight] = useState<{ page: number; rect: Rect }>()
   const [error, setError] = useState('')
   const initialJump = useRef<{ page: number; target?: Rect }>()
-  const lastTop = useRef(0)
   const more = useRef<HTMLDetailsElement>(null)
   const pageList = useRef<HTMLDivElement>(null)
   const [tool, setTool] = useState<Tool>('select')
@@ -240,10 +238,6 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
     setCurrent(at(top + Math.min(120, scroller.clientHeight * .25)))
     const range = [Math.max(1, at(top) - 1), Math.min(total, at(top + scroller.clientHeight) + 1)]
     setRenderRange((old) => old[0] === range[0] && old[1] === range[1] ? old : range)
-    if (top === 0 || Math.abs(top - lastTop.current) >= 8) {
-      setPagesOpen(top === 0 || top < lastTop.current)
-      lastTop.current = top
-    }
   }
 
   function jump(number: number, rect?: Rect) {
@@ -252,11 +246,9 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
     if (!scroller || !sheet) return
     const top = sheet.offsetTop + (rect ? Math.max(0, rect[1] * sheet.offsetHeight - 24) : 0)
     scroller.scrollTo({ top, left: rect ? Math.max(0, rect[0] * sheet.offsetWidth - 16) : 0 })
-    lastTop.current = scroller.scrollTop
     setSelection(undefined)
     setHighlight(rect ? { page: number, rect } : undefined)
     syncPageWindow(scroller)
-    setPagesOpen(true)
   }
 
   useLayoutEffect(() => {
@@ -359,17 +351,30 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
     } catch (problem) { workspace.report(problem) }
   }
 
+  function adjustZoom(next: number) {
+    const scroller = frame.current
+    const sheet = pageElement(current)
+    if (!scroller || !sheet || next === zoom) return
+    const within = (scroller.scrollTop - sheet.offsetTop) / Math.max(1, sheet.offsetHeight)
+    setZoom(next)
+    requestAnimationFrame(() => {
+      const activePage = pageElement(current)
+      if (activePage) scroller.scrollTo({ top: activePage.offsetTop + activePage.offsetHeight * within })
+    })
+  }
+
+  const pageGutter = width < 440 ? 44 : 12
   return <div className="pt-reader">
     <div className="pt-reader-frame" ref={frame} tabIndex={0} aria-label={tr('PDF document')}
       onPointerDown={() => { if (more.current) more.current.open = false }}
       onScroll={(event) => syncPageWindow(event.currentTarget)}>
       {error && <p role="alert" className="pt-pdf-loading">{tr(error)}</p>}
       {!document && !error && <p className="pt-pdf-loading" role="status">{tr('Opening PDF…')}</p>}
-      <div className="pt-reader-pages" ref={pageList}>
+      <div className="pt-reader-pages" ref={pageList} style={{ paddingInlineEnd: pageGutter }}>
         {document && width > 0 && Array.from({ length: document.numPages }, (_, index) => {
           const number = index + 1
           const ratio = ratios[number] ?? aspectRatio
-          const pageWidth = Math.max(1, width - 24) * zoom
+          const pageWidth = Math.max(1, width - 12 - pageGutter) * zoom
           return <div className="pt-pdf-sheet" key={number} style={{ width: pageWidth, aspectRatio: ratio }}>
             {(number >= renderRange[0] && number <= renderRange[1]) &&
               <PdfSheet document={document} scope={scope} page={number} width={pageWidth} aspectRatio={ratio}
@@ -382,18 +387,12 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
       </div>
     </div>
     <div className="pt-pdf-rail" aria-label={tr('PDF tools')}>
-      <button className="pt-round" title={tr(zoom === 1 ? 'Zoom in' : 'Fit to width')}
-        aria-label={tr(zoom === 1 ? 'Zoom in' : 'Fit to width')} onClick={() => {
-          const scroller = frame.current
-          const sheet = pageElement(current)
-          if (!scroller || !sheet) return
-          const within = Math.max(0, (scroller.scrollTop - sheet.offsetTop) / Math.max(1, sheet.offsetHeight))
-          setZoom((value) => value === 1 ? 1.5 : 1)
-          requestAnimationFrame(() => {
-            const target = pageElement(current)
-            if (target) scroller.scrollTo({ top: target.offsetTop + target.offsetHeight * within, left: 0 })
-          })
-        }}><Icon name={zoom === 1 ? 'zoomIn' : 'zoomOut'} size={17} /></button>
+      <div className="pt-pdf-cluster">
+        <button className="pt-round" disabled={!document || zoom >= 1.5} title={tr('Zoom in')}
+          aria-label={tr('Zoom in')} onClick={() => adjustZoom(Math.min(1.5, zoom + .25))}><Icon name="zoomIn" size={17} /></button>
+        <button className="pt-round" disabled={!document || zoom <= 1} title={tr('Zoom out')}
+          aria-label={tr('Zoom out')} onClick={() => adjustZoom(Math.max(1, zoom - .25))}><Icon name="zoomOut" size={17} /></button>
+      </div>
       {tool !== 'select' && <button className="pt-round" onClick={() => setTool('select')}
         title={tr(tool === 'region' ? 'Cancel region selection' : 'Finish drawing')}
         aria-label={tr(tool === 'region' ? 'Cancel region selection' : 'Finish drawing')}><Icon name="x" size={17} /></button>}
@@ -418,17 +417,16 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
           <button disabled={!marks.length} onClick={() => void exportCopy()}>{tr('Export annotated PDF')}</button>
         </div>
       </details>
-      {document && <div className="pt-page-controls">
-        {pagesOpen && <button className="pt-round" disabled={current <= 1} onClick={() => jump(current - 1)}
-          aria-label={tr('Previous page')} title={tr('Previous page')}><Icon name="arrowUp" size={15} /></button>}
+      {document && <div className="pt-pdf-cluster pt-page-controls">
+        <button className="pt-round" disabled={current <= 1} onClick={() => jump(current - 1)}
+          aria-label={tr('Previous page')} title={tr('Previous page')}><Icon name="arrowUp" size={15} /></button>
         <button className="pt-round pt-page-count" aria-haspopup="dialog"
-          title={tr('PDF page {0}', current)} aria-label={tr('PDF page {0}', current)} onClick={() => {
-            setJumpValue(String(current))
-            setPagesOpen(true)
-          }}>{current}<small>/ {document.numPages}</small></button>
-        {pagesOpen && <button className="pt-round" disabled={current >= document.numPages} onClick={() => jump(current + 1)}
-          aria-label={tr('Next page')} title={tr('Next page')}><Icon name="arrowDown" size={15} /></button>}
+          title={tr('PDF page {0}', current)} aria-label={tr('PDF page {0}', current)}
+          onClick={() => setJumpValue(String(current))}>{current}<small>/ {document.numPages}</small></button>
+        <button className="pt-round" disabled={current >= document.numPages} onClick={() => jump(current + 1)}
+          aria-label={tr('Next page')} title={tr('Next page')}><Icon name="arrowDown" size={15} /></button>
       </div>}
+
     </div>
     {document && jumpValue !== undefined && <Dialog title={tr('Go to page')} onClose={() => setJumpValue(undefined)}>
       <form onSubmit={(e) => { e.preventDefault(); jump(Number(jumpValue)); setJumpValue(undefined) }}>

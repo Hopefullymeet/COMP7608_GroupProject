@@ -72,7 +72,7 @@ class Worker:
     writes = {
         "comparison.save", "draft.import", "draft.resolve_reference", "audit.review", "audit.save_to_wiki", "export.create",
         "topic.create", "topic.rename", "session.create", "session.rename", "task.prepare", "task.start", "task.cancel",
-        "candidate.decide", "reader.bookmark", "note.save", "library.import_pdf", "synthesis.review",
+        "candidate.decide", "reader.bookmark", "note.save", "library.import_pdf", "library.set_alias", "synthesis.review",
         "reader.mark_save", "reader.mark_delete", "reader.answer_save", "reader.mark_to_wiki",
     }
 
@@ -390,11 +390,27 @@ class Worker:
             pid = value["location"]["passage_id"]
             return {"anchor_id": value["anchor_id"], "topic_id": topic, "source": self.research.document(source, pid),
                     "passage_id": pid, "quote": value["quote"], "read_scope": value["read_scope"]}
+        if method == "library.set_alias":
+            topic = self.topic(params)
+            paper_id = required(params, "paper_id")
+            paper = self.get("paper", paper_id)
+            if topic not in paper["topic_ids"]:
+                raise missing("Paper is outside the selected topic.")
+            alias = params.get("alias")
+            if not isinstance(alias, str) or len(alias.strip()) > 80:
+                raise invalid("A paper alias must be at most 80 characters.")
+            alias = alias.strip()
+            if alias:
+                paper["alias"] = alias
+            else:
+                paper.pop("alias", None)
+            self.put("paper", paper_id, paper)
+            return {"paper_id": paper_id, "alias": alias}
         if method in ("library.list", "library.catalog"):
             topic = self.topic(params) if "topic_id" in params else None
             papers = [p for p in self.rows("paper") if topic is None or topic in p["topic_ids"]]
             if method == "library.list":
-                items = [{**{k: p[k] for k in ("paper_id", "title", "topic_ids")},
+                items = [{**{k: p[k] for k in ("paper_id", "title", "topic_ids", "alias") if k in p},
                           "source_versions": [{**v, "pdf_available": bool(
                               self.get("source", v["source_version_id"]).get("page_count"))}
                               for v in p["source_versions"]]} for p in papers]

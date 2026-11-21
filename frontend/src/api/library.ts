@@ -48,6 +48,7 @@ type Changed = { changed: number }
 type Position = { topic_id: string; source_version_id: string; session_id?: string }
 export type LibraryMethods = {
   'file.pick': [{ purpose: 'papers' | 'draft' | 'backup' }, { files: Picked[] }]
+  'library.set_alias': [Write & { topic_id: string; paper_id: string; alias: string }, { paper_id: string; alias: string }]
   'library.catalog': [Record<string, never>, Catalog]
   'library.resolve_import': [
     Write & { review_id: string; decision: 'link' | 'separate' },

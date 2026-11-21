@@ -42,6 +42,7 @@
 | Library | 浏览个人库 | `library.list` | [已细化](discover-read-locate.md#22-加入主题并读回-library) | 客户端分段显示 |
 | | 导入、补全文、复核重复与冲突 | `task.start`（`paper_import`）、`library.resolve_import` | [已细化](library-reading.md) | |
 | | 移出主题、回收站、恢复与清理 | `library.organize/impact/trash/restore/purge` | [已细化](library-reading.md) | |
+| | 保存或清除论文别名 | `library.set_alias` | [已细化](library-reading.md) | 在阅读目录中编辑 |
 | | 标签与批量操作、来源更新 | `library.catalog/organize` | [已细化](library-reading.md) | |
 | Evidence Wiki | 浏览概念页与关系 | `wiki.list` | [已细化](comparison-wiki.md) | |
 | | 生成或重生成草稿 | `task.start`（`wiki_draft`） | [已细化](comparison-wiki.md) | |

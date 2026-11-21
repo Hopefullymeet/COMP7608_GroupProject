@@ -7,6 +7,7 @@
 | file.pick | purpose: 'papers' 或 'draft' 或 'backup' | {files: {file_id:Id,name:string}[]}，用户取消返回空数组，文件限制由 purpose 决定。桌面文件选择器多选论文，稿件和备份单选 |
 | library.catalog | {} | {papers: Paper[], reviews: Review[], trash: Paper[]}，按标题排序，客户端搜索、分段显示 |
 | task.prepare → task.start (paper_import) | kind, input:{files:Id[],topic_id?:Id,paper_id?:Id}；start 带确认单 | 依次报告 inspect、match、commit 和终态；结果 {paper_ids:Id[],review_ids:Id[]}。指定论文时补材料版本，指定主题时加入主题 |
+| library.set_alias | W, topic_id, paper_id, alias:string | {paper_id:Id,alias:string}；论文须属于指定主题。去除首尾空白后最多 80 字符，空字符串清除别名 |
 | library.resolve_import | W, review_id, decision:'link' 或 'separate' | {paper_id:Id}；链接新增版本，保留原版本和锚点。身份冲突或模糊匹配必须复核 |
 | library.organize | W, paper_ids:Id[], action:'tag'、'untag'、'link' 或 'unlink', value:string | {changed:number}；value 是标签或主题 ID。移出仅删除所选关联 |
 | library.impact | paper_ids:Id[] | {references:{kind:string,label:string}[], revision:Id}，按主题、笔记、引用、比较、稿件等列出影响 |
@@ -23,6 +24,8 @@
 | evidence.open | anchor_id | Located；按版本解析，失效报 ANCHOR_UNAVAILABLE，禁止回退至新版 |
 | note.list | topic_id | {items:Note[]}；含历史版本，可按问题、会话及来源筛选 |
 | note.save | W,topic_id,note_id?:Id,base_revision?:Id,text:string,anchor_ids:Id[],session_id?:Id,origin:'user' 或 'answer' 或 'comparison' 或 'citation' | Note；新建或追加修订，支持插入引用、自动保存及以旧版内容生成恢复版本 |
+
+论文别名随论文记录保存，各主题和版本共享。`library.list` 和 `library.catalog` 的论文条目可返回 `alias`。原标题、引用和版本 ID 保留原值。
 
 ~~~~ts
 type Paper = LibraryItem & {authors:string[], identity:string, tags:string[], changes:string[], files:{source_version_id:Id,name:string,role:string}[]}

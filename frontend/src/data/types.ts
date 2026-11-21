@@ -12,6 +12,8 @@ export interface Passage {
 
 export interface Paper {
   id: string
+  paperId?: string
+  alias?: string
   short: string
   title: string
   authors: string[]

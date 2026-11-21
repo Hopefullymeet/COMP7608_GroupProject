@@ -141,6 +141,15 @@ export function libraryFixture(
             ? [{ file_id: 'related-work.md', name: 'related-work.md' }]
             : [{ file_id: 'demo-backup', name: 'Local demo backup' }],
     }),
+    'library.set_alias': ({ topic_id, paper_id, alias }) => {
+      const paper = state.library.find((item) => item.paper_id === paper_id && item.topic_ids.includes(topic_id))
+      if (!paper) throw new Error('Paper is outside the selected topic.')
+      const normalized = alias.trim()
+      if (normalized.length > 80) throw new Error('A paper alias must be at most 80 characters.')
+      if (normalized) paper.alias = normalized
+      else delete paper.alias
+      return { paper_id, alias: normalized }
+    },
     'library.catalog': () => ({
       papers: state.library
         .map((p) => asEntry(p, state.shelf))

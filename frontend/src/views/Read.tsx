@@ -1,5 +1,5 @@
 import { count, useLanguage } from '../i18n'
-import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { NEW_SESSION, allEvidence, currentTopic, evidenceFor, paperFor, papersOfTopic, sourceStatus, useStore } from '../data/store'
 import { QUESTIONS } from '../data/scripts'
 import { Icon, Spinner } from '../components/Icon'
@@ -8,6 +8,7 @@ import { scrollWithin } from '../components/util'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { Dialog } from '../components/PageHead'
 import { FigureSearch } from '../components/FigureSearch'
+import { errorText } from '../api/contract'
 import type { ReaderAnswer, Rect, Selection } from '../api/reader'
 import type { ChatMessage, Paper, Passage } from '../data/types'
 
@@ -240,6 +241,92 @@ function PaperInsights({ paper, mode, onOpen }: { paper: Paper; mode: 'scan' | '
   </div>
 }
 
+type PaperChoice = { paper: Paper; label: string; version?: string }
+
+function PaperDirectory({ choices, selected, topicId, onSelect }: {
+  choices: PaperChoice[]; selected: string; topicId: string; onSelect: (id: string) => void
+}) {
+  const { tr } = useLanguage()
+  const workspace = useWorkspace()
+  const root = useRef<HTMLDivElement>(null)
+  const toggle = useRef<HTMLButtonElement>(null)
+  const id = useId()
+  const [open, setOpen] = useState(false)
+  const [editing, edit] = useState<Paper>()
+  const [alias, setAlias] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [problem, setProblem] = useState('')
+
+  useEffect(() => {
+    if (!open || editing) return
+    function outside(event: PointerEvent) {
+      if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false)
+    }
+    window.addEventListener('pointerdown', outside)
+    return () => window.removeEventListener('pointerdown', outside)
+  }, [open, editing])
+
+  function close() {
+    setOpen(false)
+    toggle.current?.focus({ preventScroll: true })
+  }
+
+  return <>
+    <div className="pt-paper-directory" ref={root} onKeyDown={(event) => {
+      if (!open || event.key !== 'Escape') return
+      event.stopPropagation()
+      close()
+    }}>
+      <button ref={toggle} className="pt-round" type="button" aria-expanded={open} aria-controls={open ? id : undefined}
+        title={tr('Paper list')} aria-label={tr('Paper list')} onClick={() => setOpen((value) => !value)}>
+        <Icon name="paperList" size={17} />
+      </button>
+      {open && <nav id={id} className="pt-paper-list" aria-label={tr('Papers in this reader')}>
+        {choices.map(({ paper, label, version }) => <div className="pt-paper-row" key={paper.id}>
+          <button className="pt-paper-open" type="button" title={paper.alias ? `${paper.alias} · ${paper.title}` : paper.title}
+            aria-pressed={selected === paper.id} onClick={() => { onSelect(paper.id); close() }}>
+            <Icon name="file" size={14} />
+            <span>{paper.alias || label}</span>
+            {version && <small>{version}</small>}
+          </button>
+          {paper.paperId && paper.pdfAvailable && <button type="button" className="icon-btn pt-paper-alias"
+            title={tr('Edit paper alias')} aria-label={tr('Edit alias for {0}', paper.alias || label)}
+            onClick={() => { setAlias(paper.alias ?? ''); setProblem(''); edit(paper) }}>
+            <Icon name="edit" size={14} />
+          </button>}
+        </div>)}
+      </nav>}
+    </div>
+    {editing && <Dialog title={tr('Edit paper alias')} onClose={() => { if (!saving) edit(undefined) }}>
+      <p className="dialog-text">{editing.title}</p>
+      <form onSubmit={async (event) => {
+        event.preventDefault()
+        if (!editing.paperId || saving) return
+        setSaving(true)
+        setProblem('')
+        try {
+          await workspace.write('library.set_alias', { topic_id: topicId, paper_id: editing.paperId, alias: alias.trim() })
+          edit(undefined)
+        } catch (error) {
+          setProblem(errorText(error))
+        } finally {
+          setSaving(false)
+        }
+      }}>
+        <label className="rename-field">{tr('Alias')}
+          <input autoFocus placeholder={tr('Use original title')} value={alias} maxLength={80}
+            onChange={(event) => setAlias(event.currentTarget.value)} />
+        </label>
+        {problem && <p role="alert">{tr(problem)}</p>}
+        <div className="dialog-actions">
+          <button className="ghost-btn" type="button" disabled={saving} onClick={() => edit(undefined)}>{tr('Cancel')}</button>
+          <button className="primary" disabled={saving}>{tr('Save')}</button>
+        </div>
+      </form>
+    </Dialog>}
+  </>
+}
+
 function Reader({ pdf }: { pdf?: PdfActions }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
@@ -270,20 +357,12 @@ function Reader({ pdf }: { pdf?: PdfActions }) {
 
   return (
     <section className={pdf ? 'reader reader--library' : 'reader'} aria-label={tr('Paper')}>
-      {pdf ? <nav className="pt-paper-list" aria-label={tr('Papers in this reader')}>
-        <h2>{tr('Papers')}</h2>
-        {choices.map(({ paper: item, label, version }) => (
-          <button key={item.id} type="button" title={item.title} aria-pressed={item.id === paper.id}
-            onClick={() => {
-              act.setReader(item.id)
-              setMode('reading')
-            }}>
-            <Icon name="file" size={14} />
-            <span>{label}</span>
-            {version && <small>{version}</small>}
-          </button>
-        ))}
-      </nav> : <div className="reader-bar">
+      {pdf ? <PaperDirectory key={currentTopic(state)} topicId={currentTopic(state)} choices={choices} selected={paper.id}
+        onSelect={(id) => {
+          if (id === paper.id) return
+          act.setReader(id)
+          setMode('reading')
+        }} /> : <div className="reader-bar">
         <div className="paper-tabs" role="group" aria-label={tr('Papers in this reader')}>
           {choices.map(({ paper: p, label, version }) => (
             <button key={p.id} className={p.id === paper.id ? 'on' : ''} aria-pressed={p.id === paper.id}

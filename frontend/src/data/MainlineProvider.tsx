@@ -98,6 +98,8 @@ function traceSteps(steps: Step[]): AgentRun['steps'] {
 function paperFromAbstract(source: Abstract | DocumentView, paper?: Paper): Paper {
   return {
     id: source.source_version_id,
+    paperId: source.paper_id,
+    alias: paper?.alias,
     short: paper?.short ?? 'Source abstract',
     title: paper?.title ?? 'Source abstract',
     authors: paper?.authors ?? [],
@@ -224,6 +226,8 @@ export function MainlineProvider({
       item.source_versions.map(
         (version): Paper => ({
           id: version.source_version_id,
+          paperId: item.paper_id,
+          alias: item.alias,
           short:
             item.source_versions.length > 1 ? `${item.title} · ${version.source_version_id}` : item.title,
           title: item.title,
