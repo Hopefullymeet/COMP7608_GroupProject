@@ -5,6 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 import datetime
 import json
+import math
+import os
 from pathlib import Path
 import queue
 import re
@@ -18,6 +20,8 @@ from literature import LiteratureError, MAX_VERSIONS, digest, init_corpus
 from workbench import Workbench
 from citations import CitationWorkspace, init_citations
 from reader import Reader
+from bibliography import (OPENALEX, PROVIDERS, PublicServiceError, arxiv_id, doi, identity_keys,
+                          lookup_target, metadata_from_provider, normalize_venue, openalex_search, selected_metadata)
 
 
 def encode(value):
@@ -78,6 +82,7 @@ class Worker:
         "candidate.decide", "reader.bookmark", "note.save", "library.import_pdf", "library.set_alias", "synthesis.review",
         "reader.mark_save", "reader.mark_delete", "reader.answer_save", "reader.mark_to_wiki",
         "services.save",
+        "library.commit_identifier", "library.update_metadata",
     }
 
     def __init__(self, directory, send):
@@ -105,6 +110,8 @@ class Worker:
         self.lock = threading.RLock()
         self.service_test_lock = threading.Lock()
         self.dsh = Dsh.configured(directory.resolve())
+        self.discovery_fixture = os.environ.get("PAPERTRACE_DISCOVERY_FIXTURE") == "1"
+        self.openalex_key = os.environ.get("PAPERTRACE_OPENALEX_API_KEY", "").strip()
         self.inflight = {}
         self.closing = threading.Event()
         self.subscriptions = set()
@@ -177,7 +184,7 @@ class Worker:
         response = {"jsonrpc": "2.0", "id": rpc_id}
         after = []
         method = request.get("method") if isinstance(request, dict) else None
-        with nullcontext() if method == "services.test" else self.lock:
+        with nullcontext() if method in ("services.test", "library.preview_identifier") else self.lock:
             try:
                 if not isinstance(rpc_id, str) or not isinstance(request.get("method"), str) or request.get("jsonrpc") != "2.0":
                     raise RpcError(-32600, "INVALID_REQUEST", "correct_request", "Expected a JSON-RPC 2.0 request.")
@@ -186,12 +193,15 @@ class Worker:
                     raise invalid("params must be an object.")
                 if method == "services.test":
                     response["result"] = self.test_service(params)
+                elif method == "library.preview_identifier":
+                    response["result"] = self.preview_identifier(params)
                 else:
                     with self.db:
                         response["result"] = self.call(method, params, after)
             except LiteratureError as failure:
                 after.clear()
-                issue = {"reason": failure.reason, "retryable": False, "next_action": failure.action}
+                issue = {"reason": failure.reason, "retryable": getattr(failure, "retryable", False),
+                         "next_action": failure.action}
                 response["error"] = {"code": failure.code, "message": str(failure), "data": issue}
             except RpcError as failure:
                 after.clear()
@@ -235,12 +245,15 @@ class Worker:
         settings = stored[0] if stored else {"revision": "local-contract", "model": MODEL}
         available = bool(self.dsh and self.dsh.key)
         return {"revision": settings["revision"], "model_id": MODEL, "models": [{
-            "id": MODEL, "label": "DeepSeek Harness", "model": settings["model"], "endpoint": ENDPOINT,
+            "id": MODEL, "label": "DeepSeek", "model": settings["model"], "endpoint": ENDPOINT,
             "local": False, "credential_configured": available,
         }], "budget": {
             "calls": 4 if self.dsh else 0, "tokens": 3200 if self.dsh else 0,
             "minutes": 1.5 if self.dsh else 1, "cost": 0,
-        }, "ask_before_overage": True, "services": []}
+        }, "ask_before_overage": True, "services": [] if self.discovery_fixture else [{
+            "id": "openalex", "label": "OpenAlex", "kind": "search", "enabled": True,
+            "status": "Available", "fields": ["year", "venue"],
+        }]}
 
     def save_services(self, params):
         config = self.services_config()
@@ -249,7 +262,7 @@ class Worker:
         models = params.get("models")
         if (params.get("model_id") != MODEL or not isinstance(models, list) or len(models) != 1
                 or not isinstance(models[0], dict) or models[0].get("id") != MODEL):
-            raise invalid("Select the DeepSeek Harness provider.")
+            raise invalid("Select the DeepSeek provider.")
         model = required(models[0], "model").strip()
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", model):
             raise invalid("Use a model ID with up to 128 letters, digits, dots, underscores, or hyphens.")
@@ -489,6 +502,18 @@ class Worker:
                 paper.pop("alias", None)
             self.put("paper", paper_id, paper)
             return {"paper_id": paper_id, "alias": alias}
+        if method == "library.commit_identifier":
+            topic = self.topic(params)
+            preview = self.get("bibliography_preview", required(params, "preview_id"))
+            if preview["topic_id"] != topic:
+                raise missing("The preview is outside the selected topic.")
+            target = self.paper_in_topic(params) if "paper_id" in params else None
+            paper, linked = self.add_bibliographic_paper(topic, preview["metadata"], target)
+            return {"paper_id": paper["paper_id"], **paper["source_versions"][0], "already_linked": linked}
+        if method == "library.metadata":
+            return self.paper_metadata(self.paper_in_topic(params))
+        if method == "library.update_metadata":
+            return self.update_metadata(params)
         if method in ("library.list", "library.catalog"):
             topic = self.topic(params) if "topic_id" in params else None
             papers = [p for p in self.rows("paper") if topic is None or topic in p["topic_ids"]]
@@ -505,20 +530,37 @@ class Worker:
                 return source
             session = self.session(params) if "session_id" in params else None
             position_key = encode([params["topic_id"], params.get("session_id"), source["source_version_id"]])
+            try:
+                position = self.get("position", position_key)
+            except RpcError:
+                position = {}
             if method == "reader.position":
-                try:
-                    return self.get("position", position_key)
-                except RpcError:
-                    return {}
-            pid = required(params, "passage_id")
-            if not self.research.document(source, pid)["passages"]:
-                raise missing("Passage was not found.")
-            position = {"passage_id": pid}
+                return position
+            if "page" in params:
+                page = params["page"]
+                if type(page) is not int or not 1 <= page <= source.get("page_count", 0):
+                    raise invalid("Page is outside this PDF.")
+                if position.get("page") != page:
+                    position.pop("passage_id", None)
+                position["page"] = page
+                for field, low, high in (("zoom", 0.1, 10), ("offset", 0, 1)):
+                    value = params.get(field)
+                    if type(value) not in (int, float) or not low <= value <= high or not math.isfinite(value):
+                        raise invalid(f"Invalid reading {field}.")
+                    position[field] = value
+            else:
+                pid = required(params, "passage_id")
+                passages = self.research.document(source, pid)["passages"]
+                if not passages:
+                    raise missing("Passage was not found.")
+                position["passage_id"] = pid
+                if "page" in position and passages[0].get("page") != position["page"]:
+                    position = {"passage_id": pid}
             self.put("position", position_key, position)
             if session:
                 session["reader"] = {"source_version_id": source["source_version_id"], **position}
                 self.put("session", session["session_id"], session)
-            return position
+            return position if "page" in params else {"passage_id": pid}
         if method == "evidence.locate":
             anchor = self.get("anchor", required(params, "anchor_id"))
             if anchor["topic_id"] != self.topic(params) or anchor["message_id"] != required(params, "message_id"):
@@ -599,8 +641,126 @@ class Worker:
 
     def search_result(self, saved):
         return {"search_id": saved["search_id"], "coverage": saved["coverage"],
+                **({"provider": saved["provider"]} if "provider" in saved else {}),
                 "candidates": [c for c in saved["candidates"] if c["decision"] != "exclude"],
                 "excluded": [c for c in saved["candidates"] if c["decision"] == "exclude"]}
+
+    def preview_identifier(self, params):
+        provider, identifier_ = lookup_target(required(params, "identifier"))
+        with self.lock:
+            topic = self.topic(params)
+        metadata = metadata_from_provider(provider, identifier_)
+        with self.lock, self.db:
+            self.topic(params)
+            paper = self.find_bibliographic_paper(metadata)
+            preview = {"preview_id": identifier(), "topic_id": topic, "metadata": metadata}
+            self.put("bibliography_preview", preview["preview_id"], preview)
+            if paper:
+                preview["existing_paper_id"] = paper["paper_id"]
+            return preview
+
+    def find_bibliographic_paper(self, metadata):
+        keys = identity_keys(metadata)
+        matches = [p for p in self.rows("paper") if identity_keys(p) & keys]
+        if len(matches) > 1:
+            raise RpcError(-32018, "IDENTIFIER_ALREADY_LINKED", "refresh_data", "Identifiers match different papers.")
+        return matches[0] if matches else None
+
+    def paper_in_topic(self, params):
+        topic = self.topic(params)
+        paper = self.get("paper", required(params, "paper_id"))
+        if topic not in paper["topic_ids"]:
+            raise missing("Paper is outside the selected topic.")
+        return paper
+
+    def paper_metadata(self, paper):
+        return {"paper_id": paper["paper_id"], "revision": paper.get("metadata_revision", "initial"),
+                "manual_fields": paper.get("manual_metadata_fields", []),
+                "metadata": {"title": paper["title"], "authors": paper["authors"], **paper.get("metadata", {})}}
+
+    def set_paper_metadata(self, paper, metadata):
+        previous = self.paper_metadata(paper)["metadata"]
+        if previous != metadata:
+            paper.update(metadata=metadata, metadata_revision=identifier(),
+                         title=metadata["title"], authors=metadata["authors"])
+
+    def update_metadata(self, params):
+        paper = self.paper_in_topic(params)
+        current = self.paper_metadata(paper)
+        if required(params, "base_revision") != current["revision"]:
+            raise RpcError(-32011, "STALE_REVISION", "refresh_data", "Paper metadata changed. Reload and try again.")
+        edits = params.get("changes")
+        allowed = {"title", "authors", "year", "venue", "doi", "arxiv_id"}
+        if not isinstance(edits, dict) or not edits or set(edits) - allowed:
+            raise invalid("Specify editable bibliographic fields.")
+        edits = dict(edits)
+        for field, value in edits.items():
+            if field == "authors":
+                if (not isinstance(value, list) or len(value) > 500
+                        or any(not isinstance(a, str) or not a.strip() or len(a) > 300 for a in value)):
+                    raise invalid("Authors must be a list of names.")
+                edits[field] = [a.strip() for a in value]
+            elif field == "year":
+                if value is not None and (type(value) is not int or not 1 <= value <= 9999):
+                    raise invalid("Enter a valid year.")
+            else:
+                if not isinstance(value, str) or len(value) > 1000 or (field == "title" and not value.strip()):
+                    raise invalid(f"Invalid {field}.")
+                cleaned = value.strip()
+                normalized = {"doi": doi, "arxiv_id": arxiv_id}.get(field, str)(cleaned)
+                if cleaned and not normalized:
+                    raise invalid(f"Invalid {field}.")
+                edits[field] = normalized
+        metadata = {**current["metadata"], **edits}
+        matches = identity_keys(metadata)
+        if any(p["paper_id"] != paper["paper_id"] and identity_keys(p) & matches for p in self.rows("paper")):
+            raise RpcError(-32018, "IDENTIFIER_ALREADY_LINKED", "refresh_data", "Another paper already uses this identifier.")
+        if metadata != current["metadata"] or not set(edits) <= set(current["manual_fields"]):
+            self.set_paper_metadata(paper, metadata)
+            if paper.get("metadata_revision", "initial") == current["revision"]:
+                paper["metadata_revision"] = identifier()
+            paper["manual_metadata_fields"] = sorted(set(edits) | set(current["manual_fields"]))
+            self.put("paper", paper["paper_id"], paper)
+        return self.paper_metadata(paper)
+
+    def add_bibliographic_paper(self, topic, record, target=None):
+        metadata = selected_metadata(record)
+        if isinstance(metadata.get("venue"), dict):
+            metadata["venue"] = metadata["venue"]["name"]
+        paper = self.find_bibliographic_paper(metadata)
+        if target and paper and paper["paper_id"] != target["paper_id"]:
+            raise RpcError(-32018, "IDENTIFIER_ALREADY_LINKED", "refresh_data", "Another paper already uses this identifier.")
+        paper = target or paper
+        if paper is None:
+            pid, version = identifier(), identifier()
+            abstract = record.get("abstract", "")
+            scope = "abstract" if abstract else "metadata"
+            paper = {"paper_id": pid, "title": metadata["title"], "authors": metadata["authors"],
+                     "topic_ids": [], "identity": metadata.get("doi") or metadata.get("source_id") or
+                     f"arxiv:{metadata['arxiv_id']}", "tags": [], "changes": [],
+                     "metadata": metadata, "metadata_revision": identifier(),
+                     "source_versions": [{"source_version_id": version, "available_scope": scope}],
+                     "files": [{"source_version_id": version, "name": metadata["title"], "role": scope}]}
+            self.put("source", version, {"source_version_id": version, "paper_id": pid, "passages": [
+                {"passage_id": f"{version}-{i}", "text": text}
+                for i, text in enumerate(abstract.split("\n\n"), 1) if text.strip()]})
+        else:
+            current = self.paper_metadata(paper)["metadata"]
+            if target and any(current.get(key) and metadata.get(key)
+                              and current[key] != metadata[key] and not identity_keys(current) & identity_keys(metadata)
+                              for key in ("doi", "arxiv_id")):
+                raise RpcError(-32018, "IDENTIFIER_ALREADY_LINKED", "refresh_data",
+                               "The PDF record already has a different identifier.")
+            manual = paper.get("manual_metadata_fields", [])
+            for key, value in metadata.items():
+                if key not in manual and value and (not current.get(key) or (target and key == "title")):
+                    current[key] = value
+            self.set_paper_metadata(paper, current)
+        linked = topic in paper["topic_ids"]
+        if not linked:
+            paper["topic_ids"].append(topic)
+        self.put("paper", paper["paper_id"], paper)
+        return paper, linked
 
     def accept(self, method, params, after):
         topic, kind = self.topic(params), required(params, "kind")
@@ -612,15 +772,25 @@ class Worker:
             if "previous_search_id" in input_:
                 if set(input_) != {"previous_search_id"}:
                     raise invalid("Refinement takes only previous_search_id.")
-                label = self.search({"topic_id": topic, **input_}, "previous_search_id")["query"]
+                previous = self.search({"topic_id": topic, **input_}, "previous_search_id")
+                label, filters = previous["query"], previous["filters"]
             else:
-                label = required(input_, "query")
+                label = required(input_, "query").strip()
+                if len(label) > 500:
+                    raise invalid("The search query must be at most 500 characters.")
                 filters = input_.get("filters", {})
-                if not isinstance(filters, dict) or set(filters) - {"year_from", "year_to"}:
-                    raise invalid("The local sample supports year filters only.")
+                if not isinstance(filters, dict) or set(filters) - {"year_from", "year_to", "venue"}:
+                    raise invalid("Unknown discovery filters.")
                 low, high = filters.get("year_from", 1), filters.get("year_to", 9999)
                 if type(low) is not int or type(high) is not int or not 1 <= low <= high <= 9999:
                     raise invalid("Invalid year range.")
+                if "venue" in filters:
+                    venue = filters["venue"]
+                    if (self.discovery_fixture or not isinstance(venue, str)
+                            or len(venue) > 160 or not normalize_venue(venue)):
+                        raise invalid("Enter a supported conference name.")
+            if not self.discovery_fixture:
+                task_data["search_request"] = {"query": label, "filters": filters}
             target = topic
         elif kind == "reading_qa":
             target = self.session(params)["session_id"]
@@ -684,7 +854,9 @@ class Worker:
             task_data["audit_sources"] = {j["job_id"]: j["source"]["source_version_id"] for j in audit_pending} if live else {}
 
         model = self.services_config()["models"][0]["model"] if live else ""
-        fingerprint = encode([task_data, ENDPOINT if live else "local-fixture", model])
+        search_live = "search_request" in task_data
+        endpoint = ENDPOINT if live else OPENALEX if search_live else "local-fixture"
+        fingerprint = encode([task_data, endpoint, model])
         if method == "task.prepare":
             cid = identifier()
             self.put("confirmation", cid, {"fingerprint": fingerprint, "used": False})
@@ -693,6 +865,12 @@ class Worker:
                 "purpose": "Answer the question using DeepSeek Harness and approved abstract passages",
                 "data_categories": ["Research question", "Approved passage IDs and abstract excerpts"],
             }] if live else []
+            if search_live:
+                transfers = [{"endpoint": OPENALEX, "purpose": "Search public bibliographic records (OpenAlex)",
+                              "data_categories": [f"Search query: {label}", *(
+                                  f"{caption}: {filters[key]}" for key, caption in
+                                  (("year_from", "From year"), ("year_to", "To year"))
+                                  if key in filters)]}]
             if live and kind == "reading_qa" and any(s["requested_scope"] == "full_text" for s in input_["sources"]):
                 transfers = [{"endpoint": ENDPOINT, "purpose": "Answer using selected sources",
                               "data_categories": ["Research question and excerpts from the selected papers"]}]
@@ -747,22 +925,7 @@ class Worker:
             raise RpcError(-32009, "INVALID_TRANSITION", "refresh_data", "This candidate is already in the topic.")
         result = {"candidate_id": cid, "decision": action}
         if action == "add":
-            paper = next((p for p in self.rows("paper") if p["identity"] == candidate["doi"]), None)
-            if paper is None:
-                pid, version = identifier(), identifier()
-                paper = {"paper_id": pid, "title": candidate["title"], "topic_ids": [], "authors": candidate["authors"],
-                         "identity": candidate["doi"], "tags": [], "changes": [],
-                         "source_versions": [{"source_version_id": version, "available_scope": "abstract"}],
-                         "files": [{"source_version_id": version, "name": candidate["title"], "role": "abstract"}]}
-                self.put("source", version, {"paper_id": pid, "source_version_id": version, "passages": [
-                    {"passage_id": f"{version}-{i}", "text": text}
-                    for i, text in enumerate(candidate["abstract"].split("\n\n"), 1)
-                ]})
-            topic = saved["topic_id"]
-            linked = topic in paper["topic_ids"]
-            if not linked:
-                paper["topic_ids"].append(topic)
-                self.put("paper", paper["paper_id"], paper)
+            paper, linked = self.add_bibliographic_paper(saved["topic_id"], candidate)
             result.update(decision="added", paper_id=paper["paper_id"], **paper["source_versions"][0],
                           link_status="already_linked" if linked else "linked")
         candidate["decision"] = result["decision"]
@@ -790,19 +953,24 @@ class Worker:
                     continue
                 task["status"] = "running"
                 discovery = task["kind"] == "discovery"
+                remote_search = discovery and "search_request" in task
                 audit = task["kind"] == "citation_audit"
                 reader_task = task["kind"] in ("reader_question", "visual_index")
                 live = audit or reader_task or (not discovery and self.dsh is not None)
-                if live:
+                if live or remote_search:
                     signal = threading.Event()
                     self.inflight[task_id] = signal
                 with self.db:
                     event = self.emit(task, "task.progress", {
                         "stage": "searching" if discovery else "reading",
                         "message": "Checking citations." if audit else (
+                            "Searching OpenAlex." if remote_search else
                             "Reading with DeepSeek Harness." if live else "Running local contract sample.")
                     })
                 self.send_events([event])
+            if remote_search:
+                self.run_openalex(task, signal)
+                continue
             if live:
                 if audit:
                     self.citations.run(task, signal)
@@ -910,14 +1078,63 @@ class Worker:
             linked = any(p["identity"] == PUBMEDQA["doi"] and task["topic_id"] in p["topic_ids"] for p in self.rows("paper"))
             decision = "added" if linked else ("exclude" if excluded else "pending")
             candidates.append({**PUBMEDQA, "candidate_id": identifier(), "decision": decision})
+        return self.save_search(task, query, filters, candidates, "Local PubMedQA fixture",
+                                ["Live search is not connected."])
+
+    def run_openalex(self, task, cancelled):
+        task_id = task["task_id"]
+        query, filters = (task["search_request"][key] for key in ("query", "filters"))
+        try:
+            if cancelled.is_set():
+                return
+            candidates, gaps = openalex_search(query, filters, self.openalex_key)
+            with self.lock, self.db:
+                current = self.get("task", task_id)
+                if cancelled.is_set() or current["status"] != "running":
+                    return
+                paper_keys = set().union(*(identity_keys(p) for p in self.rows("paper")
+                                           if task["topic_id"] in p["topic_ids"]))
+                previous = {}
+                for search in self.rows("search"):
+                    if search["topic_id"] == task["topic_id"]:
+                        for candidate in search["candidates"]:
+                            for key in identity_keys(candidate):
+                                previous.setdefault(key, candidate)
+                for candidate in candidates:
+                    keys = identity_keys(candidate)
+                    prior_matches = {previous[key]["decision"] for key in keys if key in previous}
+                    decision = ("added" if keys & paper_keys else "exclude" if "exclude" in prior_matches
+                                else "hold" if "hold" in prior_matches else "pending")
+                    candidate.update(candidate_id=identifier(), decision=decision)
+                # Keep explicit exclusions available even if they fall outside this response page.
+                if previous_id := task["input"].get("previous_search_id"):
+                    present = set().union(*(identity_keys(c) for c in candidates))
+                    prior = self.get("search", previous_id)["candidates"]
+                    candidates.extend({**c, "candidate_id": identifier()} for c in prior
+                                      if c["decision"] == "exclude" and identity_keys(c).isdisjoint(present | paper_keys))
+                events = self.save_search(current, query, filters, candidates, "OpenAlex", gaps)
+            with self.lock:
+                self.send_events(events)
+        except PublicServiceError as error:
+            self.fail_dsh(task_id, {"reason": error.reason, "retryable": error.retryable, "next_action": error.action,
+                                    "details": {"message": str(error)}})
+        except Exception as error:
+            print(f"PaperTrace search: {type(error).__name__}", file=sys.stderr)
+            self.fail_dsh(task_id, {"reason": "SERVICE_INVALID_RESPONSE", "retryable": True, "next_action": "retry"})
+        finally:
+            with self.lock:
+                self.inflight.pop(task_id, None)
+
+    def save_search(self, task, query, filters, candidates, service, gaps):
         sid = identifier()
         search = {"search_id": sid, "task_id": task["task_id"], "topic_id": task["topic_id"],
-                  "query": query, "filters": filters, "candidates": candidates,
-                  "coverage": {"searched_angles": ["Local contract fixture"], "gaps": ["Live search is not connected."]}}
+                  "query": query, "filters": filters, "candidates": candidates, "provider": service,
+                  "coverage": {"searched_angles": [service], "gaps": gaps}}
         self.put("search", sid, search)
-        step = {"action": "search", "query": query, "source": "Local PubMedQA fixture",
-                "observation": "One fixture matched." if candidates else "No fixture matched the selected years."}
-        task["steps"] = [{"kind": "tool", "title": "Read local search fixture", "detail": step["observation"]}]
+        count = sum(c["decision"] != "exclude" for c in candidates)
+        step = {"action": "search", "query": query, "source": service,
+                "observation": f"{count} candidates available." if count else "No candidates matched the search."}
+        task["steps"] = [{"kind": "tool", "title": f"Search {service}", "detail": step["observation"]}]
         return [self.emit(task, "discovery.step", step), self.finish(task, "completed", result=self.search_result(search))]
 
     def run_reading(self, task):
@@ -985,7 +1202,7 @@ def main():
             print(encode(message), flush=True)
 
     worker = Worker(Path(sys.argv[1]), send)
-    probes = ThreadPoolExecutor(max_workers=1)
+    probes = ThreadPoolExecutor(max_workers=2)
     try:
         for line in sys.stdin:
             try:
@@ -993,7 +1210,7 @@ def main():
             except ValueError:
                 send({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}})
                 continue
-            if isinstance(request, dict) and request.get("method") == "services.test":
+            if isinstance(request, dict) and request.get("method") in ("services.test", "library.preview_identifier"):
                 probes.submit(worker.process, request)
             else:
                 worker.process(request)

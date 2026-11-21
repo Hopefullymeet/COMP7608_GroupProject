@@ -86,10 +86,10 @@ class Dsh:
 
     @classmethod
     def configured(cls, directory):
-        cli = os.getenv("PAPERTRACE_DSH_CLI")
+        cli = os.getenv("PAPERTRACE_AGENT_CLI") or os.getenv("PAPERTRACE_DSH_CLI")
         if not cli:
             return None
-        return cls(os.getenv("PAPERTRACE_DSH_NODE", "node"), cli,
+        return cls(os.getenv("PAPERTRACE_AGENT_NODE") or os.getenv("PAPERTRACE_DSH_NODE", "node"), cli,
                    os.getenv("DEEPSEEK_API_KEY"), directory)
 
     def check(self):

@@ -1,6 +1,6 @@
 # 发现 → 阅读 → 定位 主线接口契约 v0.4
 
-首版验收「真实检索 → 加入主题 → 摘要问答 → 跳到原摘要」。桌面端用 Tauri 接真实搜索和模型，复用现有 React 界面。浏览器入口保留 mock；接入前更新原型目录的范围说明。用科学问答数据集做真实联调，PubMedQA 用作固定样例。
+验收流程为「检索 → 加入主题 → 摘要问答 → 跳到原摘要」。桌面界面连接检索和模型服务。PubMedQA 用于浏览器和离线样例。
 
 全文阅读沿用本线的版本标识，扩展契约定义[按页与段落定位、返回原 PDF 及会话书签](library-reading.md)。检索可按[启用来源声明的会议筛选能力](services-workspace.md)查询，并报告元数据缺口。通信和重试见[共用协议](protocol.md)。
 
@@ -149,7 +149,11 @@ type MainlineTaskEvent = TaskEvent<TaskResult,
 
 ## 2. 主线联调样例
 
-用 PubMedQA 的题名、书目和一条公开摘要引句构造固定样例。摘要其余文字、端点和运行记录均为联调用数据。真实联调使用已验证的搜索源与模型各一个，服务名留在配置中。搜索源需返回稳定论文标识、发表年和可用摘要，模型需能产生可核查的步骤与出处。 [PubMedQA 发表记录](https://aclanthology.org/D19-1259/)
+用 PubMedQA 的题名、书目和一条公开摘要引句构造固定样例。摘要其余文字、端点和运行记录均为联调用数据。桌面联调使用已验证的搜索源与模型各一个，服务名留在配置中。搜索源需返回稳定论文标识、发表年和可用摘要，模型需能产生可核查的步骤与出处。 [PubMedQA 发表记录](https://aclanthology.org/D19-1259/)
+
+### 桌面端 OpenAlex 检索
+
+沿用发现任务、订阅和候选操作。确认单展示 OpenAlex 目的地与实际查询条件。DiscoveryResult 可附 provider，候选可附 provider 和 source_id。会议筛选只检查关键词结果第一页内明确标为会议的来源，覆盖与缺口写入 coverage。无结果以 completed 返回空列表。SERVICE_TIMEOUT、SERVICE_RATE_LIMITED、SERVICE_NOT_CONFIGURED、SERVICE_UNAVAILABLE 和 SERVICE_INVALID_RESPONSE 以任务失败返回，已取消的任务丢弃迟到结果。桌面样例可通过启动环境显式启用。
 
 ### 2.1 发现论文
 

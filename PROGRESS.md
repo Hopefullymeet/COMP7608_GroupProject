@@ -8,9 +8,9 @@
 - 正式客户端支持简体中文和英文，可通过侧栏底部的语言选择器即时切换并记住偏好。论文、稿件和研究结果继续使用原文。
 - [接口契约](docs/contracts/README.md)和 Tauri 前端适配已就绪，可开始与宿主联调。
 - [本地宿主联调](backend/README.md)已接通 Tauri 命令、Python JSON-RPC 与 SQLite。PubMedQA 样例支持入库、问答、证据定位、订阅补收和重启读回。
-- [DSH 摘要问答](backend/README.md#启用真实-deepseek-harness-问答)已接入。真实 DeepSeek 测试走通授权、摘要工具调用、返回回答和出处定位。
+- [摘要问答](backend/README.md#配置文本模型)已接入 DeepSeek，已验证授权、摘要读取、回答和出处定位。
 
-- [主题文献综合](docs/contracts/literature-synthesis.md)接通 PDF 导入、原文定位、两篇比较、DSH 多论文提纲和 Wiki 审阅。六篇公开 PDF 导入及页级位置已核对。固定检索、Agent 补读和带 Wiki 的实验入口已具备。
+- [主题文献综合](docs/contracts/literature-synthesis.md)接通 PDF 导入、原文定位、两篇比较、多论文提纲和 Wiki 审阅。六篇公开 PDF 导入及页级位置已核对。固定检索、Agent 补读和带 Wiki 的实验入口已具备。
 
 - [离线引用与 PDF 稿件回查](docs/contracts/pdf-citations.md)接通主题内引用查询、书目映射、逐句检查及 Markdown / BibTeX 输出。六篇公开论文已验证入库与本地定位。
 
@@ -28,9 +28,11 @@
 
 - **DeepSeek 模型设置。** 现有设置页可读取、保存模型 ID 和发起连接测试。模型配置随工作区保存在本地。[前端交接](docs/product-plan/Backend_Settings_Handoff_ZH.md)列出可直接使用的控件、需收起的入口及联调步骤。
 
+- **文献发现、书目与续读。** 桌面发现接入 OpenAlex；现有候选界面沿用同一接口。已补 DOI／arXiv 预览入库、元数据编辑和版本级 PDF 位置。页面待做项集中到同一份[前端交接](docs/product-plan/Backend_Settings_Handoff_ZH.md)。
+
 ## 下一步
 
-- **执行引擎与产品功能对齐。** 按 [Agentero 功能差距与 DSH 瘦身方案](docs/product-plan/Agentero_Parity_and_Settings_ZH.md)推进。前端先收拢设置页、统一导入和阅读查找入口。后端继续推进公开文献发现和 DSH 裁剪对照验证。
+- **执行引擎与产品功能对齐。** 前端先收拢设置页、统一导入和阅读查找入口。后端继续推进稿件引用建议，并单独验证 [运行时精简](docs/product-plan/Agentero_Parity_and_Settings_ZH.md)。
 
 - **论文详情：元数据、收录与分区。** 导入 PDF 后，在论文详情页查看可编辑的标题、作者、年份、期刊或会议、DOI 或 arXiv ID。优先按 DOI 补全元数据，期刊按 ISSN 对照收录与分区，会议按正式会议名和论文类型匹配。分开显示 SCIE／SSCI 收录、JCR 学科分区（年份、学科、Q1–Q4）和 CCF 会议或期刊等级（目录版本、A/B/C）。每条显示来源，区分未匹配、待核实和不适用。排名数据先核对来源与使用授权。这项增强作为独立待办，导入和离线阅读仍可直接使用。
 

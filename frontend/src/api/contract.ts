@@ -4,6 +4,7 @@ import type { Budget, ServiceMethods, ResumeTask } from './services'
 import type { CitationTask, CitationMethods } from './citation'
 import type { ResearchTask, ResearchMethods } from './research'
 import type { ImportTask, ImportResult, LibraryMethods, Located } from './library'
+import type { ReadingPosition } from './library'
 export type Id = string
 export type NonEmpty<T> = [T, ...T[]]
 export type Scope = 'abstract' | 'full_text'
@@ -15,11 +16,13 @@ export type Action = 'pending' | 'hold' | 'exclude' | 'add'
 export type Decision = Exclude<Action, 'add'> | 'added'
 export type Candidate = {
   candidate_id: Id; title: string; authors: string[]; doi?: string; year?: number
+  provider?: string; source_id?: string
   venue?: { name: string; source: string }; metadata_url: string; abstract?: string
   change?:'new'|'updated';reason: string; available_scope: Version['available_scope']; read_scope: 'none' | Scope; decision: Decision
 }
 export type Discovery = {
   search_id: Id; candidates: Candidate[]; excluded: Candidate[]
+  provider?: string
   coverage: { searched_angles: string[]; gaps: string[] }
 }
 export type Step =
@@ -79,7 +82,7 @@ export type Methods = ReaderMethods & SynthesisMethods & LibraryMethods & Resear
   'session.rename': [Write & InSession & { title: string }, InSession & { title: string }]
   'session.list': [InTopic, { items: Session[] }]
   'session.create': [Write & InTopic, InSession]
-  'session.get': [InSession, { turns: Turn[]; active_task_id?: Id;reader?:{source_version_id:Id;passage_id?:Id} }]
+  'session.get': [InSession, { turns: Turn[]; active_task_id?: Id; reader?: { source_version_id: Id } & ReadingPosition }]
   'discovery.latest': [InTopic, { search_id?: Id; active_task_id?: Id;task_id?:Id }]
   'discovery.get': [InSearch, Discovery]
   'discovery.steps': [ForTask, { steps: Step[] }]

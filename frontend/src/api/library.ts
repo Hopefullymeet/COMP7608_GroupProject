@@ -46,10 +46,30 @@ export type ImportResult = { paper_ids: string[]; review_ids: string[] }
 type Batch = { paper_ids: string[] }
 type Changed = { changed: number }
 type Position = { topic_id: string; source_version_id: string; session_id?: string }
+type PaperKey = { topic_id: string; paper_id: string }
+export type PdfPosition = { page: number; zoom: number; offset: number }
+export type ReadingPosition = { passage_id?: string } & Partial<PdfPosition>
+export type PaperMetadata = {
+  title: string; authors: string[]; year?: number | null; venue?: string; doi?: string; arxiv_id?: string
+}
+export type MetadataRecord = PaperMetadata & { source_id?: string; provider?: string; metadata_url?: string }
+type PaperDetails = {
+  paper_id: string; revision: string; manual_fields: (keyof PaperMetadata)[]; metadata: MetadataRecord
+}
 export type LibraryMethods = {
   'file.pick': [{ purpose: 'papers' | 'draft' | 'backup' }, { files: Picked[] }]
   'library.set_alias': [Write & { topic_id: string; paper_id: string; alias: string }, { paper_id: string; alias: string }]
   'library.catalog': [Record<string, never>, Catalog]
+  'library.preview_identifier': [
+    { topic_id: string; identifier: string },
+    { preview_id: string; topic_id: string; metadata: MetadataRecord; existing_paper_id?: string },
+  ]
+  'library.commit_identifier': [
+    Write & { topic_id: string; preview_id: string; paper_id?: string },
+    { paper_id: string; source_version_id: string; available_scope: 'metadata' | 'abstract' | 'full_text'; already_linked: boolean },
+  ]
+  'library.metadata': [PaperKey, PaperDetails]
+  'library.update_metadata': [Write & PaperKey & { base_revision: string; changes: Partial<PaperMetadata> }, PaperDetails]
   'library.resolve_import': [
     Write & { review_id: string; decision: 'link' | 'separate' },
     { paper_id: string },
@@ -67,8 +87,8 @@ export type LibraryMethods = {
   'workspace.unarchive': [Write & ArchiveKey, { id: string }]
   'source.read': [Position, DocumentView]
   'source.original': [{ source_version_id: string; page?: number }, { opened: boolean }]
-  'reader.position': [Position, { passage_id?: string }]
-  'reader.bookmark': [Write & Position & { passage_id: string }, { passage_id: string }]
+  'reader.position': [Position, ReadingPosition]
+  'reader.bookmark': [Write & Position & ({ passage_id: string } | PdfPosition), ReadingPosition]
   'evidence.open': [{ anchor_id: string; topic_id?: string }, Located]
   'note.list': [{ topic_id: string }, { items: Note[] }]
   'note.save': [
@@ -91,6 +111,7 @@ export type LibraryFixture = {
   documents: Record<string, DocumentView>
   anchors: Record<string, Located>
   positions: Record<string, string>
+  pdfPositions?: Record<string, PdfPosition>
   notes: Record<string, Note[]>
   archive: (ArchiveKey & { title: string; topic_id?: string })[]
 }

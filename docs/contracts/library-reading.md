@@ -19,8 +19,8 @@
 | workspace.unarchive | W, kind,id | {id:Id}；恢复原归属与保存的成果 |
 | source.read | topic_id,source_version_id | Document；按指定版本返回结构化正文、章节、页和抽取警告 |
 | source.original | source_version_id,page?:number | {opened:boolean}；宿主打开当前版本本地 PDF；无原件报 SOURCE_UNAVAILABLE |
-| reader.position | topic_id,source_version_id | {passage_id?:Id} |
-| reader.bookmark | W,topic_id,source_version_id,passage_id | {passage_id:Id}；保存继续阅读位置 |
+| reader.position | topic_id,source_version_id,session_id? | {passage_id?:Id,page?:number,zoom?:number,offset?:number} |
+| reader.bookmark | W,topic_id,source_version_id,session_id?，以及 passage_id 或 {page,zoom,offset} | 保存段落或 PDF 阅读位置，回传保存结果 |
 | evidence.open | anchor_id | Located；按版本解析，失效报 ANCHOR_UNAVAILABLE，禁止回退至新版 |
 | note.list | topic_id | {items:Note[]}；含历史版本，可按问题、会话及来源筛选 |
 | note.save | W,topic_id,note_id?:Id,base_revision?:Id,text:string,anchor_ids:Id[],session_id?:Id,origin:'user' 或 'answer' 或 'comparison' 或 'citation' | Note；新建或追加修订，支持插入引用、自动保存及以旧版内容生成恢复版本 |
@@ -37,7 +37,20 @@ type Revision = {revision:Id,text:string,anchor_ids:Id[],origin:string}
 type Note = Revision & {note_id:Id,session_id?:Id,history:Revision[]}
 ~~~~
 
-继续研究使用以下兼容字段。session.list 的每项可附 updated_at（ISO 8601）、has_turns；session.get 可附 reader:{source_version_id,passage_id?}。reader.position 与 reader.bookmark 可带 session_id，在主题内按会话保存；省略时沿用主题书签。evidence.open 在传入旧版本锚点时始终返回原版本；用于稿件、笔记与比较时也能读回段落和页码。note.save 成功后用 note.list 读回来源、编辑身份和旧版内容，恢复到旧措辞生成一次新修订。
+继续研究使用以下兼容字段。session.list 的每项可附 updated_at（ISO 8601）、has_turns。session.get 可附 reader，包含 source_version_id 和该版本的阅读位置。省略 session_id 时沿用主题书签。evidence.open 在传入旧版本锚点时始终返回原版本，用于稿件、笔记与比较时也能读回段落和页码。note.save 成功后用 note.list 读回来源、编辑身份和旧版内容，恢复到旧措辞生成一次新修订。
+
+## 书目和 PDF 续读
+
+| 方法 | 参数 | 响应 |
+|---|---|---|
+| `library.preview_identifier` | topic_id,identifier | {preview_id,topic_id,metadata,existing_paper_id?}。用 DOI 或 arXiv ID 查询公开书目。 |
+| `library.commit_identifier` | W,topic_id,preview_id,paper_id? | {paper_id,source_version_id,available_scope,already_linked}。预览限当前主题。指定 paper_id 时补该论文的书目。 |
+| `library.metadata` | topic_id,paper_id | {paper_id,revision,metadata,manual_fields} |
+| `library.update_metadata` | W,topic_id,paper_id,base_revision,changes | 同上。版本冲突报 STALE_REVISION，标识符冲突报 IDENTIFIER_ALREADY_LINKED。 |
+
+metadata 包含 title、authors，可附 year、venue、doi、arxiv_id、provider、metadata_url 和 source_id。可编辑字段为标题、作者、年份、出版场所、DOI 与 arXiv ID。手动字段优先于后续补全。无附件书目可用 `library.import_pdf` 加同一个 paper_id 上传。
+
+PDF 位置使用从 1 开始的 page、倍率 zoom（0.1 至 10）和归一化页内纵向 offset（0 至 1）。存储以主题、会话和论文版本为键，版本更新后仍可读取旧位置。传 passage_id 的旧写法继续可用。
 
 批量选候选沿用 candidate.decide，一项一个操作键，部分失败时保留成功项并显示余项原因。检索结果中的候选可带 change:'new' 或 'updated'，无字段表示无比较基线或无变化；主线在 Refine 或监测后按此标注。重新打开 topic 时可按 task.history 找回跨客户端的步骤。workspace.activity 定位到旧版本时应保留其证据和修订历史。
 

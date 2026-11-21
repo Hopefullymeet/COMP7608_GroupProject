@@ -985,7 +985,7 @@ export function MainlineProvider({
           : c.read_scope === 'full_text'
             ? 'Full text read'
             : 'Abstract read',
-      source: c.venue?.source ?? 'Search',
+      source: c.provider ?? search?.provider ?? c.venue?.source ?? 'Search',
       decision: c.decision === 'hold' ? 'held' : c.decision === 'exclude' ? 'excluded' : c.decision,
       ...(c.decision === 'added' && { note: 'Added to topic' }),
     })),

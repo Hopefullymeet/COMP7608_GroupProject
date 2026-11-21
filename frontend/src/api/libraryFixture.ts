@@ -245,13 +245,25 @@ export function libraryFixture(
       throw new Error('The fixture includes passages only. Connect a desktop host to open the original PDF.')
     },
     'evidence.open': ({ anchor_id }) => lookup(anchor_id),
+    'library.preview_identifier': () => { throw new Error('Identifier lookup requires the desktop workspace.') },
+    'library.commit_identifier': () => { throw new Error('Identifier import requires the desktop workspace.') },
+    'library.metadata': () => { throw new Error('Paper details require the desktop workspace.') },
+    'library.update_metadata': () => { throw new Error('Paper details require the desktop workspace.') },
     'reader.position': ({ topic_id, source_version_id, session_id }) => ({
       passage_id: state.shelf.positions[(session_id ?? topic_id) + '/' + source_version_id],
+      ...state.shelf.pdfPositions?.[(session_id ?? topic_id) + '/' + source_version_id],
     }),
-    'reader.bookmark': ({ topic_id, source_version_id, passage_id, session_id }) => {
+    'reader.bookmark': ({ topic_id, source_version_id, session_id, ...position }) => {
+      const key = (session_id ?? topic_id) + '/' + source_version_id
       if (session_id) state.shelf.positions['session/' + session_id] = source_version_id
-      state.shelf.positions[(session_id ?? topic_id) + '/' + source_version_id] = passage_id
-      return { passage_id }
+      if ('passage_id' in position) {
+        state.shelf.positions[key] = position.passage_id
+        if (state.shelf.pdfPositions) delete state.shelf.pdfPositions[key]
+        return { passage_id: position.passage_id }
+      }
+      const { page, zoom, offset } = position
+      delete state.shelf.positions[key]
+      return ((state.shelf.pdfPositions ??= {})[key] = { page, zoom, offset })
     },
     'note.list': ({ topic_id }) => ({ items: state.shelf.notes[topic_id] ?? [] }),
     'note.save': ({ topic_id, note_id, base_revision, text, origin, anchor_ids, session_id }) => {

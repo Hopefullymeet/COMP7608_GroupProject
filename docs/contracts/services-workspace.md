@@ -23,7 +23,7 @@
 
 - `services.get` 返回一个 DeepSeek 选项。用 `credential_configured` 表示宿主是否提供凭据。连接是否可用以测试结果为准。
 - `services.save` 接收现有表单。允许编辑模型 ID，固定使用官方端点。修改端点、预算或服务列表返回 `SETTINGS_READ_ONLY`。旧版本返回 `STALE_REVISION`。模型变化后，尚未启动的任务需要重新确认，已经启动的任务沿用原模型。
-- `services.test` 通过 DSH 向已保存的模型发固定短请求，不读取工作区内容。相同 `operation_id` 复用第一次结果。
+- `services.test` 向已保存的模型发固定短请求，不读取工作区内容。相同 `operation_id` 复用第一次结果。
 - 系统钥匙串由桌面宿主后续接入。当前凭据由启动环境提供，`services.credentials` 返回 `CREDENTIALS_HOST_REQUIRED`。
 
 ~~~~ts

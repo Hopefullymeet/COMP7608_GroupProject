@@ -19,6 +19,7 @@ const RESEARCH_TOOLS: &[u8] = include_bytes!("../../../backend/research-tools.mj
 const CITATIONS: &[u8] = include_bytes!("../../../backend/citations.py");
 const READER: &[u8] = include_bytes!("../../../backend/reader.py");
 const DSH: &[u8] = include_bytes!("../../../backend/dsh.py");
+const BIBLIOGRAPHY: &[u8] = include_bytes!("../../../backend/bibliography.py");
 type Reply = Result<Value, String>;
 
 struct Pending {
@@ -50,6 +51,7 @@ impl Worker {
         LITERATURE.hash(&mut hash);
         WORKBENCH.hash(&mut hash);
         RESEARCH_TOOLS.hash(&mut hash);
+        BIBLIOGRAPHY.hash(&mut hash);
         let runtime = directory.join("runtime").join(format!("{:016x}", hash.finish()));
         fs::create_dir_all(&runtime).map_err(|error| error.to_string())?;
         let script = runtime.join("papertrace.py");
@@ -59,6 +61,7 @@ impl Worker {
             (&runtime.join("research-tools.mjs"), RESEARCH_TOOLS),
             (&runtime.join("citations.py"), CITATIONS),
             (&runtime.join("reader.py"), READER),
+            (&runtime.join("bibliography.py"), BIBLIOGRAPHY),
         ] {
             match fs::OpenOptions::new().write(true).create_new(true).open(path) {
                 Ok(mut file) => file.write_all(contents).map_err(|error| error.to_string())?,

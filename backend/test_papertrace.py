@@ -1,4 +1,6 @@
+import base64
 import json
+import os
 from pathlib import Path
 import queue
 import sqlite3
@@ -6,10 +8,15 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
+from unittest.mock import patch
+from uuid import uuid4
 
 from papertrace import Worker
 from dsh import read_json_answer
+from bibliography import PublicServiceError
+from test_literature import sample_pdf
 
 
 class EvidenceTest(unittest.TestCase):
@@ -36,6 +43,7 @@ class Client:
             [sys.executable, "-u", str(Path(__file__).with_name("papertrace.py")), str(directory)],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             encoding="utf-8", bufsize=1,
+            env={**os.environ, "PAPERTRACE_DISCOVERY_FIXTURE": "1"},
         )
         self.messages = queue.Queue()
         self.received = []
@@ -276,6 +284,137 @@ class ContractTest(unittest.TestCase):
         self.assertEqual(self.client.result("task.get", task_id=stranded)["issue"]["reason"], "PROCESS_INTERRUPTED")
         with sqlite3.connect(self.dir / "workspace.sqlite3") as db:
             self.assertEqual(db.execute("SELECT count(*) FROM records WHERE kind = 'search'").fetchone()[0], 0)
+
+
+class BibliographyContractTest(unittest.TestCase):
+    def setUp(self):
+        workspace = tempfile.TemporaryDirectory()
+        self.addCleanup(workspace.cleanup)
+        self.workspace = Path(workspace.name)
+        self.messages = []
+        self.worker = Worker(self.workspace, self.messages.append)
+        self.worker.discovery_fixture = False
+        self.addCleanup(lambda: self.worker.close())
+        self.topic = self.call("topic.create", title="Evidence")
+
+    def call(self, method, error=None, **params):
+        rid = uuid4().hex
+        if method in self.worker.writes:
+            params.setdefault("operation_id", rid)
+        self.worker.process({"id": rid, "method": method, "jsonrpc": "2.0", "params": params})
+        reply = next(message for message in reversed(self.messages) if message.get("id") == rid)
+        if error:
+            self.assertEqual(reply["error"]["data"]["reason"], error)
+            return reply["error"]["data"]
+        self.assertIn("result", reply, reply)
+        return reply["result"]
+
+    def start_search(self, **input_):
+        params = {**self.topic, "kind": "discovery", "input": input_}
+        prepared = self.call("task.prepare", **params)
+        self.assertEqual(prepared["transfers"][0]["endpoint"], "https://api.openalex.org/works")
+        self.assertIn("Search query: citation evidence", prepared["transfers"][0]["data_categories"])
+        return self.call("task.start", **params, confirmation_id=prepared["confirmation_id"])["task_id"]
+
+    def finish(self, task_id):
+        deadline = time.monotonic() + 4
+        while time.monotonic() < deadline:
+            task = self.call("task.get", task_id=task_id)
+            if task["status"] not in ("running", "queued"):
+                return task
+            time.sleep(.01)
+        self.fail("Discovery did not finish.")
+
+    def test_discovery_deduplicates_works_and_preserves_exclusions(self):
+        conference = {"source": {"type": "conference", "display_name": "ACL Annual Meeting"}}
+        rows = [
+            {"id": "https://openalex.org/W1", "display_name": "Evidence", "publication_year": 2023,
+             "doi": "https://doi.org/10.18653/v1/2023.emnlp-main.398",
+             "abstract_inverted_index": {"Full": [0], "abstract.": [1]},
+             "primary_location": conference},
+            {"id": "https://openalex.org/W2", "display_name": "Second", "publication_year": 2023,
+             "primary_location": conference},
+            {"id": "https://openalex.org/W3", "display_name": "No conference", "publication_year": 2023},
+        ]
+        rows.append({**rows[0], "id": "https://openalex.org/W4"})
+        with patch("bibliography.fetch", return_value=json.dumps({"results": rows}).encode()) as request:
+            result = self.finish(self.start_search(query="citation evidence", filters={"year_from": 2023, "venue": "ACL"}))["result"]
+            self.assertEqual([c["title"] for c in result["candidates"]], ["Evidence", "Second"])
+            self.assertIn("publication_year%3A%3E2022", request.call_args.args[0])
+            self.assertIn("1 had no verified conference", result["coverage"]["gaps"][0])
+            self.assertEqual(result["provider"], "OpenAlex")
+            sid = result["search_id"]
+            self.call("candidate.decide", **self.topic, search_id=sid,
+                      candidate_id=result["candidates"][0]["candidate_id"], decision="exclude")
+            added = self.call("candidate.decide", **self.topic, search_id=sid,
+                              candidate_id=result["candidates"][1]["candidate_id"], decision="add")
+            self.assertEqual(added["available_scope"], "metadata")
+            refined = self.finish(self.start_search(previous_search_id=sid))["result"]
+            self.assertEqual(refined["excluded"][0]["title"], "Evidence")
+            self.assertEqual(refined["candidates"][0]["decision"], "added")
+        with patch("bibliography.fetch", return_value=b'{"results":[]}'):
+            task = self.finish(self.start_search(query="citation evidence"))
+            self.assertEqual(task["result"]["candidates"], [])
+            self.assertEqual(task["status"], "completed")
+
+    def test_discovery_failure_and_cancellation_do_not_save_candidates(self):
+        with patch("bibliography.fetch", side_effect=PublicServiceError("SERVICE_RATE_LIMITED", "Rate limited.")):
+            failed = self.finish(self.start_search(query="citation evidence"))
+            self.assertEqual(failed["issue"]["reason"], "SERVICE_RATE_LIMITED")
+        entered, release = threading.Event(), threading.Event()
+        def slow_fetch(*_):
+            entered.set()
+            release.wait(3)
+            return b'{"results":[]}'
+        with patch("bibliography.fetch", side_effect=slow_fetch):
+            task = self.start_search(query="citation evidence")
+            try:
+                self.assertTrue(entered.wait(2))
+                self.assertEqual(self.call("task.cancel", task_id=task)["status"], "cancelled")
+            finally:
+                release.set()
+            deadline = time.monotonic() + 3
+            while task in self.worker.inflight and time.monotonic() < deadline:
+                time.sleep(.01)
+            self.assertNotIn(task, self.worker.inflight)
+        self.assertEqual(self.call("discovery.latest", **self.topic), {})
+
+    def test_identifier_import_edits_and_pdf_resume_survive_restart(self):
+        row = {"message": {"DOI": "10.18653/v1/2023.emnlp-main.398", "title": ["Enabling LLMs"],
+                           "author": [{"given": "Tianyu", "family": "Gao"}],
+                           "issued": {"date-parts": [[2023]]}, "container-title": ["EMNLP"]}}
+        with patch("bibliography.fetch", return_value=json.dumps(row).encode()):
+            preview = self.call("library.preview_identifier", **self.topic, identifier="https://doi.org/" + row["message"]["DOI"])
+        self.assertEqual(self.call("library.list", **self.topic)["items"], [])
+        other = self.call("topic.create", title="Other")
+        key = {"preview_id": preview["preview_id"]}
+        self.call("library.commit_identifier", **other, **key, error="NOT_FOUND")
+        first = self.call("library.commit_identifier", **self.topic, **key)
+        self.assertEqual(first["available_scope"], "metadata")
+        self.assertTrue(self.call("library.commit_identifier", **self.topic, **key)["already_linked"])
+        paper = {"paper_id": first["paper_id"], **self.topic}
+        revision = self.call("library.metadata", **paper)["revision"]
+        edits = {"base_revision": revision, "changes": {"title": "My corrected paper"}}
+        self.call("library.update_metadata", **paper, **edits)
+        self.call("library.update_metadata", **paper, **edits, error="STALE_REVISION")
+        content = base64.b64encode(sample_pdf("Citations support answers.")).decode()
+        pdf = self.call("library.import_pdf", **paper, name="paper.pdf", content=content)
+        self.assertTrue(self.call("library.import_pdf", **paper, name="again.pdf", content=content)["duplicate"])
+        session = self.call("session.create", **self.topic)
+        scope = {**session, "source_version_id": pdf["source_version_id"]}
+        pid = self.call("source.read", **scope)["passages"][0]["passage_id"]
+        self.assertEqual(self.call("reader.bookmark", **scope, passage_id=pid), {"passage_id": pid})
+        saved = {"page": 1, "zoom": 1.4, "offset": 0.25}
+        self.call("reader.bookmark", **scope, **saved)
+        self.call("reader.bookmark", **scope, **{**saved, "page": 2}, error="INVALID_PARAMS")
+        new = self.call("library.import_pdf", **paper, name="revised.pdf",
+                        content=base64.b64encode(sample_pdf("A different version.")).decode())
+        self.worker.close()
+        self.worker = Worker(self.workspace, self.messages.append)
+        self.assertEqual(self.call("reader.position", **scope), saved)
+        self.assertEqual(self.call("reader.position", **{**scope, "source_version_id": new["source_version_id"]}), {})
+        self.assertEqual(self.call("library.metadata", **paper)["metadata"]["title"], "My corrected paper")
+        self.assertEqual(self.call("session.get", **session)["reader"], {"source_version_id": scope["source_version_id"], **saved})
 
 
 if __name__ == "__main__":

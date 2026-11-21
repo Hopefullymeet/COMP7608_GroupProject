@@ -289,6 +289,16 @@ class CitationWorkspace:
                 metadata = json.loads(row[0]) if row else {
                     "title": paper["title"], "author_line": " ".join(paper["authors"]),
                     "doi": paper["identity"] if paper["identity"].startswith("10.") else "", "arxiv": ""}
+                bibliography = paper.get("metadata", {})
+                manual = paper.get("manual_metadata_fields", [])
+                aliases = {"title": "title", "authors": "author_line", "year": "year",
+                           "doi": "doi", "arxiv_id": "arxiv"}
+                for field, target in aliases.items():
+                    if field not in bibliography or (metadata.get(target) and field not in manual):
+                        continue
+                    value = bibliography[field]
+                    text = " ".join(value) if field == "authors" else str(value or "")
+                    metadata[target] = re.sub(r"v\d+$", "", text) if field == "arxiv_id" else text
                 result.append({**version, "paper_id": paper["paper_id"], "title": paper["title"], "metadata": metadata})
         return result
 
