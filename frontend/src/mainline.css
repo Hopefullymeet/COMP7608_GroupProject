@@ -206,15 +206,11 @@
 .pt-reader-marks polyline { fill: none; stroke-width: 2px; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .pt-reader-note textarea, .pt-selection-question textarea { width: 100%; min-height: 3rem; }
 .pt-reader-note { margin: .6rem 0; }
-.pt-annotation-list { margin: .75rem 0; }
-.pt-selection-actions, .pt-reader .lib-tools { flex-wrap: wrap; }
+.pt-selection-actions { flex-wrap: wrap; }
 .pt-selection-question blockquote, .pt-reader-answer > p { white-space: pre-wrap; }
 .pt-parsed-table { max-width: 100%; overflow-x: auto; }
 .pt-parsed-table th, .pt-parsed-table td { padding: .35rem; text-align: left; vertical-align: top; }
 
-.pt-pdf-bar, .pt-pdf-pages { display: flex; align-items: center; gap: .35rem; }
-.pt-pdf-bar { min-height: 42px; padding: 2px 10px; border-bottom: 1px solid var(--line); color: var(--ink-2); }
-.pt-pdf-pages { margin-right: auto; font-variant-numeric: tabular-nums; font-size: 12px; }
 .pt-pdf-options { position: relative; }
 .pt-pdf-options summary { cursor: pointer; list-style: none; border-radius: 6px; padding: 4px 10px; font-weight: 700; }
 .pt-pdf-options summary::-webkit-details-marker { display: none; }
@@ -225,16 +221,9 @@
 .pt-selection-actions { position: fixed; z-index: 30; display: flex; max-width: calc(100vw - 16px); gap: 2px; padding: 3px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); font-size: 13px; }
 .pt-selection-actions[hidden] { display: none; }
 .pt-selection-actions button { border-radius: 5px; padding: 7px 9px; }
-.reader > .pt-reader { min-height: 0; flex: 1; display: flex; flex-direction: column; }
-.reader > .pt-reader .pt-reader-frame { max-height: none; flex: 1; }
-.reader > .pt-reader .pt-annotation-list { overflow: auto; max-height: 24vh; margin: 0; padding: 6px 12px; border-top: 1px solid var(--line); }
-.pt-paper-insights .paper { min-width: 0; }
+.pt-paper-insights .paper { min-width: 0; padding: 0; }
 .pt-paper-insights li + li { margin-top: .65rem; }
 .pt-paper-insights button { text-align: left; }
-@container reader (max-width: 420px) {
-  .reader-bar:has(.paper-modes) { grid-template-columns: minmax(0, 1fr); }
-  .paper-modes { justify-self: start; }
-}
 
 .pt-reader-response { white-space: pre-wrap; }
 @media (max-width: 780px) {
@@ -248,3 +237,48 @@
   .read .reader { min-height: 56dvh; }
   .reader > .pt-reader .pt-reader-frame { max-height: 68dvh; }
 }
+
+.pt-reading-content { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
+.app:has(.reader--library) .sidebar { width: clamp(196px, 16.5vw, 252px); }
+.read:has(.reader--library) { grid-template-columns: minmax(240px, 28%) minmax(0, 1fr); }
+.reader--library { display: grid; grid-template-columns: clamp(92px, 9vw, 146px) minmax(0, 1fr); }
+.pt-paper-list { background: var(--surface); border-inline-end: 1px solid var(--line); padding: 12px 7px; overflow: auto; }
+.pt-paper-list h2 { color: var(--ink-3); font-size: 12px; font-weight: 500; padding: 2px 7px 9px; }
+.pt-paper-list button { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 36px; padding: 6px 7px; text-align: start; border-radius: 7px; color: var(--ink-2); }
+.pt-paper-list button > svg { flex: none; }
+.pt-paper-list button span { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.pt-paper-list button small { font-size: 10px; color: var(--ink-3); }
+.pt-paper-list button:hover, .pt-paper-list button[aria-pressed=true] { background: var(--sunk); color: var(--ink); }
+.pt-reader { min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 52px; }
+.pt-reading-content > .pt-reader { flex: 1; }
+.pt-reader-frame { background: var(--sunk); overscroll-behavior: contain; }
+.pt-reading-content .pt-reader-frame { max-height: none; }
+.pt-reader-pages { position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; width: max-content; min-width: 100%; padding: 10px 12px; }
+.pt-pdf-sheet { flex: none; background: white; box-shadow: 0 0 0 1px var(--line), 0 2px 6px rgb(35 28 24 / 6%); }
+.pt-reader-page > canvas[hidden] { display: none; }
+.pt-pdf-rail { position: relative; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 9px 3px 14px; background: var(--surface); border-inline-start: 1px solid var(--line); }
+.pt-round { box-sizing: border-box; display: grid; place-content: center; flex: none; width: 36px; height: 36px; border: 1px solid var(--line-2); border-radius: 50%; color: var(--ink-2); background: var(--surface); }
+.pt-round:hover:not(:disabled) { color: var(--accent); background: var(--accent-faint); }
+.pt-round:disabled { color: var(--ink-4); opacity: .67; }
+.pt-pdf-options summary.pt-round { padding: 0; border-radius: 50%; }
+.pt-pdf-menu { top: 0; right: calc(100% + 7px); z-index: 10; max-width: 225px; }
+.pt-page-controls { margin-top: auto; display: flex; flex-direction: column; gap: 5px; }
+.pt-page-count { font: 600 12px/1.05 var(--sans); font-variant-numeric: tabular-nums; }
+.pt-page-count small { font-size: 9px; color: var(--ink-3); }
+.pt-topic-actions { position: relative; margin-inline-start: auto; flex: none; }
+.pt-topic-actions summary { display: inline-flex; list-style: none; align-items: center; gap: 6px; cursor: pointer; }
+.pt-topic-actions summary::-webkit-details-marker { display: none; }
+.pt-topic-menu { position: absolute; z-index: 15; inset-inline-end: 0; min-width: max-content; padding: 4px; margin-top: 4px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: var(--shadow); }
+.pt-topic-menu button { display: flex; align-items: center; gap: 7px; width: 100%; text-align: start; padding: 8px 10px; border-radius: 4px; }
+.pt-topic-menu button:hover, .pt-topic-menu button[aria-current] { color: var(--accent); background: var(--accent-faint); }
+@media (max-width: 780px) {
+  .app:has(.reader--library) .sidebar { width: 100%; }
+  .reader--library { grid-template-columns: minmax(66px, 16%) minmax(0, 1fr); min-height: 60dvh; }
+  .pt-paper-list { padding: 7px 3px; }
+  .pt-paper-list button { padding: 5px; }
+  .pt-paper-list button svg { display: none; }
+  .pt-reader { grid-template-columns: minmax(0, 1fr) 45px; }
+  .pt-reading-content .pt-reader-frame { max-height: 68dvh; }
+}
+
+.workspace-notice { inset: auto auto 18px 18px; max-width: min(420px, calc(100% - 36px)); }

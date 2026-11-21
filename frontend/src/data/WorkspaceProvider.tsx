@@ -137,13 +137,7 @@ export function WorkspaceProvider({
         </div>
       )}
       {(notice || task.error || task.connectionError || task.status) && (
-        <Dialog
-          title={tr('Workspace notice')}
-          onClose={() => {
-            setNotice('')
-            task.clearNotice()
-          }}
-        >
+        <section className="mainline-task-actions workspace-notice" aria-label={tr('Workspace notice')}>
           <p role="alert">{tr(notice || task.error || task.connectionError || task.status)}</p>
           <button
             className="ghost-btn"
@@ -154,7 +148,7 @@ export function WorkspaceProvider({
           >
             {tr('Close')}
           </button>
-        </Dialog>
+        </section>
       )}
     </Context.Provider>
   )

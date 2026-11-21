@@ -269,8 +269,21 @@ function Reader({ pdf }: { pdf?: PdfActions }) {
   if (state.activeEvidence) used.add(state.activeEvidence.id)
 
   return (
-    <section className="reader" aria-label={tr('Paper')}>
-      <div className="reader-bar">
+    <section className={pdf ? 'reader reader--library' : 'reader'} aria-label={tr('Paper')}>
+      {pdf ? <nav className="pt-paper-list" aria-label={tr('Papers in this reader')}>
+        <h2>{tr('Papers')}</h2>
+        {choices.map(({ paper: item, label, version }) => (
+          <button key={item.id} type="button" title={item.title} aria-pressed={item.id === paper.id}
+            onClick={() => {
+              act.setReader(item.id)
+              setMode('reading')
+            }}>
+            <Icon name="file" size={14} />
+            <span>{label}</span>
+            {version && <small>{version}</small>}
+          </button>
+        ))}
+      </nav> : <div className="reader-bar">
         <div className="paper-tabs" role="group" aria-label={tr('Papers in this reader')}>
           {choices.map(({ paper: p, label, version }) => (
             <button key={p.id} className={p.id === paper.id ? 'on' : ''} aria-pressed={p.id === paper.id}
@@ -286,22 +299,21 @@ function Reader({ pdf }: { pdf?: PdfActions }) {
             <option key={p.id} value={p.id}>{version ? `${version} · ${label}` : label}</option>
           ))}
         </select>
-        {withPdf && <div className="view-toggle paper-modes" role="group" aria-label={tr('Paper views')}>
-          {(['scan', 'reading', 'analysis'] as const).map((item) =>
-            <button key={item} className={mode === item ? 'on' : ''} aria-pressed={mode === item}
-              onClick={() => setMode(item)}>{tr({ scan: 'Scan', reading: 'Reading', analysis: 'Analysis' }[item])}</button>)}
-        </div>}
-      </div>
-
-      {pdf && withPdf ? mode === 'reading' ? <Suspense fallback={<p className="pt-pdf-loading" role="status">{tr('Opening PDF…')}</p>}>
+      </div>}
+      <div className="pt-reading-content">
+      {pdf && withPdf ? <><Suspense fallback={<p className="pt-pdf-loading" role="status">{tr('Opening PDF…')}</p>}>
         <PdfReader key={paper.id} topic={currentTopic(state)} version={paper.id} page={currentLocation.page}
-          target={currentLocation.rect} onPage={(page, rect) => pdf.open(paper.id, page, rect)}
-          onAsk={(selection) => pdf.ask(paper.id, selection)} onFind={pdf.find}
+          target={currentLocation.rect}
+          onAsk={(selection) => pdf.ask(paper.id, selection)} onFind={pdf.find} onPaperInfo={setMode}
           onWiki={() => act.navigate({ view: 'wiki', topicId: currentTopic(state) })} />
-      </Suspense> : <PaperInsights key={paper.id} paper={paper} mode={mode} onOpen={(version, page) => {
-        pdf.open(version, page)
-        setMode('reading')
-      }} /> :
+      </Suspense>
+        {mode !== 'reading' && <Dialog title={tr(mode === 'scan' ? 'Paper details' : 'Paper references')} onClose={() => setMode('reading')}>
+          <PaperInsights key={paper.id} paper={paper} mode={mode} onOpen={(version, page) => {
+            pdf.open(version, page)
+            setMode('reading')
+          }} />
+        </Dialog>}
+      </> :
       <div className="reader-scroll scroll" onScroll={e=>{
         if(!state.mainline?.bookmark || state.activeEvidence)return
         const scroller=e.currentTarget
@@ -356,6 +368,7 @@ function Reader({ pdf }: { pdf?: PdfActions }) {
           )}
         </article>
       </div>}
+      </div>
     </section>
   )
 }

@@ -129,9 +129,7 @@ export function MainlineProvider({
   const workspace = useWorkspace()
   const [readVersions, selectVersions] = useState<string[]>([])
   const [files, setFiles] = useState<(Picked & { pdf?: File | string })[]>([])
-  const config = useRead('services.get', {})
   const { tr } = useLanguage()
-  const activity = useRead('workspace.activity', {})
   const selection = useRef<{ source_version_id: string; passage_id: string; quote: string }>()
   const { act: prototypeActions } = useStore()
   const [view, setView] = useState<State>(defaultView)
@@ -141,7 +139,10 @@ export function MainlineProvider({
   const [savedTrace, setSavedTrace] = useState<{ id: string; steps: Step[] }>()
   const [error, setError] = useState('')
   const [ready, setReady] = useState(false)
+  const config = useRead('services.get', {}, ready)
+  const activity = useRead('workspace.activity', {}, ready)
   const [initializing, setInitializing] = useState(true)
+  const [connectionError, setConnectionError] = useState(false)
   const [working, setWorking] = useState(false)
   const [draft, setDraft] = useState('')
   const [searchQuestion, setSearchQuestion] = useState('')
@@ -161,7 +162,7 @@ export function MainlineProvider({
   const writeKeys = useRef(new Map<string, string>())
   const topic = view.route.view === 'topic' ? view.route.topicId : ''
   const savedNotes = useRead('note.list', { topic_id: topic }, !!topic)
-  const history = useRead('task.history', topic ? { topic_id: topic } : {})
+  const history = useRead('task.history', topic ? { topic_id: topic } : {}, ready)
   const [position, setPosition] = useState<{ version: string; passage: string }>()
   const session = view.activeSessionId
   const reveal = (cause: unknown) => setError(errorText(cause))
@@ -209,7 +210,7 @@ export function MainlineProvider({
         })
         .catch(reveal)
     })
-    void listener.catch(reveal)
+    void listener.catch((cause) => console.warn('Native PDF drop is unavailable.', cause))
     return () => {
       valid = false
       void listener.then((stop) => stop()).catch(() => {})
@@ -310,8 +311,13 @@ export function MainlineProvider({
   async function initialize() {
     const request = ++connectionRequest.current
     setInitializing(true)
+    setConnectionError(false)
     try {
-      const version = await api.call('protocol.version', {})
+      const version = await api.call('protocol.version', {}).catch(async (cause) => {
+        if (demo || cause instanceof Error) throw cause
+        await new Promise((resolve) => setTimeout(resolve, 250))
+        return api.call('protocol.version', {})
+      })
       if (version.major !== 0)
         throw new Error(`Incompatible host protocol ${version.major}.${version.minor}.`)
       const { items } = await api.call('topic.list', {})
@@ -344,7 +350,10 @@ export function MainlineProvider({
       }))
       setReady(true)
     } catch (cause) {
-      if (request === connectionRequest.current) reveal(cause)
+      if (request === connectionRequest.current) {
+        setConnectionError(true)
+        console.warn('Could not load the local workspace.', cause)
+      }
     } finally {
       if (request === connectionRequest.current) setInitializing(false)
     }
@@ -1096,11 +1105,6 @@ export function MainlineProvider({
             {tr(notice)}
           </p>
           <div className="dialog-actions">
-            {!ready && !initializing && (
-              <button className="primary" onClick={() => void initialize()}>
-                {tr('Retry connection')}
-              </button>
-            )}
             {activeTask.connectionError && (
               <button
                 className="primary"
@@ -1124,11 +1128,12 @@ export function MainlineProvider({
           </div>
         </Dialog>
       )}
-      {!ready && !initializing && !notice && (
-        <div className="mainline-task-actions">
-          <button className="ghost-btn" onClick={() => void initialize()}>
+      {(!ready || connectionError) && (
+        <div className="mainline-task-actions" role="status">
+          {tr(initializing ? 'Connecting to the local workspace…' : 'The local workspace could not connect.')}
+          {!initializing && <button className="ghost-btn" onClick={() => void initialize()}>
             {tr('Retry connection')}
-          </button>
+          </button>}
         </div>
       )}
     </StoreContext.Provider>

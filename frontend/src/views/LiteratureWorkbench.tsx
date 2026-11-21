@@ -130,7 +130,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
       setDragging(event.payload.type === 'enter' || event.payload.type === 'over')
       if (event.payload.type === 'drop') void importFiles(event.payload.paths)
     })
-    void stop.catch(workspace.report)
+    void stop.catch((cause) => console.warn('Native PDF drop is unavailable.', cause))
     return () => { current = false; void stop.then((unlisten) => unlisten()).catch(() => {}) }
   }, [workspace.report, topicId])
 
@@ -417,7 +417,6 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
         </section>}
         {page > 0 && readerVersion && !workspace.demo && <Suspense fallback={<p role="status">{tr('Opening PDF…')}</p>}>
           <PdfReader key={readerVersion} topic={topicId} version={readerVersion} page={page} target={referencePage?.rect}
-            onPage={(next, rect) => openPage(readerVersion, next, rect)}
             onAsk={(picked) => { setSelection({ ...picked, version: readerVersion }); setSelectionQuestion(''); setTimeout(() =>
               document.getElementById('pt-selection-question')?.focus(), 0) }}
             onFind={() => findFigure(true)} onWiki={() => setView('wiki')} />
