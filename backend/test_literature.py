@@ -163,6 +163,10 @@ class LiteratureTest(unittest.TestCase):
                                 paper_id=self.a["paper_id"])["source_version_id"]
         wiki = self.call("synthesis.wiki", topic_id=self.topic)
         self.assertTrue(wiki["items"][0]["needs_review"])
+        archived = next(r for r in self.call("synthesis.list", topic_id=self.topic)["items"]
+                        if r["record_id"] == outline["record_id"])
+        self.assertIn(point["id"], archived["stale_item_ids"])
+        self.call("synthesis.review", **{**params, "base_revision": wiki["revision"]}, error="STALE_REVISION")
         self.run_task([version, self.versions[1]])
         self.assertTrue(self.worker.dsh.leads[0]["needs_review"])
         self.assertEqual(self.worker.dsh.leads[0]["passage_ids"], [])

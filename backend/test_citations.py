@@ -93,6 +93,82 @@ class TestCitationWorkflow(unittest.TestCase):
     def import_draft(self):
         return call(self.worker, "draft.import", topic_id=self.topic, name="Draft.pdf", content=make_pdf(*self.draft_text))
 
+    def test_suggestions_ground_unreferenced_clauses_and_recheck_changed_source(self):
+        v1, v2 = (paper["source_version_id"] for paper in (self.paper, self.wrong))
+        sources = [call(self.worker, "source.read", topic_id=self.topic, source_version_id=version)["passages"][0]
+                   for version in (v1, v2)]
+        first, second = "The evaluation uses human-checked evidence", "the throughput study measures runtime"
+        sentence = f"{first}, while {second}, although independent replication remains to be shown."
+        draft = call(self.worker, "draft.import", topic_id=self.topic, name="Draft.pdf", content=make_pdf(sentence))
+        snapshot = draft["versions"][0]
+        self.assertFalse(snapshot["sentences"])
+        worker = self.worker
+        target = {"topic_id": self.topic, "draft_id": draft["draft_id"], "version_id": snapshot["version_id"]}
+        with worker.lock, worker.db:
+            legacy = worker.get("pdf_draft", draft["draft_id"])
+            legacy["versions"][0].pop("uncited_sentences")
+            worker.put("pdf_draft", draft["draft_id"], legacy)
+        restored = call(worker, "draft.prose", **target)["sentences"]
+        self.assertEqual(restored, call(worker, "draft.prose", **target)["sentences"])
+        sid = restored[0]["id"]
+
+        class Model:
+            key = "fixture"
+
+            def suggest_citations(self, sentences, selected, cancelled, progress):
+                assert {s["source_version_id"] for s in selected} == {v1, v2}
+                progress("paper_read", "Read both permitted sources")
+                seen = {p["passage_id"]: {"source_version_id": v} for p, v in zip(sources, (v1, v2))}
+                return {"suggestions": [{"id": sentences[0]["id"], "claims": [
+                    {"text": first, "status": "supported", "limit": "Human evaluation only", "evidence": [
+                        {"id": sources[0]["passage_id"], "quote": "uses human-checked citation evidence."}]},
+                    {"text": second, "status": "partial", "limit": "Separate throughput benchmark", "evidence": [
+                        {"id": sources[1]["passage_id"], "quote": "measures runtime and retrieval throughput."},
+                        {"id": sources[0]["passage_id"], "quote": "An invented quote has no passage match."}]},
+                ]}]}, seen, [], {"model_steps": 1}, None
+
+        self.worker.dsh = Model()
+        args = {"topic_id": self.topic, "kind": "citation_suggest", "input": {
+            "draft_id": draft["draft_id"], "version_id": snapshot["version_id"], "sentence_ids": [sid],
+            "source_versions": [v1, v2],
+        }}
+        prepared = call(worker, "task.prepare", **args)
+        self.assertEqual(prepared["source_versions"], [v2, v1])
+        task_id = call(worker, "task.start", **args, confirmation_id=prepared["confirmation_id"])["task_id"]
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            task = call(worker, "task.get", task_id=task_id)
+            if task["status"] not in ("queued", "running"):
+                break
+            time.sleep(.015)
+        self.assertEqual(task["status"], "completed", task)
+
+        def current():
+            return call(worker, "draft.list", topic_id=self.topic)["items"][0]["versions"][0]
+
+        report = current()["reports"][0]
+        finding = report["findings"][0]
+        self.assertEqual([c["status"] for c in finding["claims"]],
+                         ["supported", "partial", "evidence_not_established"])
+        refs = [aid for claim in finding["claims"] for aid in claim["anchor_ids"]]
+        self.assertEqual(len(refs), 2)
+        evidence = call(worker, "evidence.open", topic_id=self.topic, anchor_id=refs[0])
+        self.assertEqual(evidence["source"]["source_version_id"], v1)
+        self.assertEqual(evidence["source"]["passages"][0]["page"], 1)
+        target.update(report_id=report["report_id"])
+        call(worker, "audit.review", **target, finding_id=finding["finding_id"], decision="accept")
+        call(worker, "audit.save_to_wiki", **target, finding_id=finding["finding_id"])
+        exported = call(worker, "export.create", **target, format="evidence", include_originals=False,
+                        item_ids=[finding["finding_id"]])
+        self.assertIn("independent replication", exported["files"][0]["text"])
+
+        self.import_pdf("Dataset new", "New version with changed source.", paper_id=self.paper["paper_id"])
+        revised = current()
+        self.assertEqual(revised["stale_suggestion_sentence_ids"], [sid])
+        self.assertEqual(revised["stale_sentence_ids"], [])
+        self.assertTrue(call(worker, "synthesis.wiki", topic_id=self.topic)["items"][0]["needs_review"])
+        self.assertEqual(call(worker, "evidence.open", topic_id=self.topic, anchor_id=refs[0])["quote"], evidence["quote"])
+
     def start(self, draft):
         v = draft["versions"][0]
         args = {"topic_id": self.topic, "kind": "citation_audit", "input": {

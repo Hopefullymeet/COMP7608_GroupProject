@@ -1,4 +1,3 @@
-import { pickPdfs, pdfInput } from '../api/pdf'
 import { count, useLanguage } from '../i18n'
 import { useState } from 'react'
 import { PageHead, Dialog } from '../components/PageHead'
@@ -7,6 +6,8 @@ import { useStore } from '../data/store'
 import type { Impact, Picked, Review } from '../api/library'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { Notes } from './Notes'
+import { PaperImportDialog, usePdfDrop } from './PaperImportDialog'
+import { PublicationDetails } from '../components/PublicationDetails'
 
 export function LibraryPage() {
   const { tr } = useLanguage()
@@ -24,8 +25,10 @@ export function LibraryPage() {
   const [topic, setTopic] = useState(''),
     [tag, setTag] = useState('')
   const [review, setReview] = useState<Review>(),
-    [files, setFiles] = useState<(Picked & { pdf?: File })[]>()
+    [files, setFiles] = useState<Picked[]>()
   const [target, setTarget] = useState<string>()
+  const [importing, setImporting] = useState<(File | string)[]>()
+  usePdfDrop(!demo && !importing ? (files) => { setTarget(undefined); setImporting(files) } : undefined)
   const [impact, setImpact] = useState<Impact & { ids: string[]; purge: boolean }>(),
     [clear, setClear] = useState(false)
   const [feedback, setFeedback] = useState('')
@@ -41,36 +44,12 @@ export function LibraryPage() {
   const checked = chosen.filter((id) => rows.some((p) => p.paper_id === id))
   const ids = checked.length ? checked : paper ? [paper.paper_id] : []
   async function pick(paper_id?: string) {
-    if (!demo) {
-      const selected = await pickPdfs(!paper_id)
-      if (!selected.length) return
-      const permitted = paper_id ? rows.find((row) => row.paper_id === paper_id)?.topic_ids ?? [] : topics.map((t) => t.id)
-      const nextTopic = permitted.includes(topic) ? topic : permitted[0]
-      if (!nextTopic) { report(new Error(tr('Select a topic to import PDFs.'))); return }
-      setTopic(nextTopic)
-      setTarget(paper_id)
-      setFiles(selected.map((pdf) => ({ file_id: crypto.randomUUID(), name: pdf.name, pdf })))
-      return
-    }
+    if (!demo) { setTarget(paper_id); setImporting([]); return }
     const picked = await api.call('file.pick', { purpose: 'papers' })
     if (picked.files.length) {
       setTarget(paper_id)
       setFiles(picked.files)
     }
-  }
-  async function importRealPdf() {
-    if (!files || !topic) return
-    const result: string[] = []
-    for (const file of files) {
-      if (!file.pdf) continue
-      try {
-        const item = await write('library.import_pdf', { topic_id: topic, paper_id: target, ...await pdfInput(file.pdf) })
-        result.push(file.name + ' · ' + tr(item.duplicate ? 'Already in library' :
-          item.available_scope === 'metadata' ? 'Text unavailable' : 'Imported'))
-      } catch (error) { result.push(file.name + ' · ' + (error instanceof Error ? error.message : tr('Import failed'))) }
-    }
-    setFeedback(result.join(' · '))
-    setFiles(undefined)
   }
   async function preview(purge: boolean) {
     const result = await api.call('library.impact', { paper_ids: ids })
@@ -267,6 +246,9 @@ export function LibraryPage() {
                 <aside className="card lib-detail">
                   <h2>{paper.title}</h2>
                   <p className="record-meta">{paper.identity}</p>
+                  {!demo && tab === 'Papers' && paper.topic_ids.length > 0 &&
+                    <PublicationDetails key={paper.paper_id} paper={paper.paper_id}
+                      topic={paper.topic_ids.includes(topic) ? topic : paper.topic_ids[0]} />}
                   <h3>{tr('Files and versions')}</h3>
                   {paper.files.map((f) => (
                     <p key={f.source_version_id}>
@@ -353,6 +335,11 @@ export function LibraryPage() {
           </>
         )}
       </div>
+      {importing && <PaperImportDialog topics={topics.filter((item) => !target ||
+        rows.find((row) => row.paper_id === target)?.topic_ids.includes(item.id))}
+        initialTopic={topic && (!target || rows.find((row) => row.paper_id === target)?.topic_ids.includes(topic)) ? topic : undefined}
+        initialFiles={importing} paperId={target} onClose={() => setImporting(undefined)}
+        onImported={(paper) => setFocus(paper)} onOpenTopic={!target ? (id) => act.openTopic(id, 'synthesis') : undefined} />}
       {files && (
         <Dialog title={tr('Import papers')} onClose={() => setFiles(undefined)}>
           <p>{demo ? tr('Sample material selected for the contract demo.') : tr('Review the selected material.')}</p>
@@ -368,7 +355,6 @@ export function LibraryPage() {
             className="primary"
             disabled={busy}
             onClick={() => {
-              if (!demo) { void importRealPdf(); return }
               void prepare({
                 kind: 'paper_import',
                 input: {

@@ -89,7 +89,23 @@ class Workbench:
         host = self.worker
         active = next((t["task_id"] for t in host.rows("task") if t["topic_id"] == topic
                        and t["kind"] == "literature_synthesis" and t["status"] in ("queued", "running")), None)
-        return {"items": [r for r in host.rows("synthesis") if r["topic_id"] == topic], "active_task_id": active}
+        latest = {p["source_versions"][0]["source_version_id"] for p in host.rows("paper") if topic in p["topic_ids"]}
+        items = [{**record, "stale_item_ids": self.stale_items(record, latest)}
+                 for record in host.rows("synthesis") if record["topic_id"] == topic]
+        return {"items": items, "active_task_id": active}
+
+    def stale_items(self, record, latest):
+        anchor_versions = {}
+        stale = []
+        for item in record["points"] + record["relations"]:
+            dependencies = {item[key] for key in ("from", "to") if key in item}
+            for aid in entry_anchors(item):
+                if aid not in anchor_versions:
+                    anchor_versions[aid] = self.worker.get("anchor", aid)["value"]["source_version_id"]
+                dependencies.add(anchor_versions[aid])
+            if not dependencies.issubset(latest):
+                stale.append(item["id"])
+        return stale
 
     def wiki(self, topic):
         host = self.worker
@@ -121,6 +137,10 @@ class Workbench:
         if (not isinstance(chosen, list) or not chosen or not all(isinstance(v, str) and v in eligible for v in chosen)
                 or len(set(chosen)) != len(chosen)):
             raise LiteratureError("INVALID_PARAMS", "Select distinct items from this outline.")
+        latest = {p["source_versions"][0]["source_version_id"] for p in host.rows("paper") if topic in p["topic_ids"]}
+        if set(chosen).intersection(self.stale_items(result, latest)):
+            raise LiteratureError("STALE_REVISION", "Recheck the current paper versions before saving to Wiki.",
+                                  "refresh_data", -32020)
         current = {item["id"]: item for item in wiki["items"]}
         history = wiki.get("history", [])
         for item_id in chosen:

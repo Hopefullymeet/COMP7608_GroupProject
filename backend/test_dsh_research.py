@@ -41,6 +41,8 @@ class ScriptedProvider(BaseHTTPRequestHandler):
             return
         metadata, _, rest = prompt.split("\nPapers: ", 1)[1].partition("\nChecks: ")
         checks = json.loads(rest) if rest else []
+        metadata, _, rest = metadata.partition("\nSentences: ")
+        sentences = json.loads(rest) if rest else []
         sources = json.loads(metadata.split("\nQuestion:", 1)[0])
         version = sources[0]["source_version_id"]
         available = {t["name"] for t in request.get("tools", [])}
@@ -81,6 +83,10 @@ class ScriptedProvider(BaseHTTPRequestHandler):
             response = ({"checks": [{"id": check["id"], "status": "supported", "limit": "Fixture",
                                      "evidence": citations} for check in checks]} if checks else
                         {"points": [point], "relations": [], "gaps": []})
+            if sentences:
+                response = {"suggestions": [{"id": row["id"], "claims": [
+                    {"text": row["text"], "status": "supported", "limit": "Fixture", "evidence": citations}]}
+                    for row in sentences]}
             block = {"type": "text", "text": json.dumps(response)}
         self.respond(block)
 
@@ -166,6 +172,15 @@ class DshResearchTest(unittest.TestCase):
                     )
                     self.assertIsNone(issue)
                     self.assertEqual(raw["checks"][0]["id"], "0")
+                    suggested, read, trace, _, issue = dsh.suggest_citations(
+                        [{"id": "sentence-1", "text": "The source defines the benchmark."}],
+                        [{"source_version_id": version, "title": "Alpha", "available_scope": "full_text"}],
+                        threading.Event(), None,
+                    )
+                    self.assertIsNone(issue)
+                    self.assertEqual([tool["title"] for tool in trace], ["paper_search", "paper_read"])
+                    claim = suggested["suggestions"][0]["claims"][0]
+                    self.assertIn(claim["evidence"][0]["id"], read)
                     self.assertIn(raw["checks"][0]["evidence"][0]["id"], seen)
                     phrase = "Only these words are in the reader selection."
                     selection = {"paper_id": "selected-paper", "source_version_id": version,

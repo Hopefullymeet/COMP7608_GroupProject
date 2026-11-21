@@ -8,6 +8,7 @@ import { scrollWithin } from '../components/util'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { Dialog } from '../components/PageHead'
 import { FigureSearch } from '../components/FigureSearch'
+import { PublicationDetails } from '../components/PublicationDetails'
 import { errorText } from '../api/contract'
 import type { ReaderAnswer, Rect, Selection } from '../api/reader'
 import type { ChatMessage, Paper, Passage } from '../data/types'
@@ -203,6 +204,7 @@ type PdfActions = {
 function PaperInsights({ paper, mode, onOpen }: { paper: Paper; mode: 'scan' | 'analysis'; onOpen: (version: string, page: number) => void }) {
   const { tr } = useLanguage()
   const { state } = useStore()
+  const { demo } = useWorkspace()
   const topic_id = currentTopic(state)
   const [direction, setDirection] = useState<'outgoing' | 'incoming'>('outgoing')
   const refs = useRead('literature.refs', { topic_id, source_version_id: paper.id, direction }, mode === 'analysis')
@@ -215,6 +217,7 @@ function PaperInsights({ paper, mode, onOpen }: { paper: Paper; mode: 'scan' | '
         {!!(entry?.authors.length || paper.authors.length) && <p className="paper-authors">{(entry?.authors.length ? entry.authors : paper.authors).join(' · ')}</p>}
         {paper.venue && <p>{paper.venue} {paper.year || ''}</p>}
         {entry?.identity && <p className="fine">{entry.identity}</p>}
+        {entry && !demo && <PublicationDetails paper={entry.paper_id} topic={topic_id} />}
         <button className="link-btn" onClick={() => onOpen(paper.id, 1)}>{tr('Read paper')}</button>
       </> : <>
         <div className="lib-tools">
@@ -382,6 +385,7 @@ function Reader({ pdf }: { pdf?: PdfActions }) {
       <div className="pt-reading-content">
       {pdf && withPdf ? <><Suspense fallback={<p className="pt-pdf-loading" role="status">{tr('Opening PDF…')}</p>}>
         <PdfReader key={paper.id} topic={currentTopic(state)} version={paper.id} page={currentLocation.page}
+          session={state.activeSessionId ?? undefined} resume={!location && !state.activeEvidence}
           target={currentLocation.rect}
           onAsk={(selection) => pdf.ask(paper.id, selection)} onFind={pdf.find} onPaperInfo={setMode}
           onWiki={() => act.navigate({ view: 'wiki', topicId: currentTopic(state) })} />

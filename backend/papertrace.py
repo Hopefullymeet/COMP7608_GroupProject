@@ -417,6 +417,8 @@ class Worker:
             return {"items": [self.citations.public(r) for r in self.rows("pdf_draft") if r["topic_id"] == topic]}
         if method == "draft.page":
             return self.citations.page(self.topic(params), params)
+        if method == "draft.prose":
+            return self.citations.prose(self.topic(params), params)
         if method == "audit.save_to_wiki":
             return self.citations.save_to_wiki(self.topic(params), params)
         if method == "audit.review":
@@ -855,6 +857,11 @@ class Worker:
             draft, _, audit_jobs = self.citations.jobs(topic, input_)
             target, label = draft["draft_id"], draft["name"]
             audit_pending = [j for j in audit_jobs if j["usable"] and j["cached"] is None]
+        elif kind == "citation_suggest":
+            draft, _, _, sources = self.citations.suggestions(topic, input_)
+            target, label = draft["draft_id"], draft["name"]
+            task_data["suggestion_sources"] = [s["source_version_id"] for s in sources
+                                               if s["available_scope"] == "full_text"]
         elif kind == "reader_question":
             target, _, label = self.reader.question(topic, input_)
             if "session_id" in params:
@@ -891,10 +898,12 @@ class Worker:
             raise RpcError(-32601, "METHOD_NOT_FOUND", "refresh_data", "This task is not available in the local integration worker.")
         synthesis = kind in ("literature_synthesis", "paper_comparison")
         audit = kind == "citation_audit"
+        suggest = kind == "citation_suggest"
         reader_question = kind == "reader_question"
         live = synthesis or (kind == "reading_qa" and self.dsh is not None) or (
             audit and bool(audit_pending) and self.dsh is not None and bool(self.dsh.key))
         live = live or (reader_question and input_["medium"] == "text")
+        live = live or (suggest and bool(task_data["suggestion_sources"]) and self.dsh is not None and bool(self.dsh.key))
         if audit:
             task_data["audit_sources"] = {j["job_id"]: j["source"]["source_version_id"] for j in audit_pending} if live else {}
 
@@ -922,6 +931,10 @@ class Worker:
             if audit:
                 transfers = [{"endpoint": ENDPOINT, "purpose": "Check cited claims against selected papers",
                               "data_categories": ["Selected manuscript sentences and cited full-text excerpts"]}] if live else []
+            if suggest:
+                transfers = [{"endpoint": ENDPOINT, "purpose": "Find citations for selected manuscript sentences",
+                              "data_categories": ["Selected manuscript sentences", "Selected paper titles and excerpts"]}] if live else []
+                return {"confirmation_id": cid, "transfers": transfers, "source_versions": task_data["suggestion_sources"]}
             if reader_question:
                 transfers = [{"endpoint": ENDPOINT, "purpose": "Answer from the selected PDF text",
                               "data_categories": ["Only the selected text and the question"]}] if live else []
@@ -1000,15 +1013,16 @@ class Worker:
                 discovery = task["kind"] == "discovery"
                 remote_search = discovery and "search_request" in task
                 audit = task["kind"] == "citation_audit"
+                suggest = task["kind"] == "citation_suggest"
                 reader_task = task["kind"] in ("reader_question", "visual_index")
-                live = audit or reader_task or (not discovery and self.dsh is not None)
+                live = audit or suggest or reader_task or (not discovery and self.dsh is not None)
                 if live or remote_search:
                     signal = threading.Event()
                     self.inflight[task_id] = signal
                 with self.db:
                     event = self.emit(task, "task.progress", {
                         "stage": "searching" if discovery else "reading",
-                        "message": "Checking citations." if audit else (
+                        "message": "Checking citations." if audit else "Finding citations." if suggest else (
                             "Searching OpenAlex." if remote_search else
                             "Reading with DeepSeek Harness." if live else "Running local contract sample.")
                     })
@@ -1019,6 +1033,8 @@ class Worker:
             if live:
                 if audit:
                     self.citations.run(task, signal)
+                elif suggest:
+                    self.citations.run_suggestions(task, signal)
                 elif reader_task:
                     run = self.reader.run_question if task["kind"] == "reader_question" else self.reader.run_index
                     run(task, signal)

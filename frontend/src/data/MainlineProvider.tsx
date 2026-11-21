@@ -141,6 +141,15 @@ export function MainlineProvider({
   const [savedTrace, setSavedTrace] = useState<{ id: string; steps: Step[] }>()
   const [error, setError] = useState('')
   const [ready, setReady] = useState(false)
+  const availableTopics = useRead('topic.list', {}, ready && !demo)
+  useEffect(() => {
+    if (!availableTopics) return
+    setView((previous) => ({ ...previous, topics: availableTopics.items.map((item) => {
+      const topic = previous.topics.find((candidate) => candidate.id === item.topic_id)
+      return topic ? { ...topic, title: item.title } :
+        { id: item.topic_id, title: item.title, goal: '', scripted: true, paperCount: 0, updated: '' }
+    }) }))
+  }, [availableTopics])
   const config = useRead('services.get', {}, ready)
   const activity = useRead('workspace.activity', {}, ready)
   const [initializing, setInitializing] = useState(true)

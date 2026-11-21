@@ -1,15 +1,14 @@
-import { downloadText, pdfInput } from '../api/pdf'
+import { downloadText } from '../api/pdf'
 import { useLanguage } from '../i18n'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
-import { getCurrentWebview } from '@tauri-apps/api/webview'
-import { isTauri } from '../api/desktop'
 import type { Located } from '../api/library'
 import type { Rect, Selection } from '../api/reader'
 import type { Assessment, OutlinePoint, PaperRelation } from '../api/synthesis'
 import { FigureSearch } from '../components/FigureSearch'
 import { Dialog } from '../components/PageHead'
 import { Icon } from '../components/Icon'
+import { PaperImportDialog, usePdfDrop } from './PaperImportDialog'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { useStore } from '../data/store'
 import { PageHead } from '../components/PageHead'
@@ -74,11 +73,9 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
   const [review, setReview] = useState(false)
   const [reader, setReader] = useState<Located>()
   const [readerPending, setReaderPending] = useState(false)
-  const replace = useRef<string>()
   const [dragging, setDragging] = useState(false)
-  const [imports, setImports] = useState(0)
-  const [notice, setNotice] = useState('')
-  const picker = useRef<HTMLInputElement>(null)
+  const [imports, setImports] = useState<{ files: (File | string)[]; paper?: string }>()
+  usePdfDrop(!workspace.demo && !imports ? (files) => { setDragging(false); setImports({ files }) } : undefined)
   const request = useRef(0)
   const shownEvidence = useRef<HTMLElement>(null)
   const papers = library?.items ?? []
@@ -92,63 +89,17 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
   const outline = results?.items.find((item) => item.record_id === resultId) ?? results?.items[0]
   const page = referencePage?.page ?? reader?.source.passages[0]?.page ?? 0
   const readerVersion = referencePage?.version ?? reader?.source.source_version_id ?? ''
-  const current = useRef({ workspace, topicId })
-  current.current = { workspace, topicId }
-
-  async function importFiles(files: (File | string)[], paperId?: string) {
-    if (!files.length) return
-    setImports((count) => count + 1)
-    setNotice('')
-    const failures: string[] = []
-    try {
-      for (const file of files) {
-        const data = current.current
-        try {
-          const upload = await pdfInput(file)
-          const imported = await data.workspace.write('library.import_pdf', {
-            topic_id: data.topicId, paper_id: paperId, ...upload,
-          })
-          if (!imported.duplicate) {
-            setChoices((prior) => ({ ...prior, [imported.paper_id]: imported.source_version_id }))
-          }
-        } catch (error) {
-          failures.push(error instanceof Error ? error.message : 'Import failed.')
-        }
-      }
-      if (failures.length) setNotice(failures.join(' '))
-    } finally {
-      setImports((count) => count - 1)
-      replace.current = undefined
-    }
-  }
-
-  useEffect(() => {
-    if (!isTauri()) return
-    let current = true
-    const stop = getCurrentWebview().onDragDropEvent((event) => {
-      if (!current) return
-      setDragging(event.payload.type === 'enter' || event.payload.type === 'over')
-      if (event.payload.type === 'drop') void importFiles(event.payload.paths)
-    })
-    void stop.catch((cause) => console.warn('Native PDF drop is unavailable.', cause))
-    return () => { current = false; void stop.then((unlisten) => unlisten()).catch(() => {}) }
-  }, [workspace.report, topicId])
-
   useEffect(() => {
     if (reader && window.matchMedia('(max-width: 780px)').matches) shownEvidence.current?.scrollIntoView({ block: 'nearest' })
   }, [reader])
 
-  function chooseFiles(paperId?: string) {
-    if (!picker.current) return
-    replace.current = paperId
-    picker.current.multiple = !paperId
-    picker.current.click()
-  }
+  function chooseFiles(paper?: string) { setImports({ files: [], paper }) }
 
   function drop(event: DragEvent) {
     event.preventDefault()
     setDragging(false)
-    void importFiles(Array.from(event.dataTransfer.files))
+    const files = Array.from(event.dataTransfer.files)
+    if (!workspace.demo && files.length) setImports({ files })
   }
 
   async function open(anchor: string) {
@@ -270,7 +221,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
           <textarea id="synthesis-question" value={question} maxLength={2000}
             onChange={(event) => setQuestion(event.currentTarget.value)}
             placeholder={tr('What would you like to explain in your related work?')} required />
-          <button className="primary" disabled={workspace.busy || imports > 0 || versions.length < 2 ||
+          <button className="primary" disabled={workspace.busy || Boolean(imports) || versions.length < 2 ||
             versions.length > 12 || !question.trim()}>{tr('Build outline')}</button>
         </form>}
         {results?.active_task_id && <p role="status">{tr('Researching the selected papers…')}</p>}
@@ -287,6 +238,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
           <h3>{outline.question}</h3>
           {outline.points.map((point) => <article key={point.id} className="synthesis-item">
             <h4>{point.title}</h4>
+            {outline.stale_item_ids?.includes(point.id) && <p className="synthesis-open">{tr('Evidence needs review')}</p>}
             {point.claims.map((claim, i) => <div key={i} className="synthesis-claim">
               <p>{claim.text}</p>
               {claim.assessment !== 'supported' && <strong className="synthesis-open">{tr(assessmentLabel[claim.assessment])}</strong>}
@@ -306,6 +258,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
             {outline.relations.map((relation) => <div key={relation.id} className="synthesis-claim">
               <p><strong>{names[relation.from] ?? tr('Paper')}</strong> → <strong>{names[relation.to] ?? tr('Paper')}</strong></p>
               <p>{tr(relationLabel[relation.kind] ?? relation.kind)} · {relation.subject}</p>
+              {outline.stale_item_ids?.includes(relation.id) && <p className="synthesis-open">{tr('Evidence needs review')}</p>}
               {relation.status === 'proposed' && <p className="synthesis-open">{tr('Evidence still needed')}</p>}
               {relation.comparability === 'not_comparable' && <p className="synthesis-open">{tr('Results are not directly comparable')}</p>}
               {relation.conditions && <p className="fine">{relation.conditions}</p>}
@@ -343,6 +296,9 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
           <h4>{entryTitle(item.entry)}</h4>
           {item.needs_review && <>
             <p className="synthesis-open">{tr('Evidence needs review')}</p>
+            {!!item.changed_versions?.length && <p className="fine">
+              {item.changed_versions.map((version) => names[version] ?? version).join(' · ')}
+            </p>}
             <button className="link-btn" onClick={() => {
               setQuestion('Recheck this finding against the selected paper versions: ' + entryTitle(item.entry))
               setView('outline')
@@ -360,15 +316,10 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
           onDragLeave={() => setDragging(false)} onDrop={drop}>
           <div className="synthesis-paper-heading">
             <h3>{tr('Papers')}</h3>
-            <button className="ghost-btn" disabled={imports > 0} onClick={() => chooseFiles()}>
+            <button className="ghost-btn" disabled={Boolean(imports)} onClick={() => chooseFiles()}>
               <Icon name="plus" size={14} /> {tr('Add PDFs')}
             </button>
-            <input ref={picker} hidden type="file" accept=".pdf,application/pdf" multiple
-              onChange={(event) => {
-                const files = Array.from(event.currentTarget.files ?? [])
-                event.currentTarget.value = ''
-                void importFiles(files, replace.current)
-              }} />
+
           </div>
           {!papers.length && <p className="fine">{tr('Drop two or more papers from the same topic here.')}</p>}
           {papers.map((paper) => {
@@ -388,7 +339,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
                   {index === 0 ? tr('Latest version') : tr('Version {0}', paper.source_versions.length - index)}
                 </option>)}
               </select>}
-              <button className="link-btn" disabled={imports > 0} onClick={() => chooseFiles(paper.paper_id)}>{tr('Add version')}</button>
+              <button className="link-btn" disabled={Boolean(imports)} onClick={() => chooseFiles(paper.paper_id)}>{tr('Add version')}</button>
               <button className="link-btn" onClick={() => referencesFor(checkedVersion ?? paper.source_versions[0].source_version_id)}>
                 {tr('Paper references')}
               </button>
@@ -397,8 +348,6 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
               {paper.source_versions[0].available_scope === 'metadata' && <small>{tr('Text unavailable')}</small>}
             </div>
           })}
-          {imports > 0 && <p role="status">{tr('Importing and indexing PDFs…')}</p>}
-          {notice && <p role="alert">{notice}</p>}
         </div>
 
         {readerPending && <p role="status">{tr('Opening source…')}</p>}
@@ -426,6 +375,9 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
         </Suspense>}
       </aside>
 
+      {imports && <PaperImportDialog topics={[]} initialTopic={topicId} initialFiles={imports.files}
+        paperId={imports.paper} onClose={() => setImports(undefined)}
+        onImported={(paper, version) => setChoices((prior) => ({ ...prior, [paper]: version }))} />}
       {figureDialog && <FigureSearch topic={topicId} versions={versions} names={names}
         onOpen={(figure) => openPage(figure.source_version_id, figure.page, figure.rect)}
         onAsk={(figure) => {
@@ -474,7 +426,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
         {[...outline.points, ...outline.relations].map((item) => {
           const previous = wiki?.items.find((saved) => saved.id === item.prior_id)
           return <div className="synthesis-review-item" key={item.id}>
-            <label><input type="checkbox" checked={checked.includes(item.id)} onChange={(event) => {
+            <label><input type="checkbox" checked={checked.includes(item.id)} disabled={outline.stale_item_ids?.includes(item.id)} onChange={(event) => {
               const selected = event.currentTarget.checked
               setChecked((old) => selected ? [...old, item.id] : old.filter((id) => id !== item.id))
             }} /> {entryTitle(item)}</label>

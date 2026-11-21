@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useLanguage } from '../i18n'
 import { pickPdfs, pdfInput, downloadText } from '../api/pdf'
-import type { Decision } from '../api/citation'
+import type { Decision, Report } from '../api/citation'
+import type { Located } from '../api/library'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { EvidenceLink } from './Notes'
 
@@ -23,27 +24,43 @@ export function PdfAudit({ topic }: { topic: string }) {
   const [page, setPage] = useState(0)
   const [saved, setSaved] = useState<string[]>([])
   const [exported, setExported] = useState<{ name: string; text: string }[]>([])
+  const [kind, setKind] = useState<Report['kind']>('citation_audit')
+  const [selectedPapers, selectPapers] = useState<string[]>([])
+  const [source, setSource] = useState<Located>()
+  const [limit, setLimit] = useState(40)
+  const suggesting = kind === 'citation_suggest'
   const doc = items.find((item) => item.draft_id === active) ?? items[0]
   const version = doc?.versions.find((item) => item.version_id === versionId) ?? doc?.versions[0]
-  const report = version?.reports.find((item) => item.report_id === reportId) ?? version?.reports[0]
+  const reports = version?.reports.filter((item) => item.kind === kind) ?? []
+  const report = reports.find((item) => item.report_id === reportId) ?? reports[0]
+  const prose = useRead('draft.prose', { ...scope, draft_id: doc?.draft_id ?? '', version_id: version?.version_id ?? '' },
+    Boolean(suggesting && version && !version.uncited_sentences))
+  const sentences = [...(version?.sentences ?? []), ...(suggesting ? (version?.uncited_sentences ?? prose?.sentences ?? []) : [])]
+  const staleIds = suggesting ? version?.stale_suggestion_sentence_ids : version?.stale_sentence_ids
+  const approved = papers.flatMap((paper) => selectedPapers.includes(paper.paper_id)
+    && paper.source_versions[0].available_scope === 'full_text' ? [paper.source_versions[0].source_version_id] : [])
   const target = { ...scope, draft_id: doc?.draft_id ?? '', version_id: version?.version_id ?? '' }
-  const image = useRead('draft.page', { ...target, page }, Boolean(page && version))
+  const image = useRead('draft.page', { ...target, page }, Boolean(!source && page && version))
+  const sourcePage = source?.source.passages.find((p) => p.passage_id === source.passage_id)?.page
+  const original = useRead('source.page', { topic_id: topic, source_version_id: source?.source.source_version_id ?? '',
+    page: sourcePage ?? 0 }, Boolean(sourcePage))
   const bibliography = version?.references ?? []
   const exportIds = report?.findings.filter((finding) => finding.decision === 'accept' && !finding.needs_review)
     .map((finding) => finding.finding_id) ?? []
-  const affected = version?.sentences.filter((sentence) => version.stale_sentence_ids?.includes(sentence.id)) ?? []
+  const affected = sentences.filter((sentence) => staleIds?.includes(sentence.id))
+  const orderedSentences = [...affected, ...sentences.filter((sentence) => !staleIds?.includes(sentence.id))]
   const recheckIds: string[] = []
   let citationCount = 0
   for (const sentence of affected) {
-    const count = sentence.cites.length + (sentence.unresolved?.length ?? 0)
+    const count = suggesting ? 0 : sentence.cites.length + (sentence.unresolved?.length ?? 0)
     if (recheckIds.length >= 12 || citationCount + count > 24) continue
     const candidate = [...recheckIds, sentence.id]
-    if (assignedSources(candidate).length > 12) continue
+    if (!suggesting && assignedSources(candidate).length > 12) continue
     recheckIds.push(sentence.id)
     citationCount += count
   }
 
-  function reset() { selectVersion(''); selectReport(''); select([]); setPage(0); setExported([]) }
+  function reset() { selectVersion(''); selectReport(''); select([]); setPage(0); setExported([]); setSource(undefined); setLimit(40) }
 
   async function importPdf(newVersion = false) {
     try {
@@ -85,11 +102,12 @@ export function PdfAudit({ topic }: { topic: string }) {
   }
 
   function run(ids: string[]) {
-    if (!version || !ids.length) return
+    if (!version || !ids.length || (suggesting && !approved.length)) return
     selectReport('')
     setExported([])
-    void workspace.prepare({ ...scope, kind: 'citation_audit', input: {
-      draft_id: target.draft_id, version_id: target.version_id, sentence_ids: ids, source_versions: assignedSources(ids),
+    void workspace.prepare({ ...scope, kind, input: {
+      draft_id: target.draft_id, version_id: target.version_id, sentence_ids: ids,
+      source_versions: suggesting ? approved : assignedSources(ids),
     } })
   }
 
@@ -110,8 +128,23 @@ export function PdfAudit({ topic }: { topic: string }) {
             {tr('Version {0}', doc.versions.length - i)}
           </option>)}</select>}
         </div>
-        {version.warnings.map((warning) => <p className="fine" key={warning}>{tr(warning)}</p>)}
-        <details open className="synthesis-item">
+        <div className="lib-tools">
+          {(['citation_audit', 'citation_suggest'] as const).map((mode) => <button key={mode} type="button"
+            className="ghost-btn" aria-pressed={kind === mode} disabled={workspace.busy}
+            onClick={() => { setKind(mode); select([]); selectReport(''); setSource(undefined); setExported([]) }}>
+            {tr(mode === 'citation_audit' ? 'Citation check' : 'Citation suggestions')}
+          </button>)}
+        </div>
+        {!suggesting && version.warnings.map((warning) => <p className="fine" key={warning}>{tr(warning)}</p>)}
+        {suggesting ? <details open className="synthesis-item">
+          <summary>{tr('Papers to search')}</summary>
+          {papers.filter((paper) => paper.source_versions[0].available_scope === 'full_text').map((paper) => <label
+            className="synthesis-claim" key={paper.paper_id}>
+            <input type="checkbox" checked={selectedPapers.includes(paper.paper_id)}
+              onChange={() => selectPapers((old) => old.includes(paper.paper_id)
+                ? old.filter((id) => id !== paper.paper_id) : old.length < 12 ? [...old, paper.paper_id] : old)} /> {paper.title}
+          </label>)}
+        </details> : <details open className="synthesis-item">
           <summary>{tr('Citation mapping')}</summary>
           {bibliography.map((ref) => <div className="synthesis-claim" key={ref.key}>
             <p>{ref.title || ref.text}</p>
@@ -128,39 +161,44 @@ export function PdfAudit({ topic }: { topic: string }) {
               </select>
             </label>
           </div>)}
-        </details>
-        {!!version.sentences.length && <div className="synthesis-item">
+        </details>}
+        {!!sentences.length && <div className="synthesis-item">
           <h3>{tr('Select sentences to check')}</h3>
           {recheckIds.length > 0 && <div className="lib-tools">
-            <button className="primary" disabled={workspace.busy}
+            <button className="primary" disabled={workspace.busy || (suggesting && !approved.length)}
               onClick={() => run(recheckIds)}>{tr('Recheck affected sentences ({0})', recheckIds.length)}</button>
             {affected.length > recheckIds.length && <small>{tr('{0} more sentences need review', affected.length - recheckIds.length)}</small>}
           </div>}
-          {version.sentences.map((sentence) => <div className="synthesis-claim" key={sentence.id}>
+          {orderedSentences.slice(0, limit).map((sentence) => <div className="synthesis-claim" key={sentence.id}>
             <label><input type="checkbox" checked={selected.includes(sentence.id)} onChange={() => select((old) =>
               old.includes(sentence.id) ? old.filter((id) => id !== sentence.id) : old.length < 12 ? [...old, sentence.id] : old)} /> {sentence.text}</label>
-            {sentence.page && <button className="link-btn" onClick={() => setPage(sentence.page ?? 0)}>
+            {sentence.page && <button className="link-btn" onClick={() => { setSource(undefined); setPage(sentence.page ?? 0) }}>
               {tr('PDF page {0}', sentence.page)}
             </button>}
-            {version.stale_sentence_ids?.includes(sentence.id) && <p className="fine">{tr('Evidence needs review')}</p>}
+            {staleIds?.includes(sentence.id) && <p className="fine">{tr('Evidence needs review')}</p>}
           </div>)}
-          <button className="primary" disabled={workspace.busy || !selected.length} onClick={() => run(selected)}>{tr('Check citations')}</button>
+          {orderedSentences.length > limit && <button className="link-btn" onClick={() => setLimit((n) => n + 40)}>
+            {tr('Show more sentences')}
+          </button>}
+          <button className="primary" disabled={workspace.busy || !selected.length || (suggesting && !approved.length)}
+            onClick={() => run(selected)}>{tr(suggesting ? 'Find citation suggestions' : 'Check citations')}</button>
         </div>}
       </>}
       {report && version && <section className="synthesis-item">
-        <h3>{tr('Citation check')}</h3>
+        <h3>{tr(suggesting ? 'Citation suggestions' : 'Citation check')}</h3>
         {!report.complete && <p className="fine">{tr('Part of this audit could not be completed.')}</p>}
-        {version.reports.length > 1 && <select aria-label={tr('Audit report')} value={report.report_id}
+        {reports.length > 1 && <select aria-label={tr('Audit report')} value={report.report_id}
           onChange={(event) => { selectReport(event.currentTarget.value); setExported([]) }}>
-          {version.reports.map((item, i) => <option value={item.report_id} key={item.report_id}>{tr('Audit {0}', version.reports.length - i)}</option>)}
+          {reports.map((item, i) => <option value={item.report_id} key={item.report_id}>{tr('Audit {0}', reports.length - i)}</option>)}
         </select>}
         {report.findings.map((finding) => <article className="synthesis-item" key={finding.finding_id}>
-          <p>{version.sentences.find((item) => item.id === finding.sentence_id)?.text}</p>
+          <p>{sentences.find((item) => item.id === finding.sentence_id)?.text}</p>
           {finding.needs_review && <p className="fine">{tr('Evidence needs review')}</p>}
           {finding.claims.map((claim, i) => <div key={i}>
             <strong>{tr(assessment[claim.status])}</strong>
-            <p>{claim.limit}</p>
-            {claim.anchor_ids.map((id) => <EvidenceLink id={id} key={id} />)}
+            {suggesting && <p>{claim.text}</p>}
+            <p>{tr(claim.limit)}</p>
+            {claim.anchor_ids.map((id) => <EvidenceLink id={id} key={id} onOpen={setSource} />)}
           </div>)}
           <div className="lib-tools">
             {!finding.needs_review && finding.decision === 'accept' && finding.claims.some((claim) => claim.anchor_ids.length) &&
@@ -170,7 +208,8 @@ export function PdfAudit({ topic }: { topic: string }) {
                 {tr(saved.includes(finding.finding_id) ? 'Saved to Topic Wiki' : 'Save finding to Topic Wiki')}
               </button>}
             {(['accept', 'reject', 'defer'] as const).map((decision) => <button key={decision} className="ghost-btn"
-              disabled={workspace.busy || (finding.needs_review && decision === 'accept')}
+              disabled={workspace.busy || (decision === 'accept' && (finding.needs_review
+                || (suggesting && !finding.claims.some((claim) => claim.anchor_ids.length))))}
               aria-pressed={finding.decision === decision} onClick={() => void review(finding.finding_id, decision)}>
               {tr({ accept: 'Accept', reject: 'Reject', defer: 'Defer' }[decision])}
             </button>)}
@@ -183,6 +222,11 @@ export function PdfAudit({ topic }: { topic: string }) {
       </section>}
     </section>
     <aside className="synthesis-reader" aria-label={tr('Manuscript')}>
+      {source && <div className="synthesis-evidence">
+        <h3>{tr('Source evidence')}{sourcePage ? tr(' · p. {0}', sourcePage) : ''}</h3>
+        <blockquote className="evidence-excerpt">{source.quote}</blockquote>
+        {original && <img src={'data:image/png;base64,' + original.png} alt={tr('Original PDF page {0}', original.page)} />}
+      </div>}
       {image && <div className="synthesis-evidence">
         <h3>{tr('PDF page {0}', image.page)}</h3>
         <img src={'data:image/png;base64,' + image.png} alt={tr('Original PDF page {0}', image.page)} />

@@ -51,6 +51,7 @@ class ReaderTest(unittest.TestCase):
                        query="有不同颜色的几个框，描述怎么检索")
         obj = matches["items"][0]
         self.assertEqual(obj["source_version_id"], correct["source_version_id"])
+        self.assertEqual(obj["match_kind"], "region")
         target = {"topic_id": self.topic, "source_version_id": obj["source_version_id"]}
         crop = call(self.worker, "visual.crop", **target, page=1, rect=obj["rect"])
         self.assertTrue(base64.b64decode(crop["image"]).startswith(b"\x89PNG"))
@@ -71,6 +72,14 @@ class ReaderTest(unittest.TestCase):
         outside = call(self.worker, "topic.create", title="Other topic")["topic_id"]
         with self.assertRaises(Exception):
             call(self.worker, "visual.crop", **{**target, "topic_id": outside}, page=1, rect=obj["rect"])
+
+    def test_figure_mention_without_detected_object_is_page_only(self):
+        paper = call(self.worker, "library.import_pdf", topic_id=self.topic, name="Mention.pdf",
+                     content=self.pdf("The architecture in Figure 9 explains the checkpoint recovery decisions.", False))
+        result = call(self.worker, "visual.search", topic_id=self.topic,
+                      source_versions=[paper["source_version_id"]], query="checkpoint recovery graph")
+        self.assertEqual([(r["page"], r["match_kind"], r["rect"]) for r in result["items"]],
+                         [(1, "page", [0, 0, 1, 1])])
 
     def test_selected_text_question_sends_only_the_region(self):
         original = self.pdf("Figure 1: Overview of the experiment.", True)

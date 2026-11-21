@@ -39,6 +39,7 @@ export type Outline = {
   gaps: string[]
   reads: { source_version_id: string; title: string; available_scope: string; passages_read: number }[]
   read_anchor_ids: string[]
+  stale_item_ids?: string[]
 }
 export type WikiItem = {
   id: string
@@ -47,6 +48,7 @@ export type WikiItem = {
   entry: OutlinePoint | PaperRelation
   anchor_ids: string[]
   needs_review: boolean
+  changed_versions?: string[]
 }
 export type ResearchWiki = { revision: string; items: WikiItem[] }
 export type SynthesisTask = Topic & {

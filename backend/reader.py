@@ -254,8 +254,9 @@ def rank_objects(query, objects):
     tokens, concepts = words(query)
     number = re.search(r"(?:fig(?:ure)?\.?|table|equation|图|表|公式|方程)\s*\(?(\d+)", query, re.I)
     wanted = ("table" if re.search(r"\btable\b|表格|张表|个表|表\s*[0-9]", query, re.I) else
-              "equation" if "formula" in concepts else "figure")
-    eligible = [obj for obj in objects if wanted == "figure" or obj["kind"] == wanted]
+              "equation" if "formula" in concepts else
+              "figure" if re.search(r"\b(fig(?:ure)?|diagram|chart|graph)\b|图[形片示]|图\s*[0-9]", query, re.I) else None)
+    eligible = [obj for obj in objects if wanted is None or obj["kind"] == wanted]
     primary = [words(" ".join((obj["label"], obj["caption"], obj["features"]))) for obj in eligible]
     frequencies = Counter(token for terms, _ in primary for token in tokens & terms)
     scored = []
@@ -340,7 +341,36 @@ class Reader:
                                            (obj["object_id"], self.vision_model)).fetchone()
                 if row:
                     obj["features"] += " " + row[0]
-        return {"items": rank_objects(query, candidates), "skipped": skipped}
+        matched = rank_objects(query, candidates)
+        terms, _ = words(query)
+        for obj in matched:
+            caption_terms, _ = words(obj["caption"])
+            obj["match_kind"] = "caption" if terms & caption_terms else "region"
+        if not matched:
+            matched = self.find_mention_pages(versions, terms)
+        return {"items": matched, "skipped": skipped}
+
+    def find_mention_pages(self, versions, terms):
+        terms = sorted(terms - {"figure", "fig", "table", "equation", "graph", "diagram"})[:16]
+        if not terms:
+            return []
+        query = " OR ".join(f'"{term}"' for term in terms)
+        rows = self.host.db.execute(f"""
+            SELECT version_id, page, text FROM paper_passages WHERE paper_passages MATCH ?
+            AND version_id IN ({','.join('?' for _ in versions)})
+            ORDER BY bm25(paper_passages), version_id, page LIMIT 48
+        """, (query, *versions))
+        result, seen = [], set()
+        for version, page, text in rows:
+            if (version, page) in seen or not re.search(r"\b(fig(?:ure)?|table|eq(?:uation)?)\.?\s*\(?\d|[图表式]\s*\(?\d", text, re.I):
+                continue
+            seen.add((version, page))
+            result.append({"object_id": f"{version}:{page}:mention", "source_version_id": version, "page": page,
+                           "kind": "figure", "label": "Page mention", "caption": text[:360], "features": "",
+                           "rect": [0, 0, 1, 1], "match_kind": "page"})
+            if len(result) == 5:
+                break
+        return result
 
     @property
     def has_vision(self):

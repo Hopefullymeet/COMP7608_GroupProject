@@ -5,12 +5,16 @@ import { DEFAULT_QUESTION, DEMO_TOPIC } from '../data/fixtures'
 import { Icon } from '../components/Icon'
 import { Logo } from '../components/Logo'
 import { Disclosure } from '../components/Disclosure'
+import { PaperImportDialog, usePdfDrop } from './PaperImportDialog'
 
 export function Home() {
   const { tr } = useLanguage()
   const { state, act } = useStore()
   const [text, setText] = useState('')
   const [over, setOver] = useState(false)
+  const [importing, setImporting] = useState<(File | string)[]>()
+  const desktop = Boolean(state.mainline && !state.mainline.demo)
+  usePdfDrop(desktop && !importing ? setImporting : undefined)
   const expanded = text.length > 0 || state.dropped.length > 0
   const [inputHeight, setInputHeight] = useState(34)
   const measureRef = useRef<HTMLTextAreaElement>(null)
@@ -34,6 +38,7 @@ export function Home() {
   const canSubmit = !!text.trim() || state.dropped.length > 0
   const submit = () => { if (canSubmit) act.startFromHome(text) }
   const addFiles = (files: FileList | null) => {
+    if (desktop && files?.length) { setImporting(Array.from(files)); return }
     if (state.mainline) { state.mainline.attachFiles?.(Array.from(files??[]));return }
     const names = Array.from(files ?? []).map((f) => f.name)
     if (names.length) act.drop(names)
@@ -73,7 +78,7 @@ export function Home() {
               <div className="composer-bar">
                 <button className="ghost-btn sm home-attach" aria-label={tr('Add papers')} title={expanded ? undefined : tr('Add papers')}
                   disabled={!expanded && !state.mainline}
-                  onClick={() => state.mainline ? state.mainline.attachFiles?.() : fileRef.current?.click()}>
+                  onClick={() => desktop ? setImporting([]) : state.mainline ? state.mainline.attachFiles?.() : fileRef.current?.click()}>
                   <Icon name="paperclip" size={15} />
                   <span className="home-attach-label" aria-hidden="true">{tr('Add papers')}</span>
                 </button>
@@ -83,6 +88,8 @@ export function Home() {
           <input ref={fileRef} type="file" accept=".pdf,.bib" multiple hidden onChange={(e) => addFiles(e.target.files)} />
           <button className="send" disabled={!canSubmit} onClick={submit} aria-label={tr('Start research')}><Icon name="arrowUp" size={17} /></button>
         </div>
+        {importing && <PaperImportDialog topics={state.topics} initialFiles={importing}
+          onClose={() => setImporting(undefined)} onOpenTopic={(id) => act.openTopic(id, 'synthesis')} />}
 
         {(!state.mainline || state.mainline.demo) && <button className="suggestion" disabled={!canDemo} title={canDemo ? undefined : tr('Refresh to restore the demo topic')} onClick={() => act.startDemo()}>
           <Icon name="compass" size={15} />

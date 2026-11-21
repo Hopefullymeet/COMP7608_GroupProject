@@ -108,10 +108,10 @@ def parse_document(pages):
     for ref in rows:
         aliases[(norm(ref["surname"]), ref["year"])].append(ref)
     by_num = {r["key"]: r for r in rows} if marked else {}
-    sentences = []
+    sentences, uncited = [], []
     for page, raw in body:
         text = compact(re.sub(r"(?<=\w)-\s*\n\s*(?=\w)", "", raw))
-        for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z\[“])", text):
+        for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z\[“])|(?<=[。！？])\s*", text):
             if len(sentence) < 12:
                 continue
             keys, unresolved = set(), set()
@@ -140,7 +140,9 @@ def parse_document(pages):
             if keys or unresolved:
                 sentences.append({"page": page, "text": sentence[:2500], "cites": sorted(keys),
                                   "unresolved": sorted(unresolved)})
-    return {"metadata": metadata, "references": rows, "sentences": sentences,
+            else:
+                uncited.append({"page": page, "text": sentence[:2500], "cites": [], "unresolved": []})
+    return {"metadata": metadata, "references": rows, "sentences": sentences, "uncited": uncited,
             "has_text": any(page.strip() for page in pages)}
 
 
@@ -368,6 +370,7 @@ class CitationWorkspace:
                            "format": "pdf", "write_mode": "positions", "versions": []}
         snapshot = {"version_id": self.identifier(), "checksum": checksum, "page_count": len(pages),
                     "sentences": [{"id": self.identifier(), **row} for row in parsed["sentences"]],
+                    "uncited_sentences": [{"id": self.identifier(), **row} for row in parsed["uncited"]],
                     "references": parsed["references"], "reports": [], "warnings": []}
         if not snapshot["sentences"]:
             snapshot["warnings"].append("No identifiable in-text citations. Check that this PDF has selectable text and a reference list.")
@@ -405,8 +408,10 @@ class CitationWorkspace:
                 for ref in draft["references"] for _, source in [self.match(draft, ref, sources)]}
 
     @staticmethod
-    def finding_stale(finding, targets):
-        return any(claim.get("source_version_id") != targets.get(finding["ref_key"])
+    def finding_stale(finding, targets, current_versions):
+        if "source_versions" in finding:
+            return not current_versions.issuperset(finding["source_versions"])
+        return any(claim.get("source_version_id") != targets.get(finding.get("ref_key"))
                    for claim in finding["claims"])
 
     def wiki_changes(self, topic, items):
@@ -415,6 +420,7 @@ class CitationWorkspace:
             return {}
         reports = {item["record_id"] for item in audit_items.values()}
         sources = self.sources(topic)
+        current_versions = {source["source_version_id"] for source in sources}
         changes = {}
         for doc in self.host.rows("pdf_draft"):
             if doc["topic_id"] != topic:
@@ -428,13 +434,15 @@ class CitationWorkspace:
                     for finding in report["findings"]:
                         key = "audit-" + finding["cache_key"]
                         item = audit_items.get(key)
-                        if item and item["record_id"] == report["report_id"] and self.finding_stale(finding, targets):
+                        if (item and item["record_id"] == report["report_id"]
+                                and self.finding_stale(finding, targets, current_versions)):
                             changes[key] = item["source_versions"]
         return changes
 
     def public(self, doc):
         versions = []
         sources = self.sources(doc["topic_id"])
+        current_versions = {source["source_version_id"] for source in sources}
         for v in doc["versions"]:
             refs = []
             for ref in v["references"]:
@@ -442,21 +450,56 @@ class CitationWorkspace:
                 refs.append({**ref, "status": state, "target_title": source["title"] if source else None,
                              "target_version_id": source["source_version_id"] if source else None})
             targets = {r["key"]: r["target_version_id"] for r in refs}
-            reports = [{**r, "findings": [{**f, "needs_review": self.finding_stale(f, targets)}
+            reports = [{**r, "findings": [{**f, "needs_review": self.finding_stale(f, targets, current_versions)}
                                          for f in r["findings"]]} for r in v["reports"]]
             latest = {}
             attempted = {}
             for report in reports:
                 for finding in report["findings"]:
-                    key = (finding["sentence_id"], finding["ref_key"])
+                    key = (report["kind"], finding["sentence_id"], finding.get("ref_key"))
                     attempted.setdefault(key, finding)
                     if any(claim["status"] != "blocked" for claim in finding["claims"]):
                         latest.setdefault(key, finding)
             # An interrupted attempt should not clear an outstanding recheck.
-            stale = {finding["sentence_id"] for finding in (attempted | latest).values()
-                     if finding["needs_review"]}
-            versions.append({**v, "references": refs, "reports": reports, "stale_sentence_ids": sorted(stale)})
+            stale = defaultdict(set)
+            for (kind, sentence_id, _), finding in (attempted | latest).items():
+                if finding["needs_review"]:
+                    stale[kind].add(sentence_id)
+            versions.append({**v, "references": refs, "reports": reports,
+                             "stale_sentence_ids": sorted(stale["citation_audit"]),
+                             "stale_suggestion_sentence_ids": sorted(stale["citation_suggest"])})
         return {**doc, "versions": versions}
+
+    def prose(self, topic, params):
+        doc, version = self.snapshot(topic, params)
+        if "uncited_sentences" in version:
+            return {"sentences": version["uncited_sentences"]}
+        # Stable IDs cover pre-existing PDF snapshots without changing their cited sentence IDs.
+        row = self.host.db.execute("SELECT content FROM pdf_files WHERE version_id=?", (version["version_id"],)).fetchone()
+        if row is None:
+            return {"sentences": []}
+        uncited = parse_document(extract_pdf(row[0]))["uncited"]
+        version["uncited_sentences"] = [{"id": stable_key(version["version_id"], i), **item}
+                                       for i, item in enumerate(uncited)]
+        self.host.put("pdf_draft", doc["draft_id"], doc)
+        return {"sentences": version["uncited_sentences"]}
+
+    def suggestions(self, topic, params):
+        doc, draft = self.snapshot(topic, params)
+        if "uncited_sentences" not in draft:
+            self.prose(topic, params)
+            doc, draft = self.snapshot(topic, params)
+        ids, versions = params.get("sentence_ids"), params.get("source_versions")
+        if any(not isinstance(items, list) or not 1 <= len(items) <= limit
+               or not all(isinstance(item, str) for item in items) or len(items) != len(set(items))
+               for items, limit in ((ids, 12), (versions, 12))):
+            raise LiteratureError("INVALID_PARAMS", "Select one to twelve sentences and source versions.")
+        sentences = {s["id"]: s for s in draft["sentences"] + draft.get("uncited_sentences", [])}
+        sources = self.sources(topic, set(versions))
+        if (not set(ids) <= sentences.keys() or {s["source_version_id"] for s in sources} != set(versions)
+                or len({s["paper_id"] for s in sources}) != len(versions)):
+            raise LiteratureError("INVALID_PARAMS", "Select sentences from this manuscript and one version per paper in this topic.")
+        return doc, draft, [sentences[i] for i in ids], sources
 
     def page(self, topic, params):
         _, draft = self.snapshot(topic, params)
@@ -574,19 +617,7 @@ class CitationWorkspace:
         if job["cached"]:
             claim = job["cached"]
         elif job["usable"] and isinstance(answer, dict):
-            refs = answer.get("evidence", [])
-            for ref in refs[:6] if isinstance(refs, list) else []:
-                if not isinstance(ref, dict) or not isinstance(ref.get("id"), str) or not isinstance(ref.get("quote"), str):
-                    continue
-                passage = seen.get(ref["id"])
-                if not passage or passage["source_version_id"] != vid or not 12 <= len(ref["quote"]) <= 700:
-                    continue
-                doc = self.host.research.document(self.host.source(vid, task["topic_id"]), ref["id"])
-                for actual in doc["passages"]:
-                    if ref["quote"] in actual["text"]:
-                        aid = self.host.store_anchor(task, report_id, {**actual, "paper_id": source["paper_id"],
-                                                                      "source_version_id": vid}, ref["quote"])
-                        claim["anchor_ids"].append(aid)
+            claim["anchor_ids"] = list(self.verified_anchors(task, report_id, answer, seen, {vid: source}))
             state = answer.get("status")
             claim["status"] = (state if state in ("supported", "partial", "conflict") and claim["anchor_ids"]
                                else "evidence_not_established")
@@ -597,6 +628,115 @@ class CitationWorkspace:
             claim["limit"] = "The selected source could not be checked in this run."
         return {"finding_id": self.identifier(), "sentence_id": sentence["id"], "ref_key": job["ref_key"],
                 "claims": [claim], "cache_key": job["cache"]}
+
+    def verified_anchors(self, task, report_id, answer, seen, sources):
+        refs = answer.get("evidence")
+        anchors, used = {}, set()
+        for ref in refs[:6] if isinstance(refs, list) else []:
+            if not isinstance(ref, dict) or not isinstance(ref.get("id"), str) or not isinstance(ref.get("quote"), str):
+                continue
+            pid, quote = ref["id"], ref["quote"]
+            passage = seen.get(pid)
+            vid = passage.get("source_version_id") if passage else None
+            if vid not in sources or not 12 <= len(quote) <= 700 or (pid, quote) in used:
+                continue
+            doc = self.host.research.document(self.host.source(vid, task["topic_id"]), pid)
+            for actual in doc["passages"]:
+                if quote in actual["text"]:
+                    aid = self.host.store_anchor(task, report_id, {**actual, "paper_id": sources[vid]["paper_id"],
+                                                                  "source_version_id": vid}, quote)
+                    anchors[aid] = vid
+                    used.add((pid, quote))
+        return anchors
+
+    def suggestion_finding(self, task, report_id, sentence, rows, seen, sources, issue):
+        text = sentence["text"]
+        claims, dependencies, spans = [], set(), []
+        for row in rows[:8] if isinstance(rows, list) else []:
+            part = row.get("text", "").strip() if isinstance(row, dict) and isinstance(row.get("text"), str) else ""
+            if not part or part not in text or any(c["text"] == part for c in claims):
+                continue
+            state = row.get("status")
+            anchors = self.verified_anchors(task, report_id, row, seen, sources) if state in (
+                "supported", "partial", "conflict") else {}
+            if not anchors:
+                state = "evidence_not_established"
+            start = text.index(part)
+            spans.append((start, start + len(part)))
+            dependencies.update(anchors.values())
+            claims.append({"text": part, "status": state, "anchor_ids": list(anchors),
+                           "limit": str(row.get("limit", ""))[:1000] if anchors else "No verified passage was found."})
+        end = 0
+        for left, right in sorted(spans) + [(len(text), len(text))]:
+            remaining = text[end:left].strip(" ,.;:，。；：")
+            if len(remaining) >= 12 or (remaining and len(remaining) >= 4 and not remaining.isascii()):
+                claims.append({"text": remaining, "status": "evidence_not_established", "anchor_ids": [],
+                               "limit": "This part of the sentence was not covered."})
+            end = max(end, right)
+        if not rows or not claims:
+            claims = [{"text": text, "status": "blocked" if issue else "evidence_not_established", "anchor_ids": [],
+                       "limit": "This run did not establish evidence for the sentence."}]
+        return {"finding_id": self.identifier(), "sentence_id": sentence["id"], "claims": claims,
+                "source_versions": sorted(dependencies), "cache_key": stable_key(report_id, sentence["id"])}
+
+    def run_suggestions(self, task, cancelled):
+        host = self.host
+        topic = task["topic_id"]
+        issue, answers, seen, trace, usage = None, {}, {}, [], {}
+        try:
+            with host.lock:
+                _, _, sentences, versions = self.suggestions(topic, task["input"])
+            sources = {s["source_version_id"]: s for s in versions
+                       if s["source_version_id"] in task["suggestion_sources"] and s["available_scope"] == "full_text"}
+            runtime = host.dsh_for_task(task) if "dsh_model" in task else None
+            if not sources:
+                issue = {"reason": "FULL_TEXT_UNAVAILABLE", "retryable": False, "next_action": "restore_source"}
+            elif not runtime:
+                issue = {"reason": "MODEL_UNAVAILABLE", "retryable": True, "next_action": "configure_service"}
+            elif not cancelled.is_set():
+                def progress(name, detail):
+                    with host.lock, host.db:
+                        current = host.get("task", task["task_id"])
+                        if current["status"] != "running":
+                            return
+                        event = host.emit(current, "task.progress", {"stage": name, "message": f"{name}: {detail}"})
+                    host.send_events([event])
+
+                try:
+                    raw, seen, trace, usage, issue = runtime.suggest_citations(
+                        [{"id": s["id"], "text": s["text"]} for s in sentences], list(sources.values()), cancelled, progress)
+                    rows = raw.get("suggestions") if isinstance(raw, dict) else None
+                    if isinstance(rows, list):
+                        answers = {r["id"]: r.get("claims") for r in rows
+                                   if isinstance(r, dict) and isinstance(r.get("id"), str)}
+                    if any(not isinstance(answers.get(s["id"]), list) for s in sentences) and not issue:
+                        issue = {"reason": "MODEL_OUTPUT_INVALID", "retryable": True, "next_action": "retry"}
+                except DshFailure as error:
+                    issue = error.issue
+            with host.lock, host.db:
+                current = host.get("task", task["task_id"])
+                if cancelled.is_set() or current["status"] != "running":
+                    return
+                doc, draft = self.snapshot(topic, task["input"])
+                report_id = self.identifier()
+                findings = [self.suggestion_finding(task, report_id, s, answers.get(s["id"]), seen, sources, issue)
+                            for s in sentences]
+                report = {"report_id": report_id, "kind": "citation_suggest", "complete": not issue,
+                          "model": task.get("dsh_model", ""), "findings": findings, "usage": usage}
+                draft["reports"].insert(0, report)
+                host.put("pdf_draft", doc["draft_id"], doc)
+                current["steps"] = trace
+                result = {"record_id": report_id, "kind": "citation_suggest"}
+                event = (host.finish(current, "partial", result=result, issue=issue) if issue
+                         else host.finish(current, "completed", result=result))
+            host.send_events([event])
+        except Exception as error:
+            import sys
+            print(f"PaperTrace citation suggestion: {type(error).__name__}", file=sys.stderr)
+            host.fail_dsh(task["task_id"], {"reason": "CITATIONS_UNAVAILABLE", "retryable": True, "next_action": "retry"})
+        finally:
+            with host.lock:
+                host.inflight.pop(task["task_id"], None)
 
     def report(self, topic, params):
         doc, draft = self.snapshot(topic, params)
@@ -615,7 +755,10 @@ class CitationWorkspace:
             self.require_current(topic, params, [finding])
         finding["decision"] = decision
         claim = finding["claims"][0]
-        if decision == "accept" and claim["anchor_ids"] and claim["status"] != "blocked":
+        if report["kind"] == "citation_suggest":
+            if decision == "accept" and not any(c["anchor_ids"] for c in finding["claims"]):
+                raise LiteratureError("INVALID_PARAMS", "An evidence-backed suggestion is required.")
+        elif decision == "accept" and claim["anchor_ids"] and claim["status"] != "blocked":
             self.host.db.execute("INSERT OR REPLACE INTO audit_cache VALUES (?, ?)",
                                  (finding["cache_key"], json.dumps(claim, ensure_ascii=False)))
         else:
@@ -628,33 +771,41 @@ class CitationWorkspace:
     def save_to_wiki(self, topic, params):
         _, report = self.report(topic, params)
         finding = next((f for f in report["findings"] if f["finding_id"] == params.get("finding_id")), None)
-        if not finding or finding.get("decision") != "accept" or not finding["claims"][0]["anchor_ids"]:
+        if not finding or finding.get("decision") != "accept" or not any(c["anchor_ids"] for c in finding["claims"]):
             raise LiteratureError("INVALID_PARAMS", "Accept an evidence-backed finding first.")
-        claim = finding["claims"][0]
-        version = claim["source_version_id"]
         self.require_current(topic, params, [finding])
         wiki = self.host.research.wiki(topic)
         key = "audit-" + finding["cache_key"]
         current = {item["id"]: item for item in wiki["items"]}
         if key in current:
             return {"item_id": key}
-        status = {"supported": "supported", "partial": "partial", "conflict": "conflicting"}.get(claim["status"], "missing")
+        claims, anchors, versions = [], [], set()
+        for claim in finding["claims"]:
+            by_version = defaultdict(list)
+            for aid in claim["anchor_ids"]:
+                version = self.host.get("anchor", aid)["value"]["source_version_id"]
+                by_version[version].append(aid)
+            status = {"supported": "supported", "partial": "partial", "conflict": "conflicting"}.get(claim["status"], "missing")
+            anchors.extend(claim["anchor_ids"])
+            versions.update(by_version)
+            claims.append({"text": claim["text"], "assessment": status, "conditions": claim["limit"] if by_version else "",
+                           "gap": "" if by_version else claim["limit"], "contributions": [
+                               {"source_version_id": version, "assessment": status, "role": "Cited evidence", "anchor_ids": ids}
+                               for version, ids in by_version.items()]})
         current[key] = {"id": key, "kind": "point", "record_id": report["report_id"],
-                        "anchor_ids": claim["anchor_ids"], "source_versions": [version],
-                        "entry": {"id": key, "title": claim["text"], "claims": [{
-                            "text": claim["text"], "assessment": status, "conditions": claim["limit"], "gap": "",
-                            "contributions": [{"source_version_id": version, "assessment": status,
-                                               "role": "Cited evidence", "anchor_ids": claim["anchor_ids"]}],
-                        }]}}
-        self.host.db.execute("INSERT INTO wiki_evidence VALUES (?, ?, ?)", (topic, key, version))
+                        "anchor_ids": anchors, "source_versions": sorted(versions),
+                        "entry": {"id": key, "title": finding["claims"][0]["text"], "claims": claims}}
+        self.host.db.executemany("INSERT INTO wiki_evidence VALUES (?, ?, ?)", ((topic, key, v) for v in versions))
         self.host.put("research_wiki", topic, {"revision": self.identifier(), "items": list(current.values()),
                                              "history": wiki.get("history", [])})
         return {"item_id": key}
 
     def require_current(self, topic, params, findings):
         _, draft = self.snapshot(topic, params)
-        targets = self.reference_versions(draft, self.sources(topic))
-        if any(self.finding_stale(finding, targets) for finding in findings):
+        sources = self.sources(topic)
+        targets = self.reference_versions(draft, sources)
+        versions = {s["source_version_id"] for s in sources}
+        if any(self.finding_stale(finding, targets, versions) for finding in findings):
             raise LiteratureError("STALE_REVISION", "Check the current cited paper before using this finding.", "refresh_data", -32020)
 
     def export(self, topic, params):

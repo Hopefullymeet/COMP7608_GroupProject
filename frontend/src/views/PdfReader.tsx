@@ -8,6 +8,7 @@ import type { PDFDocumentProxy } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import 'pdfjs-dist/web/pdf_viewer.css'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
+import type { ReadingPosition } from '../api/library'
 import { useLanguage } from '../i18n'
 import type { Mark, Point, Rect, Selection } from '../api/reader'
 
@@ -72,10 +73,11 @@ function PdfSheet({ document, scope, page, width, aspectRatio, marks, target, se
       raster.height = Math.ceil(viewport.height * ratio)
       overlay.replaceChildren()
       overlay.style.setProperty('--total-scale-factor', String(viewport.scale))
+      const textContentSource = await pdfPage.getTextContent()
+      if (!active) return
       const rendering = pdfPage.render({ canvas: raster, viewport, transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0] })
       cancelRaster = () => rendering.cancel()
-      const text = new TextLayer({ textContentSource: await pdfPage.getTextContent(), container: overlay, viewport })
-      if (!active) return
+      const text = new TextLayer({ textContentSource, container: overlay, viewport })
       cancelText = () => text.cancel()
       await Promise.all([rendering.promise, text.render()])
       if (active) setReady(true)
@@ -160,8 +162,34 @@ function PdfSheet({ document, scope, page, width, aspectRatio, marks, target, se
   )
 }
 
-export default function PdfReader({ topic, version, page, target, onAsk, onFind, onWiki, onPaperInfo }: {
+type PageLink = { title: string; page: number; depth: number }
+type FindHit = { page: number; text: string; rect?: Rect }
+
+async function readOutline(pdf: PDFDocumentProxy) {
+  const result: PageLink[] = []
+  type Outline = NonNullable<Awaited<ReturnType<PDFDocumentProxy['getOutline']>>>
+  async function visit(items: Outline, depth: number) {
+    for (const item of items) {
+      if (result.length >= 300) return
+      try {
+        const destination = typeof item.dest === 'string' ? await pdf.getDestination(item.dest) : item.dest
+        if (destination?.length) {
+          const first = destination[0]
+          const page = (typeof first === 'number' ? first : await pdf.getPageIndex(first)) + 1
+          if (page < 1 || page > pdf.numPages) continue
+          result.push({ title: item.title, page, depth })
+        }
+      } catch { /* This entry has no internal destination. */ }
+      await visit(item.items, depth + 1)
+    }
+  }
+  await visit(await pdf.getOutline() ?? [], 0)
+  return result
+}
+
+export default function PdfReader({ topic, version, page, target, onAsk, onFind, onWiki, onPaperInfo, session, resume }: {
   topic: string; version: string; page: number; target?: Rect
+  session?: string; resume?: boolean
   onAsk: (selection: Selection) => void; onFind?: () => void; onWiki: () => void; onPaperInfo?: (mode: 'scan' | 'analysis') => void
 }) {
   const { tr } = useLanguage()
@@ -180,6 +208,27 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
   const [annotationsOpen, setAnnotationsOpen] = useState(false)
   const [highlight, setHighlight] = useState<{ page: number; rect: Rect }>()
   const [error, setError] = useState('')
+  const [outline, setOutline] = useState<PageLink[]>()
+  const [outlineOpen, showOutline] = useState(false)
+  const [findOpen, showFind] = useState(false)
+  const [term, setTerm] = useState('')
+  const [matches, setMatches] = useState<FindHit[]>()
+  const [match, setMatch] = useState(0)
+  const findInput = useRef<HTMLInputElement>(null)
+  const textCache = useRef(new Map<number, FindHit[]>())
+  const bookmark = useRef<{ page: number; zoom: number; offset: number }>()
+  const bookmarkTimer = useRef<ReturnType<typeof setTimeout>>()
+  const restoringPosition = useRef(false)
+  const [restored, setRestored] = useState(false)
+  const [savedPosition, setSavedPosition] = useState<ReadingPosition>()
+  useEffect(() => {
+    if (!session || !resume || restored) return
+    let live = true
+    void api.call('reader.position', { topic_id: topic, source_version_id: version, session_id: session })
+      .then((value) => { if (live) setSavedPosition(value) })
+      .catch(() => { if (live) setSavedPosition({}) })
+    return () => { live = false }
+  }, [api, topic, version, session, resume, restored])
   const initialJump = useRef<{ page: number; target?: Rect }>()
   const more = useRef<HTMLDetailsElement>(null)
   const pageList = useRef<HTMLDivElement>(null)
@@ -240,11 +289,11 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
     setRenderRange((old) => old[0] === range[0] && old[1] === range[1] ? old : range)
   }
 
-  function jump(number: number, rect?: Rect) {
+  function jump(number: number, rect?: Rect, offset = 0) {
     const scroller = frame.current
     const sheet = pageElement(number)
     if (!scroller || !sheet) return
-    const top = sheet.offsetTop + (rect ? Math.max(0, rect[1] * sheet.offsetHeight - 24) : 0)
+    const top = sheet.offsetTop + (rect ? Math.max(0, rect[1] * sheet.offsetHeight - 24) : offset * sheet.offsetHeight)
     scroller.scrollTo({ top, left: rect ? Math.max(0, rect[0] * sheet.offsetWidth - 16) : 0 })
     setSelection(undefined)
     setHighlight(rect ? { page: number, rect } : undefined)
@@ -253,15 +302,106 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
 
   useLayoutEffect(() => {
     if (!document || !width || !frame.current) return
+    if (session && resume && !restored) {
+      if (!savedPosition) return
+      if (savedPosition.page) {
+        restoringPosition.current = true
+        const restore = { page, target }
+        initialJump.current = restore
+        setZoom(Math.min(1.5, Math.max(1, savedPosition.zoom ?? 1)))
+        requestAnimationFrame(() => {
+          if (initialJump.current === restore) jump(Math.min(document.numPages, savedPosition.page!), undefined, savedPosition.offset)
+          requestAnimationFrame(() => { restoringPosition.current = false })
+        })
+      }
+      setRestored(true)
+      return
+    }
     if (initialJump.current?.page !== page || initialJump.current?.target !== target) {
       initialJump.current = { page, target }
       jump(Math.max(1, Math.min(document.numPages, page)), target)
     } else syncPageWindow(frame.current)
-  }, [document, page, target, width])
+  }, [document, page, target, width, session, resume, restored, savedPosition])
 
   useLayoutEffect(() => {
     if (frame.current) syncPageWindow(frame.current)
   }, [zoom, ratios])
+
+  const saveBookmark = useCallback(() => {
+    if (!session || !bookmark.current) return
+    const position = bookmark.current
+    bookmark.current = undefined
+    void api.call('reader.bookmark', { topic_id: topic, source_version_id: version, session_id: session,
+      operation_id: crypto.randomUUID(), ...position }).catch(workspace.report)
+  }, [api, topic, version, session, workspace.report])
+  useEffect(() => () => { clearTimeout(bookmarkTimer.current); saveBookmark() }, [saveBookmark])
+
+  function queueBookmark(scroller: HTMLDivElement, scale = zoom) {
+    if (!session || !resume || !restored || restoringPosition.current || !pageList.current) return
+    const top = scroller.scrollTop
+    let page = current
+    while (page > 1 && (pageElement(page)?.offsetTop ?? 0) > top) page--
+    while (page < pageList.current.children.length && (pageElement(page + 1)?.offsetTop ?? Infinity) <= top) page++
+    const sheet = pageElement(page)
+    if (!sheet) return
+    bookmark.current = { page, zoom: scale, offset: Math.max(0, Math.min(1,
+      (top - sheet.offsetTop) / Math.max(1, sheet.offsetHeight))) }
+    clearTimeout(bookmarkTimer.current)
+    bookmarkTimer.current = setTimeout(saveBookmark, 450)
+  }
+
+  function openFind() {
+    showFind(true)
+    requestAnimationFrame(() => findInput.current?.focus())
+  }
+
+  useEffect(() => {
+    if (!document) return
+    function findShortcut(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' &&
+          (frame.current?.parentElement?.contains(window.document.activeElement) || window.document.activeElement === window.document.body)) {
+        e.preventDefault()
+        openFind()
+      }
+    }
+    window.addEventListener('keydown', findShortcut)
+    return () => window.removeEventListener('keydown', findShortcut)
+  }, [document])
+
+  useEffect(() => {
+    if (!document || !findOpen || !term.trim()) { setMatches(undefined); return }
+    let live = true
+    setMatches(undefined)
+    const needle = term.trim().normalize('NFKC').toLocaleLowerCase()
+    const scan = async () => {
+      const found: FindHit[] = []
+      const normalize = (text: string) => text.normalize('NFKC').toLocaleLowerCase()
+      for (let page = 1; live && page <= document.numPages; page++) {
+        if (!textCache.current.has(page)) {
+          const sheet = await document.getPage(page)
+          const viewport = sheet.getViewport({ scale: 1 })
+          const content = await sheet.getTextContent()
+          textCache.current.set(page, content.items.flatMap((item) => {
+            if (!('str' in item) || !item.str.trim()) return []
+            const [x, y] = viewport.convertToViewportPoint(item.transform[4], item.transform[5])
+            const clamp = (value: number) => Math.max(0, Math.min(1, value))
+            const rect: Rect = [clamp(x / viewport.width), clamp((y - item.height) / viewport.height),
+              clamp((x + item.width) / viewport.width), clamp((y + 2) / viewport.height)]
+            return [{ page, text: item.str, rect }]
+          }))
+        }
+        const items = textCache.current.get(page) ?? []
+        const local = items.filter((item) => normalize(item.text).includes(needle))
+        if (local.length) found.push(...local)
+        else if (normalize(items.map((item) => item.text).join(' ')).includes(needle)) {
+          found.push({ page, text: term.trim() })
+        }
+      }
+      if (live) { setMatches(found); setMatch(0); if (found[0]) jump(found[0].page, found[0].rect) }
+    }
+    const timer = setTimeout(() => void scan().catch(() => { if (live) setMatches([]) }), 250)
+    return () => { live = false; clearTimeout(timer) }
+  }, [document, findOpen, term])
 
   useLayoutEffect(() => {
     const menu = popup.current
@@ -360,6 +500,7 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
     requestAnimationFrame(() => {
       const activePage = pageElement(current)
       if (activePage) scroller.scrollTo({ top: activePage.offsetTop + activePage.offsetHeight * within })
+      queueBookmark(scroller, next)
     })
   }
 
@@ -367,7 +508,7 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
   return <div className="pt-reader">
     <div className="pt-reader-frame" ref={frame} tabIndex={0} aria-label={tr('PDF document')}
       onPointerDown={() => { if (more.current) more.current.open = false }}
-      onScroll={(event) => syncPageWindow(event.currentTarget)}>
+      onScroll={(event) => { syncPageWindow(event.currentTarget); queueBookmark(event.currentTarget) }}>
       {error && <p role="alert" className="pt-pdf-loading">{tr(error)}</p>}
       {!document && !error && <p className="pt-pdf-loading" role="status">{tr('Opening PDF…')}</p>}
       <div className="pt-reader-pages" ref={pageList} style={{ paddingInlineEnd: pageGutter }}>
@@ -408,6 +549,11 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
             <button onClick={() => onPaperInfo('analysis')}>{tr('Paper references')}</button>
           </>}
           {onFind && <button onClick={onFind}>{tr('Find a figure')}</button>}
+          <button disabled={!document} onClick={openFind}>{tr('Find in PDF')}</button>
+          <button disabled={!document} onClick={() => {
+            showOutline(true)
+            if (!outline && document) void readOutline(document).then(setOutline).catch(() => setOutline([]))
+          }}>{tr('PDF outline')}</button>
           <button onClick={() => setTool('region')}>{tr('Select region')}</button>
           <button onClick={() => setTool('ink')}>{tr('Draw')}</button>
           <button disabled={!marks.length} onClick={() => setAnnotationsOpen(true)}>{tr('Annotations')}</button>
@@ -428,6 +574,31 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
       </div>}
 
     </div>
+    {findOpen && <div className="pt-pdf-find" role="search" onKeyDown={(event) => {
+      if (event.key === 'Escape') { showFind(false); setHighlight(undefined); frame.current?.focus() }
+      if (event.key === 'Enter' && event.target === findInput.current && matches?.length) {
+        event.preventDefault()
+        const index = (match + (event.shiftKey ? -1 : 1) + matches.length) % matches.length
+        setMatch(index); jump(matches[index].page, matches[index].rect)
+      }
+    }}>
+      <input ref={findInput} className="text-field" aria-label={tr('Find in PDF')} placeholder={tr('Find in PDF')}
+        value={term} onChange={(e) => setTerm(e.currentTarget.value)} />
+      <small role="status">{!term.trim() ? '' : !matches ? tr('Searching…') : matches.length ? `${match + 1} / ${matches.length}` : tr('No matching text')}</small>
+      {[-1, 1].map((delta) => <button key={delta} className="link-btn" disabled={!matches?.length}
+        aria-label={tr(delta < 0 ? 'Previous match' : 'Next match')} onClick={() => {
+          if (!matches?.length) return
+          const index = (match + delta + matches.length) % matches.length
+          setMatch(index); jump(matches[index].page, matches[index].rect)
+        }}>{delta < 0 ? '↑' : '↓'}</button>)}
+      <button className="link-btn" onClick={() => { showFind(false); setHighlight(undefined) }} aria-label={tr('Close')}>×</button>
+    </div>}
+    {outlineOpen && <Dialog title={tr('PDF outline')} onClose={() => showOutline(false)}>
+      {outline?.length ? outline.map((section, i) => <button className="link-btn pt-outline-link" key={i}
+        style={{ paddingInlineStart: Math.min(5, section.depth) * 14 }}
+        onClick={() => { jump(section.page); showOutline(false) }}>{section.title} · {section.page}</button>)
+        : <p>{tr(outline ? 'This PDF has no embedded outline.' : 'Loading…')}</p>}
+    </Dialog>}
     {document && jumpValue !== undefined && <Dialog title={tr('Go to page')} onClose={() => setJumpValue(undefined)}>
       <form onSubmit={(e) => { e.preventDefault(); jump(Number(jumpValue)); setJumpValue(undefined) }}>
         <label className="rename-field">{tr('Page number')}

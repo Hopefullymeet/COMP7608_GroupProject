@@ -36,7 +36,10 @@ export function FigureSearch({ topic, versions, names, onOpen, onAsk, onClose }:
         {figures?.length === 0 && <p>{tr('No matching regions. Try another description.')}</p>}
         {skippedFigures > 0 && <p className="fine">{tr('{0} selected papers could not be indexed.', skippedFigures)}</p>}
         {figures?.map((figure) => <article className="synthesis-item" key={figure.object_id}>
-          <strong>{names[figure.source_version_id]} · {figure.label}</strong>
+          <strong>{names[figure.source_version_id]} · {tr(figure.label)}</strong>
+          {figure.match_kind && <small className="fine"> · {tr({
+            caption: 'Caption match', region: 'Indexed region', page: 'Page mention only',
+          }[figure.match_kind])}</small>}
           {figure.caption && <p className="fine">{figure.caption}</p>}
           <button className="link-btn" onClick={() => {
             onOpen(figure)

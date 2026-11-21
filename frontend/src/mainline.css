@@ -260,6 +260,9 @@
 .pt-reader-page > canvas[hidden] { display: none; }
 .pt-pdf-rail { position: absolute; inset: 12px 14px 14px auto; z-index: 4; display: flex; flex-direction: column; align-items: center; gap: 7px; pointer-events: none; }
 .pt-pdf-rail > * { pointer-events: auto; }
+.pt-pdf-find { position: absolute; inset: 10px 52px auto auto; z-index: 6; display: flex; gap: 8px; align-items: center; max-width: calc(100% - 66px); padding: 6px 10px; background: var(--surface, white); border: 1px solid var(--line, #ddd); border-radius: 8px; box-shadow: 0 3px 12px rgb(0 0 0 / 10%); }
+.pt-pdf-find input { min-width: 0; width: 11rem; }
+.pt-outline-link { display: block; text-align: start; margin-block: 5px; }
 .pt-round { box-sizing: border-box; display: grid; place-content: center; flex: none; width: 36px; height: 36px; border: 1px solid var(--line-2); border-radius: 50%; color: var(--ink-2); background: var(--surface); }
 .pt-paper-directory > .pt-round, .pt-pdf-options summary.pt-round { box-shadow: 0 1px 4px rgb(35 28 24 / 7%); }
 .pt-round:hover:not(:disabled) { color: var(--accent); background: var(--accent-faint); }

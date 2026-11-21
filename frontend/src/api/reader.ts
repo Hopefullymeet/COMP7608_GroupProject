@@ -15,6 +15,7 @@ export type PdfObject = {
   object_id: string; source_version_id: string; page: number; rect: Rect
   label: string; kind: 'figure' | 'table' | 'equation'; caption: string; features: string
   rows?: (string | null)[][]
+  match_kind?: 'caption' | 'region' | 'page'
 }
 export type ReaderAnswer = Omit<Selection, 'rects' | 'quote'> & {
   id: string; source_version_id: string; question: string; answer: string

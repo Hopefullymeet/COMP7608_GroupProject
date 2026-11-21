@@ -100,6 +100,7 @@ export function citationFixture(
   const handlers: Handlers<CitationMethods> = {
     'audit.save_to_wiki': () => { throw new Error('PDF review requires the desktop workspace.') },
     'draft.page': () => { throw new Error('PDF rendering requires the desktop workspace.') },
+    'draft.prose': () => ({ sentences: [] }),
     'draft.resolve_reference': () => { throw new Error('PDF review requires the desktop workspace.') },
     'draft.list': ({ topic_id }) => ({ items: items(topic_id) }),
     'draft.import': (p) => {
