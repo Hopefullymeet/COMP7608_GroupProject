@@ -1,0 +1,39 @@
+{
+  "papers": 18,
+  "pdf_pages": 249,
+  "cases": 84,
+  "relations": 14,
+  "cases_by_task": {
+    "reading_qa": 18,
+    "citation_annotation": 18,
+    "citation_check": 42,
+    "literature_discovery": 3,
+    "paper_comparison": 3
+  },
+  "atomic_labels": {
+    "supported": 32,
+    "contradicted": 24,
+    "not_established": 3,
+    "None": 3
+  },
+  "assistant_source_checked_cases": 84,
+  "assistant_source_checked_relations": 14,
+  "human_adjudicated": 0,
+  "review_outcomes": {
+    "complete_within_declared_scope": 63,
+    "partial": 18,
+    "fixture_definition_checked_not_executed": 3
+  },
+  "candidate_records": 162,
+  "candidate_statuses": {
+    "supports": 23,
+    "unjudged": 85,
+    "relevant": 6,
+    "partially_relevant": 16,
+    "not_relevant_in_screening": 32
+  },
+  "changed_cases": 70,
+  "changed_relations": 14,
+  "reviewed_at": "2026-11-21T21:47:02.242070+08:00",
+  "release": "local_pilot_all_cases_assistant_reviewed_with_explicit_partial_candidates"
+}

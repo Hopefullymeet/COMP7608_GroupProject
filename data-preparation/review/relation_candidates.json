@@ -1,0 +1,1515 @@
+[
+  {
+    "source_paper_id": "fid",
+    "target_paper_id": "dpr",
+    "review_status": "machine_candidate",
+    "citation_confirmed": null,
+    "intent_labels": [],
+    "hits": [
+      {
+        "pdf_page": 1,
+        "term": "Karpukhin",
+        "context": "nswer\nfrom these documents. Different retrieval tech-\nniques have been considered, either using sparse\nrepresentations based on TF/IDF or using dense\nembeddings (Guu et al., 2020; Karpukhin et al.,\n2020). The models which extract the answers are\noften based on contextualized word representations\nsuch as ELMo or BERT (Peters et al., 2018; De-\nvlin et al., 2019), and predict a span as answer.\nAggregating and combining evidence from mul-\ntiple passages is not straightforward when using\nextractive models, and multiple techniques have\nbeen proposed to address this limitation (Cl"
+      },
+      {
+        "pdf_page": 2,
+        "term": "Karpukhin",
+        "context": "sentation\nand approximate nearest neighbors were competi-\ntive with traditional approaches. Such models can\nbe trained using weak supervision in the form of\nquestion-answer pairs (Karpukhin et al., 2020), or\npretrained using a cloze task and ﬁnetuned end-to-\nend (Guu et al., 2020; Lee et al., 2019).\nGenerative question answering was mostly\nconsidered in previous work for datasets requiring\nto generate answers, such as NarrativeQA (Koˇcisk`y\net al., 2018), CoQA (Reddy et al., 2019) or\nELI5 (Fan et al., 2019). These datasets were gen-\nerated in a way that answers do not corre"
+      },
+      {
+        "pdf_page": 3,
+        "term": "Karpukhin",
+        "context": "aph Retriever (Min et al., 2019b) 34.7 55.8 - - -\nHard EM (Min et al., 2019a) 28.8 50.9 - - -\nORQA (Lee et al., 2019) 31.3 45.1 - 20.2 -\nREALM (Guu et al., 2020) 40.4 - - - -\nDPR (Karpukhin et al., 2020) 41.5 57.9 - 36.7 -\nSpanSeqGen (Min et al., 2020) 42.5 - - - -\nRAG (Lewis et al., 2020b) 44.5 56.1 68.0 - -\nT5 (Roberts et al., 2020) 36.6 - 60.5 - -\nGPT-3 few shot (Brown et al., 2020) 29.9 - 71.2 - -\nFusion-in-Decoder (base) 48.2 65.0 77.1 53.4 60.6\nFusion-in-Decoder (large) 51.4 67.6 80.1 56.7 63.2\nTable 1: Comparison to state-of-the-art. On TriviaQA, we report results on"
+      },
+      {
+        "pdf_page": 3,
+        "term": "Karpukhin",
+        "context": "et (right), competitions.codalab.org/competitions/17208#results).\nRetrieval. For the retrieval of support passages,\nwe consider two methods: BM25 (Robertson et al.,\n1995) and DPR (Karpukhin et al., 2020). In BM25,\npassages are represented as bag of words, and the\nranking function is based on term and inverse doc-\nument frequencies. We use the implementation\nfrom Apache Lucene1 with default parameters, and\ntokenize questions and passages with SpaCy.2 In\nDPR, passages and questions are represented as\ndense vector representations, computed using two\nBERT networks. The ranking "
+      },
+      {
+        "pdf_page": 4,
+        "term": "Karpukhin",
+        "context": "ning set for validation.\nWe use the Wikipedia dumps from Dec. 20, 2018\nfor NQ and TriviaQA and from Dec. 21, 2016 for\nSQuAD. We apply the same preprocessing as Chen\net al. (2017); Karpukhin et al. (2020), leading to\npassages of 100 words, which do not overlap.\nEvaluation. Predicted answers are evaluated\nwith the standard exact match metric (EM), as in-\ntroduced by Rajpurkar et al. (2016). A generated\nanswer is considered correct if it matches any an-\nswer of the list of acceptable answers after normal-\nization. This normalization step consists in low-\nercasing and removing "
+      },
+      {
+        "pdf_page": 4,
+        "term": "Karpukhin",
+        "context": "g the title Python string method. For both\ntraining and testing, we retrieve 100 passages (un-\nless said otherwise), and truncate them to 250 word\npieces. Following the results of Karpukhin et al.\n(2020), passages are retrieved with DPR for NQ\nand TriviaQA, and with BM25 for SQuAD. We\ngenerate answers by using greedy decoding.\nComparison to state-of-the-art. In table 1, we\ncompare the results obtained by Fusion-in-Decoder\nwith existing approaches for open domain ques-\ntion answering. We observe that while conceptu-\nally simple, this method outperforms existing work\non the N"
+      },
+      {
+        "pdf_page": 6,
+        "term": "Karpukhin",
+        "context": "79\nsupervised challenge dataset for reading comprehen-\nsion. In Proceedings of the 55th Annual Meeting\nof the Association for Computational Linguistics ,\npages 1601–1611.\nVladimir Karpukhin, Barlas O ˘guz, Sewon Min, Ledell\nWu, Sergey Edunov, Danqi Chen, and Wen-\ntau Yih. 2020. Dense passage retrieval for\nopen-domain question answering. arXiv preprint\narXiv:2004.04906.\nDiederik P. Kingma and Jimmy Ba. 2014. Adam: A\nmethod for stochastic optimization. arXiv preprint\narXiv:1412.6980.\nTom´aˇs Ko ˇcisk`y, Jonathan Schwarz, Phil Blunsom,\nChris Dyer, Karl Moritz Hermann, G´abor M"
+      },
+      {
+        "pdf_page": 6,
+        "term": "Karpukhin",
+        "context": "Proceedings of the 58th An-\nnual Meeting of the Association for Computational\nLinguistics, pages 7871–7880.\nPatrick Lewis, Ethan Perez, Aleksandara Piktus, Fabio\nPetroni, Vladimir Karpukhin, Naman Goyal, Hein-\nrich K ¨uttler, Mike Lewis, Wen-tau Yih, Tim\nRockt¨aschel, et al. 2020b. Retrieval-augmented gen-\neration for knowledge-intensive nlp tasks. arXiv\npreprint arXiv:2005.11401.\nSewon Min, Danqi Chen, Hannaneh Hajishirzi, and\nLuke Zettlemoyer. 2019a. A discrete hard EM ap-\nproach for weakly supervised question answering.\nIn Proceedings of the 2019 Conference on Empiri-\nca"
+      },
+      {
+        "pdf_page": 6,
+        "term": "Dense Passage Retrieval",
+        "context": "ing\nof the Association for Computational Linguistics ,\npages 1601–1611.\nVladimir Karpukhin, Barlas O ˘guz, Sewon Min, Ledell\nWu, Sergey Edunov, Danqi Chen, and Wen-\ntau Yih. 2020. Dense passage retrieval for\nopen-domain question answering. arXiv preprint\narXiv:2004.04906.\nDiederik P. Kingma and Jimmy Ba. 2014. Adam: A\nmethod for stochastic optimization. arXiv preprint\narXiv:1412.6980.\nTom´aˇs Ko ˇcisk`y, Jonathan Schwarz, Phil Blunsom,\nChris Dyer, Karl Moritz Hermann, G´abor Melis, and\nEdward Grefenstette. 2018. The NarrativeQA read-\ning comprehension challenge. Transaction"
+      }
+    ]
+  },
+  {
+    "source_paper_id": "qasper",
+    "target_paper_id": "s2orc",
+    "review_status": "machine_candidate",
+    "citation_confirmed": null,
+    "intent_labels": [],
+    "hits": [
+      {
+        "pdf_page": 2,
+        "term": "S2ORC",
+        "context": "ollection interfaces: one for collect-\ning follow-up questions given titles and abstracts,\nand another for obtaining evidence and answers to\nthose questions.\n2.1 Papers\nWe ﬁltered S2ORC (Lo et al., 2020),2 a collection\nof machine-readable full text for open-access pa-\n2We accessed both release versions 20190928 and\n20200705v1.\npers, to (i) those from arXiv with an associated\nLaTeX source ﬁle, 3 and (ii) are in the computa-\ntional linguistics domain.4 We limited our domain\nto computational linguistics to ensure high qual-\nity as we have access to realistic users through\nour "
+      },
+      {
+        "pdf_page": 2,
+        "term": "S2ORC",
+        "context": "rs through\nour research network; broader domain collection\nis left to future work and should be enabled by the\nproof-of-concept of our protocols given in this pa-\nper. We used the S2ORC parser (which normalizes\nmulti-ﬁle LaTeX sources and resolves comments\nand macros) to convert LaTeX markup to full text\nwhile preserving section and paragraph breaks and\nmath equations. We supplemented the paper text\nwith extracted images of ﬁgures and tables associ-\nated with their captions; these were crawled from\nSemantic Scholar.5 The result of this process was\na collection of 18K full t"
+      },
+      {
+        "pdf_page": 2,
+        "term": "Lo et al.",
+        "context": "on interfaces: one for collect-\ning follow-up questions given titles and abstracts,\nand another for obtaining evidence and answers to\nthose questions.\n2.1 Papers\nWe ﬁltered S2ORC (Lo et al., 2020),2 a collection\nof machine-readable full text for open-access pa-\n2We accessed both release versions 20190928 and\n20200705v1.\npers, to (i) those from arXiv with an associated\nLaTeX source ﬁle, 3 and (ii) are in the computa-\ntional linguistics domain.4 We limited our domain\nto computational linguistics to ensure high qual-\nity as we have access to realistic users through\nour researc"
+      },
+      {
+        "pdf_page": 3,
+        "term": "S2ORC",
+        "context": "per that contain textual evidence. We assign\neach evidence paragraph to its containing top-level8\n7Two domain-experts independently judged these, and\nachieved a Cohen’sκ of 0.94.\n8S2ORC provides section hierarchy derived from LaTeX\nsource"
+      },
+      {
+        "pdf_page": 9,
+        "term": "S2ORC",
+        "context": "ed\nby other researchers. To adhere to copyright, we\nhave restricted ourselves to arXiv papers released\nunder a CC-BY-* license, as identiﬁed via Unpay-\nwall, which was used in the S2ORC (Lo et al.,\n2020) dataset construction. Due to our choice to\nuse arXiv as the source of papers, QASPER is al-\nmost entirely an English-language dataset, and QA\nsystems built on QASPER would not be expected\nto work well on non-English language research\npapers.\nWe have determined the amount we paid the\nannotators to be well-above the minimum wage in\nour local area. While we do collect informat"
+      },
+      {
+        "pdf_page": 9,
+        "term": "Lo et al.",
+        "context": "ther researchers. To adhere to copyright, we\nhave restricted ourselves to arXiv papers released\nunder a CC-BY-* license, as identiﬁed via Unpay-\nwall, which was used in the S2ORC (Lo et al.,\n2020) dataset construction. Due to our choice to\nuse arXiv as the source of papers, QASPER is al-\nmost entirely an English-language dataset, and QA\nsystems built on QASPER would not be expected\nto work well on non-English language research\npapers.\nWe have determined the amount we paid the\nannotators to be well-above the minimum wage in\nour local area. While we do collect information\nabo"
+      },
+      {
+        "pdf_page": 11,
+        "term": "S2ORC",
+        "context": "for Computa-\ntional Linguistics, pages 6762–6771, Online. Asso-\nciation for Computational Linguistics.\nKyle Lo, Lucy Lu Wang, Mark Neumann, Rodney Kin-\nney, and Daniel Weld. 2020. S2ORC: The semantic\nscholar open research corpus. In Proceedings of the\nAssociation for Computational Linguistics (ACL).\nAnastasios Nentidis, Anastasia Krithara, Konstanti-\nnos Bougiatiotis, Georgios Paliouras, and Ioannis\nKakadiaris. 2018. Results of the sixth edition\nof the BioASQ challenge. In Proceedings of the\n6th BioASQ Workshop A challenge on large-scale\nbiomedical semantic indexing and que"
+      }
+    ]
+  },
+  {
+    "source_paper_id": "scifact",
+    "target_paper_id": "fever",
+    "review_status": "machine_candidate",
+    "citation_confirmed": null,
+    "intent_labels": [],
+    "hits": [
+      {
+        "pdf_page": 1,
+        "term": "Thorne",
+        "context": " against a corpus of\ndocuments that support or refute the claim – has\nbeen studied to combat the proliferation of misin-\nformation in political news, social media, and on\nthe web (Thorne et al., 2018; Hanselowski et al.,\n2019). However, verifying scientiﬁc claims poses\nnew challenges to both dataset construction and\neffective modeling. While political claims are read-\nily available on fact-checking websites and can be\nveriﬁed by crowd workers, annotators with exten-\nsive domain knowledge are required to generate\nand verify scientiﬁc claims.\nIn addition, NLP systems for scie"
+      },
+      {
+        "pdf_page": 2,
+        "term": "FEVER",
+        "context": "idence necessary to verify a given claim.\nWe establish performance baselines onSCIFACT\nwith an approach similar to DeYoung et al. (2020a),\nwhich achieves strong performance on the FEVER\nclaim veriﬁcation dataset (Thorne et al., 2018). Our\nbaseline is a pipeline system which retrieves ab-\nstracts related to an input claim, uses a BERT-\nbased (Devlin et al., 2019) sentence selector to iden-\ntify rationale sentences, and labels each abstract\nas SUPPORTS , REFUTES , or NOINFO with respect\nto the claim. We demonstrate that our baseline\ncan beneﬁt from training on claims from dom"
+      },
+      {
+        "pdf_page": 2,
+        "term": "Thorne",
+        "context": "n claim.\nWe establish performance baselines onSCIFACT\nwith an approach similar to DeYoung et al. (2020a),\nwhich achieves strong performance on the FEVER\nclaim veriﬁcation dataset (Thorne et al., 2018). Our\nbaseline is a pipeline system which retrieves ab-\nstracts related to an input claim, uses a BERT-\nbased (Devlin et al., 2019) sentence selector to iden-\ntify rationale sentences, and labels each abstract\nas SUPPORTS , REFUTES , or NOINFO with respect\nto the claim. We demonstrate that our baseline\ncan beneﬁt from training on claims from domains\nincluding Wikipedia articles"
+      },
+      {
+        "pdf_page": 3,
+        "term": "FEVER",
+        "context": "checking\ndatasets such as UKP Snopes (Hanselowski et al.,\n2019), which use political fact-checking websites\nas a source of natural claims. On the other hand,\nclaims in the popular FEVER dataset (Thorne et al.,\n2018) are synthetic, since they are created by anno-\ntators by mutating sentences from the Wikipedia\narticles that will serve as evidence.\nSupporting and refuting evidence In most fact-\nchecking work, claims are assigned a global truth\nlabel based on the entirety of the available evidence.\nFor example in FEVER , the claim “Barack Obama\nwas the 44th President of the Un"
+      },
+      {
+        "pdf_page": 3,
+        "term": "FEVER",
+        "context": "as evidence.\nSupporting and refuting evidence In most fact-\nchecking work, claims are assigned a global truth\nlabel based on the entirety of the available evidence.\nFor example in FEVER , the claim “Barack Obama\nwas the 44th President of the United States” can be\nveriﬁed using Wikipedia as an evidence source.\nWhile SCIFACT claims are indeed veriﬁable as-\nsertions about scientiﬁc ﬁndings, accurately assign-\ning a global truth label to a scientiﬁc claim (given a\nﬁxed scientiﬁc corpus) requires a systematic review\nby a team of experts. In this work we focus on the\nsimpler task"
+      },
+      {
+        "pdf_page": 3,
+        "term": "Thorne",
+        "context": "ts such as UKP Snopes (Hanselowski et al.,\n2019), which use political fact-checking websites\nas a source of natural claims. On the other hand,\nclaims in the popular FEVER dataset (Thorne et al.,\n2018) are synthetic, since they are created by anno-\ntators by mutating sentences from the Wikipedia\narticles that will serve as evidence.\nSupporting and refuting evidence In most fact-\nchecking work, claims are assigned a global truth\nlabel based on the entirety of the available evidence.\nFor example in FEVER , the claim “Barack Obama\nwas the 44th President of the United States” ca"
+      },
+      {
+        "pdf_page": 4,
+        "term": "Thorne",
+        "context": "or agreement (§7).\nQuality We assign 232 claim-abstract pairs for in-\ndependent re-annotation. The label agreement is\n0.75 Cohen’sκ, comparable with the 0.68 Fleiss’\nκ reported in Thorne et al. (2018), and 0.70 Co-\nhen’sκ reported in Hanselowski et al. (2019). To\nmeasure rationale agreement, we treat each sen-\ntence as either classiﬁed as “part of a rationale” or\n“not part of a rationale” and compute sentence-level\nagreement. The resulting Cohen’sκ is 0.71.\n4 The S CIFACT task\nTask FormulationThe inputs to our task are a sci-\nentiﬁc claimc and a corpus of abstractsA. All ab"
+      },
+      {
+        "pdf_page": 5,
+        "term": "FEVER",
+        "context": "e-level\nevaluation, we evaluate the model’s performance\nat identifying the sentences sufﬁcient to justify the\nabstract-level predictions. We conduct evaluations\nin both the “Open” FEVER -style (Thorne et al.,\n2018) setting where the evidence abstracts must\nbe retrieved, and the “Oracle abstract” ERASER -\nstyle (DeYoung et al., 2020a) setting where the\ngold evidence abstractsE(c) are provided.\nAbstract-level evaluation is inspired by the\nFEVER score. Given a claimc, a predicted evidence\nabstracta∈ ˆE(c) is correctly labeled if (1)a is a\ngold evidence abstract forc, and (2) T"
+      },
+      {
+        "pdf_page": 5,
+        "term": "FEVER",
+        "context": "etrieved, and the “Oracle abstract” ERASER -\nstyle (DeYoung et al., 2020a) setting where the\ngold evidence abstractsE(c) are provided.\nAbstract-level evaluation is inspired by the\nFEVER score. Given a claimc, a predicted evidence\nabstracta∈ ˆE(c) is correctly labeled if (1)a is a\ngold evidence abstract forc, and (2) The predicted\nlabel is correct: ˆy(c,a ) = y(c,a ). It is correctly\nrationalized if, in addition, the predicted rationale\nsentences contain a gold rationale, i.e., there exists\nsome gold rationaleRi(c,a )⊆ ˆS(c,a ).\nLike FEVER , which limits the maximum number\no"
+      },
+      {
+        "pdf_page": 5,
+        "term": "FEVER",
+        "context": "= y(c,a ). It is correctly\nrationalized if, in addition, the predicted rationale\nsentences contain a gold rationale, i.e., there exists\nsome gold rationaleRi(c,a )⊆ ˆS(c,a ).\nLike FEVER , which limits the maximum number\nof predicted rationale sentences to ﬁve, SCIFACT\nlimits to three predicted rationale sentences. Over-\nall performance is measured by the micro-F1 of\nthe precision and recall over the correctly-labeled\nand correctly-rationalized evidence abstracts. We\nrefer to these evaluations as AbstractLabel-Only and\nAbstractLabel+Rationale, respectively.\nSentence-level ev"
+      },
+      {
+        "pdf_page": 5,
+        "term": "Thorne",
+        "context": "tion, we evaluate the model’s performance\nat identifying the sentences sufﬁcient to justify the\nabstract-level predictions. We conduct evaluations\nin both the “Open” FEVER -style (Thorne et al.,\n2018) setting where the evidence abstracts must\nbe retrieved, and the “Oracle abstract” ERASER -\nstyle (DeYoung et al., 2020a) setting where the\ngold evidence abstractsE(c) are provided.\nAbstract-level evaluation is inspired by the\nFEVER score. Given a claimc, a predicted evidence\nabstracta∈ ˆE(c) is correctly labeled if (1)a is a\ngold evidence abstract forc, and (2) The predicted\nl"
+      },
+      {
+        "pdf_page": 6,
+        "term": "FEVER",
+        "context": "laims about COVID-19 using\n5We truncate the rationale input if it exceeds the BERT\ntoken limit.c is never truncated.\nRATIONAL -S ELECT . L ABEL -P RED .\nTraining data P R F1 A CC.\nFEVER 41.5 57.9 48.4 67.6\nUKP Snopes 42.5 62.3 50.5 71.3\nSCIFACT 73.7 70.5 72.1 75.7\nFEVER + SCIFACT 72.4 67.2 69.7 81.9\nSentence encoder P R F1 A CC.\nSCIBERT 74.5 74.3 74.4 69.2\nBioMedRoBERTa 75.3 69.9 72.5 71.7\nRoBERTa-base 76.1 66.1 70.8 62.9\nRoBERTa-large 73.7 70.5 72.1 75.7\nModel inputs P R F1 A CC.\nClaim-only - - - 44.5\nAbstract-only 60.1 60.9 60.5 53.3\nTable 3: Comparison of different train"
+      },
+      {
+        "pdf_page": 6,
+        "term": "FEVER",
+        "context": "ken limit.c is never truncated.\nRATIONAL -S ELECT . L ABEL -P RED .\nTraining data P R F1 A CC.\nFEVER 41.5 57.9 48.4 67.6\nUKP Snopes 42.5 62.3 50.5 71.3\nSCIFACT 73.7 70.5 72.1 75.7\nFEVER + SCIFACT 72.4 67.2 69.7 81.9\nSentence encoder P R F1 A CC.\nSCIBERT 74.5 74.3 74.4 69.2\nBioMedRoBERTa 75.3 69.9 72.5 71.7\nRoBERTa-base 76.1 66.1 70.8 62.9\nRoBERTa-large 73.7 70.5 72.1 75.7\nModel inputs P R F1 A CC.\nClaim-only - - - 44.5\nAbstract-only 60.1 60.9 60.5 53.3\nTable 3: Comparison of different training datasets, en-\ncoders, and model inputs for R ATIONALE SELECTION\nand L ABEL PREDIC"
+      },
+      {
+        "pdf_page": 6,
+        "term": "FEVER",
+        "context": "-\nstracts have no gold rationale sentences; as in §5,\nwe provide thek most similar sentences from the\nabstract as input (more details in Appendix A).\nTraining Data We train on (1) FEVER , (2) UKP\nSnopes, (3) SCIFACT, and (4) FEVER pretraining\nfollowed by SCIFACT ﬁne-tuning. RoBERTa-large\n(Liu et al., 2019) is used as the sentence encoder.\nSentence encoder We ﬁne-tune SCIBERT (Belt-\nagy et al., 2019), BioMedRoBERTa (Gururangan\net al., 2020), RoBERTa-base, and RoBERTa-large.\nSCIFACT is used as training data.\nModel Inputs We examine the performance of\n“claim-only” and “abstrac"
+      },
+      {
+        "pdf_page": 6,
+        "term": "FEVER",
+        "context": "s in §5,\nwe provide thek most similar sentences from the\nabstract as input (more details in Appendix A).\nTraining Data We train on (1) FEVER , (2) UKP\nSnopes, (3) SCIFACT, and (4) FEVER pretraining\nfollowed by SCIFACT ﬁne-tuning. RoBERTa-large\n(Liu et al., 2019) is used as the sentence encoder.\nSentence encoder We ﬁne-tune SCIBERT (Belt-\nagy et al., 2019), BioMedRoBERTa (Gururangan\net al., 2020), RoBERTa-base, and RoBERTa-large.\nSCIFACT is used as training data.\nModel Inputs We examine the performance of\n“claim-only” and “abstract-only” models trained\non SCIFACT, using RoBE"
+      },
+      {
+        "pdf_page": 6,
+        "term": "FEVER",
+        "context": "e examine the performance of\n“claim-only” and “abstract-only” models trained\non SCIFACT, using RoBERTa-large as the sentence\nencoder. The claim-only model makes label predic-\n6Our FEVER -trained RATIONALE SELECTION module\nachieves 79.9 sentence-level F1 on the FEVER test set, virtu-\nally identical to 79.6 reported in DeYoung et al. (2020a)."
+      },
+      {
+        "pdf_page": 6,
+        "term": "FEVER",
+        "context": "CIFACT, using RoBERTa-large as the sentence\nencoder. The claim-only model makes label predic-\n6Our FEVER -trained RATIONALE SELECTION module\nachieves 79.9 sentence-level F1 on the FEVER test set, virtu-\nally identical to 79.6 reported in DeYoung et al. (2020a)."
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": " label predic-\ntions without access to the claim.\nResults The results are shown in Table 3. For LA-\nBEL PREDICTION , the best performance is achieved\nby training ﬁrst on the large FEVER dataset and\nthen ﬁne-tuning on the smaller in-domainSCIFACT\ntraining set. To understand the beneﬁts of FEVER\npretraining, we examined the claim / evidence pairs\nwhere the FEVER + SCIFACT- trained model made\ncorrect predictions but the SCIFACT- trained model\ndid not. In 36 / 44 of these cases, the SCIFACT-\ntrained model predicts NOINFO. Thus pretraining\non FEVER appears to improve the model’s"
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": "CTION , the best performance is achieved\nby training ﬁrst on the large FEVER dataset and\nthen ﬁne-tuning on the smaller in-domainSCIFACT\ntraining set. To understand the beneﬁts of FEVER\npretraining, we examined the claim / evidence pairs\nwhere the FEVER + SCIFACT- trained model made\ncorrect predictions but the SCIFACT- trained model\ndid not. In 36 / 44 of these cases, the SCIFACT-\ntrained model predicts NOINFO. Thus pretraining\non FEVER appears to improve the model’s abil-\nity to recognize textual entailment relationships\nbetween evidence and claim – particularly relation-\n"
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": "ge FEVER dataset and\nthen ﬁne-tuning on the smaller in-domainSCIFACT\ntraining set. To understand the beneﬁts of FEVER\npretraining, we examined the claim / evidence pairs\nwhere the FEVER + SCIFACT- trained model made\ncorrect predictions but the SCIFACT- trained model\ndid not. In 36 / 44 of these cases, the SCIFACT-\ntrained model predicts NOINFO. Thus pretraining\non FEVER appears to improve the model’s abil-\nity to recognize textual entailment relationships\nbetween evidence and claim – particularly relation-\nships indicated by non-domain-speciﬁc cues like\n“is associated with”"
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": " SCIFACT- trained model made\ncorrect predictions but the SCIFACT- trained model\ndid not. In 36 / 44 of these cases, the SCIFACT-\ntrained model predicts NOINFO. Thus pretraining\non FEVER appears to improve the model’s abil-\nity to recognize textual entailment relationships\nbetween evidence and claim – particularly relation-\nships indicated by non-domain-speciﬁc cues like\n“is associated with” or “has an important role in”.\nFor RATIONALE SELECTION , training on SCI-\nFACT alone produces the best results. We exam-\nined the rationales that theSCIFACT- trained model\nidentiﬁed but "
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": " important role in”.\nFor RATIONALE SELECTION , training on SCI-\nFACT alone produces the best results. We exam-\nined the rationales that theSCIFACT- trained model\nidentiﬁed but the FEVER - trained model missed,\nand found that they generally contain science-\nspeciﬁc vocabulary. Thus, training on additional\nout-of-domain data provides little beneﬁt.\nRoBERTa-large exhibits the strongest perfor-\nmance on label prediction, while SCIBERT has\na slight edge on rationale selection. The “claim-\nonly” model exhibits very poor performance, which\nprovides some reassurance that the claim "
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": "ence.\n6.2 Full task\nExperimental setup Based on the results from\n§6.1, we use the RATIONALE SELECTION module\ntrained on SCIFACT only, and the LABEL PREDIC -\nTION module trained on FEVER + SCIFACT for our\nﬁnal end-to-end system VERI SCI. Although SCIB-\nERT performs slightly better on rationale selection,\nusing RoBERTa-large for bothRATIONALE SELEC -\nTION and LABEL PREDICTION gave the best full-\npipeline performance on the dev set, so we use\nRoBERTa-large for both components. For the AB-\nSTRACT RETRIEVAL module, the best dev set full-\npipeline performance was achieved by retr"
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": "les\nfor correctly retrieved documents, and no rationales\nfor incorrect retrievals. The “Zero-shot” setting re-\nports the zero-shot generalization performance of\na model trained on FEVER (the results on UKP\nSnopes were slightly worse). VERI SCI reports the\nperformance of our best system.\nResults The results are shown in Table 4. In the\noracle abstract setting, the abstract-level F1 scores\nare roughly comparable to label classiﬁcation accu-\nracies, and the AbstractLabel+Rationale score in Row\n3 implies an end-to-end classiﬁcation accuracy of\nroughly 70%, given gold abstracts."
+      },
+      {
+        "pdf_page": 8,
+        "term": "FEVER",
+        "context": "aseline. Words crucial for correct veriﬁcation are highlighted.\nleads to relative improvements of 47% on\nopen SentenceSelection+Label, and 28% on open\nAbstractLabel+Rationale over FEVER alone (Row 6 vs.\nRow 5). The three pipeline components make simi-\nlar contributions to the overall model error. Replac-\ning RATIONALE SELECTION with an oracle leads\nto a roughly 20-point rise in SentenceSelection+Label\nF1 (Row 6 vs. Row 4). Replacing ABSTRACT RE-\nTRIEVAL with an oracle as well leads to a gain of\nroughly 20 more points (Row 4 vs. Row 1).\nNearly all correctly-labeled abstracts"
+      },
+      {
+        "pdf_page": 9,
+        "term": "FEVER",
+        "context": "orEval (Derczynski et al., 2017),\nSnopes (Popat et al., 2017), CLEF-2018 Check-\nThat! (Barr ´on-Cede˜no et al., 2018), Verify (Baly\net al., 2018), Perspectrum (Chen et al., 2019),\nFEVER (Thorne et al., 2018), and UKP Snopes\n(Hanselowski et al., 2019). Hanselowski et al.\n(2019) provides a thorough review. To our knowl-\nedge, there are no existing data sets for scientiﬁc\nclaim veriﬁcation. We refer to our task as “claim\nveriﬁcation” rather than “fact-checking” to empha-\nsize that our focus is to help researchers make sense\nof scientiﬁc ﬁndings, not to counter disinformation.\n"
+      },
+      {
+        "pdf_page": 9,
+        "term": "Thorne",
+        "context": "(Derczynski et al., 2017),\nSnopes (Popat et al., 2017), CLEF-2018 Check-\nThat! (Barr ´on-Cede˜no et al., 2018), Verify (Baly\net al., 2018), Perspectrum (Chen et al., 2019),\nFEVER (Thorne et al., 2018), and UKP Snopes\n(Hanselowski et al., 2019). Hanselowski et al.\n(2019) provides a thorough review. To our knowl-\nedge, there are no existing data sets for scientiﬁc\nclaim veriﬁcation. We refer to our task as “claim\nveriﬁcation” rather than “fact-checking” to empha-\nsize that our focus is to help researchers make sense\nof scientiﬁc ﬁndings, not to counter disinformation.\nFact-ch"
+      },
+      {
+        "pdf_page": 11,
+        "term": "FEVER",
+        "context": " evidence retrieval and claim veriﬁ-\ncation. In European Conference on Information Re-\ntrieval.\nJames Thorne, Andreas Vlachos, Christos\nChristodoulopoulos, and Arpit Mittal. 2018.\nFever: a large-scale dataset for fact extraction and\nveriﬁcation. In NAACL.\nGuy Tsafnat, Paul P Glasziou, Miew Keen Choong,\nAdam G. Dunn, Filippo Galgani, and Enrico W.\nCoiera. 2014. Systematic review automation tech-\nnologies. Systematic Reviews, 3:74 – 74.\nGeorge Tsatsaronis, Georgios Balikas, Prodromos\nMalakasiotis, Ioannis Partalas, Matthias Zschunke,\nMichael R. Alvers, Dirk Weissenborn, Anast"
+      },
+      {
+        "pdf_page": 11,
+        "term": "Thorne",
+        "context": "s. In EMNLP.\nAmir Soleimani, Christof Monz, and Marcel Worring.\n2019. Bert for evidence retrieval and claim veriﬁ-\ncation. In European Conference on Information Re-\ntrieval.\nJames Thorne, Andreas Vlachos, Christos\nChristodoulopoulos, and Arpit Mittal. 2018.\nFever: a large-scale dataset for fact extraction and\nveriﬁcation. In NAACL.\nGuy Tsafnat, Paul P Glasziou, Miew Keen Choong,\nAdam G. Dunn, Filippo Galgani, and Enrico W.\nCoiera. 2014. Systematic review automation tech-\nnologies. Systematic Reviews, 3:74 – 74.\nGeorge Tsatsaronis, Georgios Balikas, Prodromos\nMalakasiotis, I"
+      },
+      {
+        "pdf_page": 12,
+        "term": "FEVER",
+        "context": " SELECTION module described in §5, we ﬁnd\nthat the usual decision rule of predicting ˆzi = 1\nwhen ˜zi≥ 0.5 works well for models trained on\nSCIFACT. However, for models trained on FEVER\nand UKP Snopes, we achieve better performance\nby tuning the classiﬁcation threshold t, such that\nˆzi = 1 when ˜zi ≥ t, on the SCIFACT dev set.\nThe best threshold was t = 0.025 when training\non FEVER , and t = 0.75 when training on UKP\nSnopes.\nA.2 Training the R ATIONALE SELECTION\nmodule\nWe experiment with various learning rates when\ntraining SCIBERT, BioMedRoBERTa, RoBERTa-\nbase, and RoBERTa"
+      },
+      {
+        "pdf_page": 12,
+        "term": "FEVER",
+        "context": "s, we achieve better performance\nby tuning the classiﬁcation threshold t, such that\nˆzi = 1 when ˜zi ≥ t, on the SCIFACT dev set.\nThe best threshold was t = 0.025 when training\non FEVER , and t = 0.75 when training on UKP\nSnopes.\nA.2 Training the R ATIONALE SELECTION\nmodule\nWe experiment with various learning rates when\ntraining SCIBERT, BioMedRoBERTa, RoBERTa-\nbase, and RoBERTa-large. Below we describe the\nsetting for training RoBERTa-large.\nFor models trained on SCIFACT, we use an ini-\ntial learning rate of 1e-5 on the transformer base\nand 1e-3 on the linear layer. For FE"
+      },
+      {
+        "pdf_page": 12,
+        "term": "FEVER",
+        "context": "describe the\nsetting for training RoBERTa-large.\nFor models trained on SCIFACT, we use an ini-\ntial learning rate of 1e-5 on the transformer base\nand 1e-3 on the linear layer. For FEVER + SCI-\nFACT, the learning rate is set to 1e-5 for the entire\nmodel for pre-training on FEVER and ﬁne-tuning\non SCIFACT. We use a batch size of 256 through\ngradient accumulation and apply cosine learning\nrate decay over 20 epochs to ﬁnd the best perform-\ning model on the dev set.\nFor models trained on FEVER , we set the learn-\ning rate to 5e-6 for the transformer base and 5e-5\nfor the linear "
+      },
+      {
+        "pdf_page": 12,
+        "term": "FEVER",
+        "context": "-\ntial learning rate of 1e-5 on the transformer base\nand 1e-3 on the linear layer. For FEVER + SCI-\nFACT, the learning rate is set to 1e-5 for the entire\nmodel for pre-training on FEVER and ﬁne-tuning\non SCIFACT. We use a batch size of 256 through\ngradient accumulation and apply cosine learning\nrate decay over 20 epochs to ﬁnd the best perform-\ning model on the dev set.\nFor models trained on FEVER , we set the learn-\ning rate to 5e-6 for the transformer base and 5e-5\nfor the linear layer. For models trained on UKP\nSnopes, we set the learning rate 1e-5 for the trans-\nformer "
+      },
+      {
+        "pdf_page": 12,
+        "term": "FEVER",
+        "context": " use a batch size of 256 through\ngradient accumulation and apply cosine learning\nrate decay over 20 epochs to ﬁnd the best perform-\ning model on the dev set.\nFor models trained on FEVER , we set the learn-\ning rate to 5e-6 for the transformer base and 5e-5\nfor the linear layer. For models trained on UKP\nSnopes, we set the learning rate 1e-5 for the trans-\nformer base and 1e-4 for the linear layer. We ﬁnd\nthat these learning rates help the models converge.\nWe only train the model for 3 epochs on FEVER\nand 5 epochs on UKP Snopes because they are\nlarger datasets and the models"
+      },
+      {
+        "pdf_page": 12,
+        "term": "FEVER",
+        "context": "the learning rate 1e-5 for the trans-\nformer base and 1e-4 for the linear layer. We ﬁnd\nthat these learning rates help the models converge.\nWe only train the model for 3 epochs on FEVER\nand 5 epochs on UKP Snopes because they are\nlarger datasets and the models converged within\nearly epochs.\nA.3 Training the L ABEL PREDICTION\nmodule\nWe adopt similar settings as we used for the RA-\nTIONALE SELECTION module and only change the\nlearning rate to 1e-5 for the transformer base and\n1e-4 for the linear layer for models trained on SCI-\nFACT, FEVER , and UKP Snopes. When training on\nc"
+      },
+      {
+        "pdf_page": 12,
+        "term": "FEVER",
+        "context": "s as we used for the RA-\nTIONALE SELECTION module and only change the\nlearning rate to 1e-5 for the transformer base and\n1e-4 for the linear layer for models trained on SCI-\nFACT, FEVER , and UKP Snopes. When training on\nclaim / cited abstract pairs labeledNOINFO, we use\nthek sentences in the abstract with greatest simi-\nlarity to the claim as rationales (§5).k is sampled\nfrom{0, 1} with uniform probability.\nA.4 Additional training details\nAll models are trained using a single Nvidia P100\nGPU on Google Colabortoary Pro platform.8 For\nthe RATIONALE SELECTION module, it takes"
+      },
+      {
+        "pdf_page": 12,
+        "term": "FEVER",
+        "context": "ortoary Pro platform.8 For\nthe RATIONALE SELECTION module, it takes about\n150 minutes to train on SCIFACT for 20 epochs.\n120 minutes on UKP Snopes for 5 epochs, and 700\nminutes on FEVER for 3 epochs. For the LABEL -\nPREDICTION module, it takes about 130 minutes\nto train on SCIFACT for 20 epochs, 160 minutes\non UKP Snopes for 5 epochs, and 640 minutes on\nFEVER for 3 epochs.\nA.5 Hyperparameter search\nThe learning rate, batch size, and number of epochs\nare the most important hyperparameters. We per-\nform manual tuning and select the hyperparameters\nthat produce the highest F1 "
+      },
+      {
+        "pdf_page": 12,
+        "term": "FEVER",
+        "context": " on FEVER for 3 epochs. For the LABEL -\nPREDICTION module, it takes about 130 minutes\nto train on SCIFACT for 20 epochs, 160 minutes\non UKP Snopes for 5 epochs, and 640 minutes on\nFEVER for 3 epochs.\nA.5 Hyperparameter search\nThe learning rate, batch size, and number of epochs\nare the most important hyperparameters. We per-\nform manual tuning and select the hyperparameters\nthat produce the highest F1 on the development\nset. For the learning rate, we experiment with 1e-3,\n1e-4, 5e-5, 1e-5, and 5e-6. For batch size, we ex-\nperiment with 64 and 256. The number of epochs\nare cu"
+      }
+    ]
+  },
+  {
+    "source_paper_id": "dpr",
+    "target_paper_id": "drqa",
+    "review_status": "machine_candidate",
+    "citation_confirmed": null,
+    "intent_labels": [],
+    "hits": [
+      {
+        "pdf_page": 1,
+        "term": "Chen et al.",
+        "context": "t of passages where some\nof them contain the answer to the question, and\nthen (2) a machine reader can thoroughly exam-\nine the retrieved contexts and identify the correct\nanswer (Chen et al., 2017). Although reducing\nopen-domain QA to machine reading is a very rea-\nsonable strategy, a huge performance degradation\nis often observed in practice2, indicating the needs\nof improving retrieval.\n∗Equal contribution\n1The code and trained models have been released at\nhttps://github.com/facebookresearch/DPR.\n2For instance, the exact match score on SQuAD v1.1 drops\nfrom above 80% to "
+      },
+      {
+        "pdf_page": 2,
+        "term": "Chen et al.",
+        "context": "esult, any open-domain QA system needs to\ninclude an efﬁcientretriever component that can se-\nlect a small set of relevant texts, before applying the\nreader to extract the answer (Chen et al., 2017). 4\nFormally speaking, a retriever R : (q,C)→C F\nis a function that takes as input a questionq and a\ncorpusC and returns a much smaller ﬁlter set of\ntextsCF⊂C , where|CF| =k≪|C| . For a ﬁxed\nk, a retriever can be evaluated in isolation on top-k\nretrieval accuracy, which is the fraction of ques-\ntions for whichCF contains a span that answers the\nquestion.\n3 Dense Passage Retriever"
+      },
+      {
+        "pdf_page": 7,
+        "term": "Chen et al.",
+        "context": "s were done on eight 32GB GPUs.\n6.2 Results\nTable 4 summarizes our ﬁnal end-to-end QA re-\nsults, measured by exact match with the reference\nanswer after minor normalization as in (Chen et al.,\n2017; Lee et al., 2019). From the table, we can"
+      },
+      {
+        "pdf_page": 9,
+        "term": "Chen et al.",
+        "context": "6777\nbeen used as the standard method applied broadly\nto various QA tasks (e.g., Chen et al., 2017; Yang\net al., 2019a,b; Nie et al., 2019; Min et al., 2019a;\nWolfson et al., 2020). Augmenting text-based re-\ntrieval with external structured information, such\nas knowledge graph and Wikipedia hyperlinks, has\nalso been explored recently (Min et al., 2019b; Asai\net al., 2020).\nThe use of dense vector representations for re-\ntrieval has a long history since Latent Semantic\nAnalysis"
+      },
+      {
+        "pdf_page": 10,
+        "term": "Reading Wikipedia",
+        "context": " rank using gradient descent. In\nProceedings of the 22nd international conference on\nMachine learning, pages 89–96.\nDanqi Chen, Adam Fisch, Jason Weston, and Antoine\nBordes. 2017. Reading Wikipedia to answer open-\ndomain questions. In Association for Computa-\ntional Linguistics (ACL), pages 1870–1879.\nRajarshi Das, Shehzaad Dhuliawala, Manzil Zaheer,\nand Andrew McCallum. 2019. Multi-step retriever-\nreader interaction for scalable open-domain question\nanswering. In International Conference on Learn-\ning Representations (ICLR).\nScott Deerwester, Susan T Dumais, George W Fur-\n"
+      }
+    ]
+  },
+  {
+    "source_paper_id": "dpr",
+    "target_paper_id": "orqa",
+    "review_status": "machine_candidate",
+    "citation_confirmed": null,
+    "intent_labels": [],
+    "hits": [
+      {
+        "pdf_page": 1,
+        "term": "Lee et al.",
+        "context": "ation needs a\nlarge number of labeled pairs of question and con-\ntexts. Dense retrieval methods have thus never\nbe shown to outperform TF-IDF/BM25 for open-\ndomain QA before ORQA (Lee et al., 2019), which\nproposes a sophisticated inverse cloze task (ICT)\nobjective, predicting the blocks that contain the\nmasked sentence, for additional pretraining. The\nquestion encoder and the reader model are then ﬁne-\ntuned using pairs of questions and answers jointly.\nAlthough ORQA successfully demonstrates that\ndense retrieval can outperform BM25, setting new\nstate-of-the-art results on "
+      },
+      {
+        "pdf_page": 2,
+        "term": "Lee et al.",
+        "context": "vs. 42.9% in Top-5 accuracy),\nbut also results in a substantial improvement on\nthe end-to-end QA accuracy compared to ORQA\n(41.5% vs. 33.3%) in the open Natural Questions\nsetting (Lee et al., 2019; Kwiatkowski et al., 2019).\nOur contributions are twofold. First, we demon-\nstrate that with the proper training setup, sim-\nply ﬁne-tuning the question and passage encoders\non existing question-passage pairs is sufﬁcient to\ngreatly outperform BM25. Our empirical results\nalso suggest that additional pretraining may not be\nneeded. Second, we verify that, in the context of\nopen-doma"
+      },
+      {
+        "pdf_page": 4,
+        "term": "Lee et al.",
+        "context": "e number of training examples.\n4 Experimental Setup\nIn this section, we describe the data we used for\nexperiments and the basic setup.\n4.1 Wikipedia Data Pre-processing\nFollowing (Lee et al., 2019), we use the English\nWikipedia dump from Dec. 20, 2018 as the source\ndocuments for answering questions. We ﬁrst apply\nthe pre-processing code released in DrQA (Chen\net al., 2017) to extract the clean, text-portion of\narticles from the Wikipedia dump. This step re-\nmoves semi-structured data, such as tables, info-\nboxes, lists, as well as the disambiguation pages.\nWe then split eac"
+      },
+      {
+        "pdf_page": 4,
+        "term": "Lee et al.",
+        "context": "re the passage is from, along\nwith an [SEP] token.\n4.2 Question Answering Datasets\nWe use the same ﬁve QA datasets and train-\ning/dev/testing splitting method as in previous\nwork (Lee et al., 2019). Below we brieﬂy describe\neach dataset and refer readers to their paper for the\ndetails of data preparation.\nNatural Questions (NQ) (Kwiatkowski et al.,\n2019) was designed for end-to-end question an-\nswering. The questions were mined from real\nGoogle search queries and the answers were spans\nin Wikipedia articles identiﬁed by annotators.\nTriviaQA(Joshi et al., 2017) contains a se"
+      },
+      {
+        "pdf_page": 5,
+        "term": "Lee et al.",
+        "context": "5 a clear\nadvantage. Second, the data was collected from\nonly 500+ Wikipedia articles and thus the distribu-\ntion of training examples is extremely biased, as\nargued previously by Lee et al. (2019).\n5.2 Ablation Study on Model Training\nTo understand further how different model training\noptions affect the results, we conduct several addi-\ntional experiments and discuss our ﬁndings below."
+      },
+      {
+        "pdf_page": 7,
+        "term": "Lee et al.",
+        "context": "t 32GB GPUs.\n6.2 Results\nTable 4 summarizes our ﬁnal end-to-end QA re-\nsults, measured by exact match with the reference\nanswer after minor normalization as in (Chen et al.,\n2017; Lee et al., 2019). From the table, we can"
+      },
+      {
+        "pdf_page": 8,
+        "term": "Lee et al.",
+        "context": "6776\nTraining Model NQ TriviaQA WQ TREC SQuAD\nSingle BM25+BERT (Lee et al., 2019) 26.5 47.1 17.7 21.3 33.2\nSingle ORQA (Lee et al., 2019) 33.3 45.0 36.4 30.1 20.2\nSingle HardEM (Min et al., 2019a) 28.1 50.9 - - -\nSingle GraphRetriever (Min et al., 2019b) 34.5 56.0 36.4 - -\nSingle PathRetriever (Asai et al., 2020) 32.6 - - - 56.5\nSingle REALM Wiki (Guu et al., 2020) 39.2 - 40.2 46.8 -\nSingle REALM News (Guu et al., 2020) 40.4 - 40.7 42.9 -\nSingle\nBM25 32.6 52.4"
+      },
+      {
+        "pdf_page": 8,
+        "term": "Lee et al.",
+        "context": "6776\nTraining Model NQ TriviaQA WQ TREC SQuAD\nSingle BM25+BERT (Lee et al., 2019) 26.5 47.1 17.7 21.3 33.2\nSingle ORQA (Lee et al., 2019) 33.3 45.0 36.4 30.1 20.2\nSingle HardEM (Min et al., 2019a) 28.1 50.9 - - -\nSingle GraphRetriever (Min et al., 2019b) 34.5 56.0 36.4 - -\nSingle PathRetriever (Asai et al., 2020) 32.6 - - - 56.5\nSingle REALM Wiki (Guu et al., 2020) 39.2 - 40.2 46.8 -\nSingle REALM News (Guu et al., 2020) 40.4 - 40.7 42.9 -\nSingle\nBM25 32.6 52.4 29.9 24.9 38.1\nDPR 41.5 56.8 34.6 25.9 29.8\nBM25+DPR 39"
+      },
+      {
+        "pdf_page": 8,
+        "term": "Lee et al.",
+        "context": "state-\nof-the-art results on four out of the ﬁve datasets,\nwith 1% to 12% absolute differences in exact match\naccuracy. It is interesting to contrast our results to\nthose of ORQA (Lee et al., 2019) and also the\nconcurrently developed approach, REALM (Guu\net al., 2020). While both methods include addi-\ntional pretraining tasks and employ an expensive\nend-to-end training regime, DPR manages to out-\nperform them on both NQ and TriviaQA, simply\nby focusing on learning a strong passage retrieval\nmodel using pairs of questions and answers. The\nadditional pretraining tasks are lik"
+      },
+      {
+        "pdf_page": 8,
+        "term": "Lee et al.",
+        "context": " of the art.\nTo compare our pipeline training approach with\njoint learning, we run an ablation on Natural Ques-\ntions where the retriever and reader are jointly\ntrained, following Lee et al. (2019). This approach\nobtains a score of 39.8 EM, which suggests that our\nstrategy of training a strong retriever and reader in\nisolation can leverage effectively available supervi-\nsion, while outperforming a comparable joint train-\ning approach with a simpler design (Appendix D).\nOne thing worth noticing is that our reader does\nconsider more passages compared to ORQA, al-\nthough it is"
+      },
+      {
+        "pdf_page": 9,
+        "term": "Lee et al.",
+        "context": "\nand directly retrieve the answers to the input ques-\ntions efﬁciently. Using additional pretraining with\nthe objective that matches surrogates of questions\nand relevant passages, Lee et al. (2019) jointly train\nthe question encoder and reader. Their approach\noutperforms the BM25 plus reader paradigm on\nmultiple open-domain QA datasets in QA accuracy,\nand is further extended by REALM (Guu et al.,\n2020), which includes tuning the passage encoder\nasynchronously by re-indexing the passages dur-\ning training. The pretraining objective has also\nrecently been improved by Xiong et"
+      },
+      {
+        "pdf_page": 10,
+        "term": "Latent retrieval",
+        "context": "ions: a benchmark for question answering\nresearch. Transactions of the Association of Compu-\ntational Linguistics (TACL).\nKenton Lee, Ming-Wei Chang, and Kristina Toutanova.\n2019. Latent retrieval for weakly supervised open\ndomain question answering. In Association for Com-\nputational Linguistics (ACL), pages 6086–6096.\nMike Lewis, Yinhan Liu, Naman Goyal, Mar-\njan Ghazvininejad, Abdelrahman Mohamed, Omer\nLevy, Veselin Stoyanov, and Luke Zettlemoyer.\n2020a. BART: Denoising sequence-to-sequence pre-\ntraining for natural language generation, translation,\nand comprehension. In"
+      }
+    ]
+  },
+  {
+    "source_paper_id": "orqa",
+    "target_paper_id": "drqa",
+    "review_status": "machine_candidate",
+    "citation_confirmed": null,
+    "intent_labels": [],
+    "hits": [
+      {
+        "pdf_page": 1,
+        "term": "Chen et al.",
+        "context": "a-\ntion retrieval (IR) system to do much of the heavy\nlifting, even though it cannot be ﬁne-tuned on the\ndownstream task. In the strongly supervised set-\nting popularized by DrQA (Chen et al., 2017),\nthey also assume a reading comprehension model\ntrained on question-answer-evidence triples, such\nas SQuAD (Rajpurkar et al., 2016). The IR sys-\ntem is used at test time to generate evidence candi-\ndates in place of the gold evidence. In the weakly\nsupervised setting, proposed by TriviaQA (Joshi\net al., 2017), SearchQA (Dunn et al., 2017), and\nQuasar (Dhingra et al., 2017), the "
+      },
+      {
+        "pdf_page": 2,
+        "term": "Chen et al.",
+        "context": "en string SQuAD (Rajpurkar et al., 2016)\nOpen-domain QA\nUnsupervised QA none none none string GPT-2 (Radford et al., 2019)\nStrongly Supervised QA given span heuristic string DrQA (Chen et al., 2017)\nWeakly Supervised QA\nClosed Retrieval QA heuristic string heuristic string TriviaQA (Joshi et al., 2017)\nOpen Retrieval QA learned string learned string ORQA (this work)\nTable 1: Comparison of assumptions made by related tasks, along with references to examples. Heuristic evidence\nrefers to the typical strategy of considering only a closed set of evidence documents from a tradit"
+      },
+      {
+        "pdf_page": 2,
+        "term": "Chen et al.",
+        "context": "ering tasks in Table 1.\nEvaluation is exact match with any of the ref-\nerence answer strings after minor normalization\nsuch as lowercasing, following evaluation scripts\nfrom DrQA (Chen et al., 2017).\n2.2 Formal Deﬁnitions\nWe introduce several general deﬁnitions of model\ncomponents that subsume many retrieval-based\nopen domain question answering systems.\nModels are deﬁned with respect to an unstruc-\ntured text corpus that is split into B blocks of ev-\nidence texts. An answer derivation is a pair (b, s),\nwhere 1≤ b≤ B indicates the index of an ev-\nidence block and s denotes a"
+      },
+      {
+        "pdf_page": 2,
+        "term": "Chen et al.",
+        "context": "l-based open domain question\nanswering systems, a blackbox IR system ﬁrst\nchooses a closed set of evidence candidates. For\nexample, the score from the retriever component\nof DrQA (Chen et al., 2017) is deﬁned as:\nSretr(b, q) =\n{\n0 b∈ TOP (k, TF-IDF (q, b))\n−∞ otherwise\nMost work following DrQA use the same candi-\ndates from TF-IDF and focus on reading compre-\nhension or re-ranking. The reading component"
+      },
+      {
+        "pdf_page": 5,
+        "term": "Chen et al.",
+        "context": "on answering or reading comprehension datasets.\nNot all of them are intended as open domain QA\ndatasets in their original form, so we convert them\nto open formats, following DrQA (Chen et al.,\n2017). Each example in the open version of the\ndatasets consists of a single question string and a\nset of reference answer strings.\nNatural Questions contains question from ag-\ngregated queries to Google Search (Kwiatkowski\net al., 2019). To gather an open version of this\ndataset, we only keep questions with short answers\nand discard the given evidence document. An-\nswers with many to"
+      },
+      {
+        "pdf_page": 8,
+        "term": "Chen et al.",
+        "context": "arning to exploit exact n-\ngram overlap. Too little masking makes language un-\nderstanding unnecessary.\nwe are aware of—BERTserini (Yang et al., 2019).\nDrQA’s reader is DocReader (Chen et al.,\n2017), and they use TF-IDF to retrieve the top k\ndocuments. They also include distant supervision\nbased on TF-IDF retrieval. BERTserini’s reader is\nderived from base BERT (much like our reader),\nand they use BM25 to retrieve the topk paragraphs\n(much like our BM25 baseline). A major differ-\nence is that BERTserini uses true paragraphs from\nWikipedia rather than arbitrary blocks, resul"
+      },
+      {
+        "pdf_page": 10,
+        "term": "Reading Wikipedia",
+        "context": "airs. In Proceedings of the 2013\nConference on Empirical Methods in Natural Lan-\nguage Processing, pages 1533–1544.\nDanqi Chen, Adam Fisch, Jason Weston, and Antoine\nBordes. 2017. Reading wikipedia to answer open-\ndomain questions. In Proceedings of the 55th An-\nnual Meeting of the Association for Computational\nLinguistics (Volume 1: Long Papers) , volume 1,\npages 1870–1879.\nJames Clarke, Dan Goldwasser, Ming-Wei Chang, and\nDan Roth. 2010. Driving semantic parsing from\nthe world’s response. In Proceedings of the four-\nteenth conference on computational natural lan-\nguage le"
+      }
+    ]
+  },
+  {
+    "source_paper_id": "fid",
+    "target_paper_id": "orqa",
+    "review_status": "machine_candidate",
+    "citation_confirmed": null,
+    "intent_labels": [],
+    "hits": [
+      {
+        "pdf_page": 2,
+        "term": "Lee et al.",
+        "context": " answering, and is an active area of\nresearch to improve QA systems. Initially, sparse\nrepresentations based on TF/IDF were used to\nretrieve support documents (Chen et al., 2017).\nLee et al. (2018) introduced a supervised learning\nmethod to rerank paragraphs based on BiLSTM,\nwhile Wang et al. (2018a) trained a ranking system\nwith reinforcement learning. A second approach\nto improve the retrieval step of QA systems is to\nused additional information such as the Wikipedia\nor Wikidata graphs (Min et al., 2019b; Asai et al.,\n2020). Recently, multiple works show that retrieval\nsy"
+      },
+      {
+        "pdf_page": 2,
+        "term": "Lee et al.",
+        "context": "s can\nbe trained using weak supervision in the form of\nquestion-answer pairs (Karpukhin et al., 2020), or\npretrained using a cloze task and ﬁnetuned end-to-\nend (Guu et al., 2020; Lee et al., 2019).\nGenerative question answering was mostly\nconsidered in previous work for datasets requiring\nto generate answers, such as NarrativeQA (Koˇcisk`y\net al., 2018), CoQA (Reddy et al., 2019) or\nELI5 (Fan et al., 2019). These datasets were gen-\nerated in a way that answers do not correspond\nto spans in support documents, thus requiring ab-\nstractive models. Raffel et al. (2020) showed "
+      },
+      {
+        "pdf_page": 3,
+        "term": "Lee et al.",
+        "context": ", 2019) - - - 53.0 60.9\nPath Retriever (Asai et al., 2020) 31.7 - - 56.5 63.8\nGraph Retriever (Min et al., 2019b) 34.7 55.8 - - -\nHard EM (Min et al., 2019a) 28.8 50.9 - - -\nORQA (Lee et al., 2019) 31.3 45.1 - 20.2 -\nREALM (Guu et al., 2020) 40.4 - - - -\nDPR (Karpukhin et al., 2020) 41.5 57.9 - 36.7 -\nSpanSeqGen (Min et al., 2020) 42.5 - - - -\nRAG (Lewis et al., 2020b) 44.5 56.1 68.0 - -\nT5 (Roberts et al., 2020) 36.6 - 60.5 - -\nGPT-3 few shot (Brown et al., 2020) 29.9 - 71.2 - -\nFusion-in-Decoder (base) 48.2 65.0 77.1 53.4 60.6\nFusion-in-Decoder (large) 51.4 67.6 80.1 56.7"
+      },
+      {
+        "pdf_page": 3,
+        "term": "Lee et al.",
+        "context": ".\n4 Experiments\nIn this section, we report empirical evaluations of\nFusion-in-Decoder for open domain QA.\nDatasets. We consider the following datasets,\nand use the same setting as Lee et al. (2019):\n• NaturalQuestions (Kwiatkowski et al., 2019)\ncontains questions corresponding to Google\nsearch queries. The open-domain version of\nthis dataset is obtained by discarding answers\nwith more than 5 tokens.\n• TriviaQA (Joshi et al., 2017) contains ques-\ntions gathered from trivia and quiz-league"
+      },
+      {
+        "pdf_page": 4,
+        "term": "Lee et al.",
+        "context": "rehension dataset. Given a paragraph\nextracted from Wikipedia, annotators were\nasked to write questions, for which the answer\nis a span from the corresponding paragraph.\nFollowing Lee et al. (2019) we use the validation as\ntest, and keep 10% of the training set for validation.\nWe use the Wikipedia dumps from Dec. 20, 2018\nfor NQ and TriviaQA and from Dec. 21, 2016 for\nSQuAD. We apply the same preprocessing as Chen\net al. (2017); Karpukhin et al. (2020), leading to\npassages of 100 words, which do not overlap.\nEvaluation. Predicted answers are evaluated\nwith the standard exac"
+      },
+      {
+        "pdf_page": 6,
+        "term": "Latent retrieval",
+        "context": "on answering. In Proceedings of the 2018 Con-\nference on Empirical Methods in Natural Language\nProcessing, pages 565–569.\nKenton Lee, Ming-Wei Chang, and Kristina Toutanova.\n2019. Latent retrieval for weakly supervised open\ndomain question answering. In Proceedings of the\n57th Annual Meeting of the Association for Compu-\ntational Linguistics, pages 6086–6096.\nMike Lewis, Yinhan Liu, Naman Goyal, Mar-\njan Ghazvininejad, Abdelrahman Mohamed, Omer\nLevy, Veselin Stoyanov, and Luke Zettlemoyer.\n2020a. BART: Denoising sequence-to-sequence pre-\ntraining for natural language genera"
+      }
+    ]
+  },
+  {
+    "source_paper_id": "alce",
+    "target_paper_id": "rarr",
+    "review_status": "machine_candidate",
+    "citation_confirmed": null,
+    "intent_labels": [],
+    "hits": [
+      {
+        "pdf_page": 10,
+        "term": "RARR",
+        "context": "rint\narXiv:2212.09577.\nLuyu Gao, Zhuyun Dai, Panupong Pasupat, Anthony\nChen, Arun Tejasvi Chaganty, Yicheng Fan, Vin-\ncent Y Zhao, Ni Lao, Hongrae Lee, Da-Cheng Juan,\net al. 2023. RARR: Researching and revising what\nlanguage models say, using language models. In\nAssociation for Computational Linguistics (ACL).\nKelvin Guu, Kenton Lee, Zora Tung, Panupong Pasupat,\nand Ming-Wei Chang. 2020. REALM: Retrieval-\naugmented language model pre-training. In Interna-\ntional Conference on Machine Learning (ICML).\nHangfeng He, Hongming Zhang, and Dan Roth. 2022.\nRethinking with retrieval"
+      },
+      {
+        "pdf_page": 10,
+        "term": "Researching and revising",
+        "context": "rXiv:2212.09577.\nLuyu Gao, Zhuyun Dai, Panupong Pasupat, Anthony\nChen, Arun Tejasvi Chaganty, Yicheng Fan, Vin-\ncent Y Zhao, Ni Lao, Hongrae Lee, Da-Cheng Juan,\net al. 2023. RARR: Researching and revising what\nlanguage models say, using language models. In\nAssociation for Computational Linguistics (ACL).\nKelvin Guu, Kenton Lee, Zora Tung, Panupong Pasupat,\nand Ming-Wei Chang. 2020. REALM: Retrieval-\naugmented language model pre-training. In Interna-\ntional Conference on Machine Learning (ICML).\nHangfeng He, Hongming Zhang, and Dan Roth. 2022.\nRethinking with retrieval: Fait"
+      }
+    ]
+  },
+  {
+    "source_paper_id": "specter",
+    "target_paper_id": "scibert",
+    "review_status": "machine_candidate",
+    "citation_confirmed": null,
+    "intent_labels": [],
+    "hits": [
+      {
+        "pdf_page": 1,
+        "term": "SciBERT",
+        "context": "s we show in\nthis work, simply passing these textual ﬁelds to an\n“off-the-shelf” pretrained language model—even a\nstate-of-the-art model tailored to scientiﬁc text like\nthe recent SciBERT (Beltagy et al., 2019)—does\nnot result in accurate paper representations. The\nlanguage modeling objectives used to pretrain the\nmodel do not lead it to output representations that\nare helpful for document-level tasks such as topic\nclassiﬁcation or recommendation.\nIn this paper, we introduce a new method for\nlearning general-purpose vector representations of\nscientiﬁc documents. Our system,"
+      },
+      {
+        "pdf_page": 1,
+        "term": "SciBERT",
+        "context": "se vector representations of\nscientiﬁc documents. Our system, SPECTER ,2 in-\ncorporates inter-document context into the Trans-\nformer (Vaswani et al., 2017) language models\n(e.g., SciBERT (Beltagy et al., 2019)) to learn\ndocument representations that are effective across\na wide-variety of downstream tasks, without the\nneed for any task-speciﬁc ﬁne-tuning of the pre-\ntrained language model. We speciﬁcally use cita-\ntions as a naturally occurring, inter-document in-\ncidental supervision signal indicating which docu-\nments are most related and formulate the signal into\na tripl"
+      },
+      {
+        "pdf_page": 1,
+        "term": "Beltagy",
+        "context": " 2020. c©2020 Association for Computational Linguistics\n2270\nSPECTER: Document-level Representation Learning using\nCitation-informed Transformers\nArman Cohan†∗ Sergey Feldman†∗ Iz Beltagy† Doug Downey† Daniel S. Weld†,‡\n†Allen Institute for Artiﬁcial Intelligence\n‡Paul G. Allen School of Computer Science & Engineering, University of Washington\n{armanc,sergey,beltagy,dougd,danw}@allenai.org\nAbstract\nRepresentation learning is a critical ingre-\ndient for natural language processing sys-\ntems. Recent Transformer language mod-\nels like BERT learn powerful textual repre-\nsentati"
+      },
+      {
+        "pdf_page": 1,
+        "term": "Beltagy",
+        "context": "eltagy† Doug Downey† Daniel S. Weld†,‡\n†Allen Institute for Artiﬁcial Intelligence\n‡Paul G. Allen School of Computer Science & Engineering, University of Washington\n{armanc,sergey,beltagy,dougd,danw}@allenai.org\nAbstract\nRepresentation learning is a critical ingre-\ndient for natural language processing sys-\ntems. Recent Transformer language mod-\nels like BERT learn powerful textual repre-\nsentations, but these models are targeted to-\nwards token- and sentence-level training ob-\njectives and do not leverage information on\ninter-document relatedness, which limits their\ndocume"
+      },
+      {
+        "pdf_page": 1,
+        "term": "Beltagy",
+        "context": " in\nthis work, simply passing these textual ﬁelds to an\n“off-the-shelf” pretrained language model—even a\nstate-of-the-art model tailored to scientiﬁc text like\nthe recent SciBERT (Beltagy et al., 2019)—does\nnot result in accurate paper representations. The\nlanguage modeling objectives used to pretrain the\nmodel do not lead it to output representations that\nare helpful for document-level tasks such as topic\nclassiﬁcation or recommendation.\nIn this paper, we introduce a new method for\nlearning general-purpose vector representations of\nscientiﬁc documents. Our system, SPECTER "
+      },
+      {
+        "pdf_page": 1,
+        "term": "Beltagy",
+        "context": " representations of\nscientiﬁc documents. Our system, SPECTER ,2 in-\ncorporates inter-document context into the Trans-\nformer (Vaswani et al., 2017) language models\n(e.g., SciBERT (Beltagy et al., 2019)) to learn\ndocument representations that are effective across\na wide-variety of downstream tasks, without the\nneed for any task-speciﬁc ﬁne-tuning of the pre-\ntrained language model. We speciﬁcally use cita-\ntions as a naturally occurring, inter-document in-\ncidental supervision signal indicating which docu-\nments are most related and formulate the signal into\na triplet-loss p"
+      },
+      {
+        "pdf_page": 2,
+        "term": "SciBERT",
+        "context": " describe how pretrained LMs can be applied\nfor document representation and then discuss the\ndetails of SPECTER .\n3https://github.com/allenai/scidocs\nTransformer (initialized with SciBERT)\nRelated paper (P+)Query paper (PQ) Unrelated paper (P−)\nTriplet loss = max\n{(\nd\n(\nPQ,P+)− d(PQ,P−) + m), 0}\nFigure 1: Overview of SPECTER .\n2.2 Background: Pretrained Transformers\nRecently, pretrained Transformer networks have\ndemonstrated success on various NLP tasks (Rad-\nford et al., 2018; Devlin et al., 2019; Yang et al.,\n2019; Liu et al., 2019); we use these models as\nthe foundation "
+      },
+      {
+        "pdf_page": 2,
+        "term": "SciBERT",
+        "context": "ss on various NLP tasks (Rad-\nford et al., 2018; Devlin et al., 2019; Yang et al.,\n2019; Liu et al., 2019); we use these models as\nthe foundation for SPECTER . Speciﬁcally, we use\nSciBERT (Beltagy et al., 2019) which is an adap-\ntation of the original BERT (Devlin et al., 2019)\narchitecture to the scientiﬁc domain. The BERT\nmodel architecture (Devlin et al., 2019) uses multi-\nple layers of Transformers (Vaswani et al., 2017) to\nencode the tokens in a given input sequence. Each\nlayer consists of a self-attention sublayer followed\nby a feedforward sublayer. The ﬁnal hidden st"
+      },
+      {
+        "pdf_page": 2,
+        "term": "SciBERT",
+        "context": "ngs, since they are written to provide a suc-\ncinct and comprehensive summary of the paper.4\nAs such, we encode the concatenated title and ab-\nstract using a Transformer LM (e.g., SciBERT) and\ntake the ﬁnal representation of the [CLS] token as\nthe output representation of the paper:5\nv = Transformer(input)[CLS], (1)\nwhere Transformer is the Transformer’s for-\nward function, and input is the concatenation of\nthe [CLS] token and WordPieces (Wu et al., 2016)\nof the title and abstract of a paper, separated by\n4We also experimented with additional ﬁelds such as\nvenues and author"
+      },
+      {
+        "pdf_page": 2,
+        "term": "Beltagy",
+        "context": "ious NLP tasks (Rad-\nford et al., 2018; Devlin et al., 2019; Yang et al.,\n2019; Liu et al., 2019); we use these models as\nthe foundation for SPECTER . Speciﬁcally, we use\nSciBERT (Beltagy et al., 2019) which is an adap-\ntation of the original BERT (Devlin et al., 2019)\narchitecture to the scientiﬁc domain. The BERT\nmodel architecture (Devlin et al., 2019) uses multi-\nple layers of Transformers (Vaswani et al., 2017) to\nencode the tokens in a given input sequence. Each\nlayer consists of a self-attention sublayer followed\nby a feedforward sublayer. The ﬁnal hidden state\nassoc"
+      },
+      {
+        "pdf_page": 3,
+        "term": "SciBERT",
+        "context": "2272\nthe [SEP] token. We use SciBERT as our model\ninitialization as it is optimized for scientiﬁc text,\nthough our formulation is general and any Trans-\nformer language model instead of SciBERT. Using\nthe above method with an “off-the-shelf” SciBERT\ndoes not take global inter-document information\ninto account. This is because SciBERT, like other\npretrained language models, is trained via language\nmodeling objectives, which on"
+      },
+      {
+        "pdf_page": 3,
+        "term": "SciBERT",
+        "context": "he [SEP] token. We use SciBERT as our model\ninitialization as it is optimized for scientiﬁc text,\nthough our formulation is general and any Trans-\nformer language model instead of SciBERT. Using\nthe above method with an “off-the-shelf” SciBERT\ndoes not take global inter-document information\ninto account. This is because SciBERT, like other\npretrained language models, is trained via language\nmodeling objectives, which only predict words or\nsentences given their in-document, nearby textual\ncontext. In contrast, we propose to incorporate ci-\ntations into the model as a signal "
+      },
+      {
+        "pdf_page": 3,
+        "term": "SciBERT",
+        "context": "on as it is optimized for scientiﬁc text,\nthough our formulation is general and any Trans-\nformer language model instead of SciBERT. Using\nthe above method with an “off-the-shelf” SciBERT\ndoes not take global inter-document information\ninto account. This is because SciBERT, like other\npretrained language models, is trained via language\nmodeling objectives, which only predict words or\nsentences given their in-document, nearby textual\ncontext. In contrast, we propose to incorporate ci-\ntations into the model as a signal of inter-document\nrelatedness, while still leveraging th"
+      },
+      {
+        "pdf_page": 3,
+        "term": "SciBERT",
+        "context": "ans-\nformer language model instead of SciBERT. Using\nthe above method with an “off-the-shelf” SciBERT\ndoes not take global inter-document information\ninto account. This is because SciBERT, like other\npretrained language models, is trained via language\nmodeling objectives, which only predict words or\nsentences given their in-document, nearby textual\ncontext. In contrast, we propose to incorporate ci-\ntations into the model as a signal of inter-document\nrelatedness, while still leveraging the model’s ex-\nisting strength in modeling language.\n2.3 Citation-Based Pretraining Obj"
+      },
+      {
+        "pdf_page": 3,
+        "term": "SciBERT",
+        "context": "se the L2 norm distance:\nd(P A,P B) =‖vA− vB‖2,\nwhere vA is the vector corresponding to the pooled\noutput of the Transformer run on paperA (Equation\n1).6 Starting from the trained SciBERT model, we\npretrain the Transformer parameters on the citation\nobjective to learn paper representations that capture\ndocument relatedness.\n2.4 Selecting Negative Distractors\nThe choice of negative example papersP− is im-\nportant when training the model. We consider two\nsets of negative examples: the ﬁrst set simply con-\nsists of randomly selected papers from the corpus.\n6We also experimente"
+      },
+      {
+        "pdf_page": 5,
+        "term": "SciBERT",
+        "context": "lts in about 684K training\ntriples and 145K validation triples.\nTraining and Implementation We implement\nour model in AllenNLP (Gardner et al., 2018).\nWe initialize the model from SciBERT pretrained\nweights (Beltagy et al., 2019) since it is the state-\nof-the-art pretrained language model on scientiﬁc\ntext. We continue training all model parameters on\nour training objective (Equation 2). We perform\nminimal tuning of our model’s hyperparameters\nbased on the performance on the validation set,\nwhile baselines are extensively tuned. Based on\ninitial experiments, we use a margin"
+      },
+      {
+        "pdf_page": 5,
+        "term": "Beltagy",
+        "context": "riples and 145K validation triples.\nTraining and Implementation We implement\nour model in AllenNLP (Gardner et al., 2018).\nWe initialize the model from SciBERT pretrained\nweights (Beltagy et al., 2019) since it is the state-\nof-the-art pretrained language model on scientiﬁc\ntext. We continue training all model parameters on\nour training objective (Equation 2). We perform\nminimal tuning of our model’s hyperparameters\nbased on the performance on the validation set,\nwhile baselines are extensively tuned. Based on\ninitial experiments, we use a margin m=1 for the\ntriplet loss. F"
+      },
+      {
+        "pdf_page": 6,
+        "term": "SciBERT",
+        "context": " al., 2017), a method for learning docu-\nment representations by removing the ﬁrst prin-\ncipal component of aggregated word-level embed-\ndings which we pretrain on scientiﬁc text; SciBERT\n(Beltagy et al., 2019) a state-of-the-art pretrained\nTransformer LM for scientiﬁc text; and Sent-BERT\n(Reimers and Gurevych, 2019), a model that uses\nnegative sampling to tune BERT for producing op-\ntimal sentence embeddings. We also compare with\nCiteomatic (Bhagavatula et al., 2018), a closely\nrelated paper representation model for citation pre-\ndiction which trains content-based represen"
+      },
+      {
+        "pdf_page": 6,
+        "term": "Beltagy",
+        "context": "7), a method for learning docu-\nment representations by removing the ﬁrst prin-\ncipal component of aggregated word-level embed-\ndings which we pretrain on scientiﬁc text; SciBERT\n(Beltagy et al., 2019) a state-of-the-art pretrained\nTransformer LM for scientiﬁc text; and Sent-BERT\n(Reimers and Gurevych, 2019), a model that uses\nnegative sampling to tune BERT for producing op-\ntimal sentence embeddings. We also compare with\nCiteomatic (Bhagavatula et al., 2018), a closely\nrelated paper representation model for citation pre-\ndiction which trains content-based representations\nw"
+      },
+      {
+        "pdf_page": 7,
+        "term": "SciBERT",
+        "context": "83.8 52.5 18.2 69.0\nCiteomatic (2018) 67.1 75.7 81.1 90.2 80.5 90.2 86.3 94.1 84.4 92.8 52.5 17.3 76.0\nSGC (2019a) 76.8 82.7 77.2 88.0 75.7 87.5 91.6 96.2 84.1 92.5 52.7 18.2 76.9\nSciBERT (2019) 79.7 80.7 50.7 73.1 47.7 71.1 48.3 71.7 49.7 72.6 52.1 17.9 59.6\nSent-BERT (2019) 80.5 69.1 68.2 83.3 64.8 81.3 63.5 81.6 66.4 82.8 51.6 17.1 67.5\nSPECTER (Ours) 82.0 86.4 83.6 91.5 84.5 92.4 88.3 94.9 88.1 94.8 53.9 20.0 80.0\nTable 1: Results on the SCIDOCS evaluation suite consisting of 7 tasks.\n6 Analysis\nIn this section, we analyze several design deci-\nsions in SPECTER , provide"
+      },
+      {
+        "pdf_page": 7,
+        "term": "SciBERT",
+        "context": "latedness\nfrom them. As another possible reason of this be-\nhavior, tokenization using Wordpieces might be\nsuboptimal for author names. Many author names\nare out-of-vocabulary for SciBERT and thus, they\nmight be split into sub-words and shared across\nnames that are not semantically related, leading\nto noisy correlation. Finally, we ﬁnd that adding\nvenues slightly decreases performance, 14 except\non document classiﬁcation (which makes sense, as\nwe would expect venues to have high correlation\n13We experimented with both concatenating authors with\nthe title and abstract and al"
+      },
+      {
+        "pdf_page": 7,
+        "term": "SciBERT",
+        "context": "ur simple approach of including cita-\ntions of citations is effective. The sixth row of the\ntable shows that using a strong general-domain lan-\nguage model (BERT-Large) instead of SciBERT in\nSPECTER reduces performance considerably. This\nis reasonable because unlike BERT-Large, SciB-\nERT is pretrained on scientiﬁc text.\nVisualization Figure 2 shows t-SNE (van der\nMaaten, 2014) projections of our embeddings\n(SPECTER ) compared with the SciBERT baseline"
+      },
+      {
+        "pdf_page": 7,
+        "term": "SciBERT",
+        "context": " unlike BERT-Large, SciB-\nERT is pretrained on scientiﬁc text.\nVisualization Figure 2 shows t-SNE (van der\nMaaten, 2014) projections of our embeddings\n(SPECTER ) compared with the SciBERT baseline"
+      },
+      {
+        "pdf_page": 8,
+        "term": "SciBERT",
+        "context": "2277\n(a) SPECTER\n (b) SciBERT\nFigure 2: t-SNE visualization of paper embeddings and\ntheir corresponding MAG topics.\nfor a random set of papers. When comparing\nSPECTER embeddings with SciBERT, we observe\nthat our embeddings are better at encoding topi-\ncal information, as the clusters seem to be more\ncompact. Further, we see some examples of cross-\ntopic relatedness reﬂected in the embedding space\n(e.g., Engineering, Ma"
+      },
+      {
+        "pdf_page": 8,
+        "term": "SciBERT",
+        "context": "7\n(a) SPECTER\n (b) SciBERT\nFigure 2: t-SNE visualization of paper embeddings and\ntheir corresponding MAG topics.\nfor a random set of papers. When comparing\nSPECTER embeddings with SciBERT, we observe\nthat our embeddings are better at encoding topi-\ncal information, as the clusters seem to be more\ncompact. Further, we see some examples of cross-\ntopic relatedness reﬂected in the embedding space\n(e.g., Engineering, Mathematics and Computer\nScience are close to each other, while Business\nand Economics are also close to each other). To\nquantify the comparison of visualized embe"
+      },
+      {
+        "pdf_page": 8,
+        "term": "SciBERT",
+        "context": "ed by Rosenberg and\nHirschberg (2007). For the points corresponding to\nFigure 2, the homogeneity and completeness val-\nues for SPECTER are respectively 0.41 and 0.72\ncompared with SciBERT’s 0.19 and 0.63, a clear\nimprovement on separating topics using the pro-\njected embeddings.\nComparison with Task Speciﬁc Fine-Tuning\nWhile the fact that SPECTER does not require ﬁne-\ntuning makes its paper embeddings less costly to\nuse, often the best performance from pretrained\nTransformers is obtained when the models are ﬁne-\ntuned directly on each end task. We experiment\nwith ﬁne-tuning"
+      },
+      {
+        "pdf_page": 8,
+        "term": "SciBERT",
+        "context": "ngs less costly to\nuse, often the best performance from pretrained\nTransformers is obtained when the models are ﬁne-\ntuned directly on each end task. We experiment\nwith ﬁne-tuning SciBERT on our tasks, and ﬁnd\nthis to be generally inferior to using our ﬁxed rep-\nresentations from SPECTER . Speciﬁcally, we ﬁne-\ntune SciBERT directly on task-speciﬁc signals in-\nstead of citations. To ﬁne-tune on task-speciﬁc\ndata (e.g., user activity), we used a dataset of co-\nviews with 65K query papers, co-reads with 14K\nquery papers, and co-citations (instead of direct\ncitations) with 83K "
+      },
+      {
+        "pdf_page": 8,
+        "term": "SciBERT",
+        "context": "ch end task. We experiment\nwith ﬁne-tuning SciBERT on our tasks, and ﬁnd\nthis to be generally inferior to using our ﬁxed rep-\nresentations from SPECTER . Speciﬁcally, we ﬁne-\ntune SciBERT directly on task-speciﬁc signals in-\nstead of citations. To ﬁne-tune on task-speciﬁc\ndata (e.g., user activity), we used a dataset of co-\nviews with 65K query papers, co-reads with 14K\nquery papers, and co-citations (instead of direct\ncitations) with 83K query papers. As the end tasks\nare ranking tasks, for all datasets we construct up\nto 5 triplets and ﬁne-tune the model using triplet\nran"
+      },
+      {
+        "pdf_page": 8,
+        "term": "SciBERT",
+        "context": "ruct up\nto 5 triplets and ﬁne-tune the model using triplet\nranking loss. The positive papers are sampled from\nTraining signal CLS USR CITE REC All\nSPECTER 84.2 88.4 91.5 36.9 80.0\nSciBERT ﬁne-tune on co-view 83.0 84.2 84.1 36.4 76.0\nSciBERT ﬁne-tune on co-read 82.3 85.4 86.7 36.3 77.1\nSciBERT ﬁne-tune on co-citation 82.9 84.3 85.2 36.6 76.4\nSciBERT ﬁne-tune on multitask 83.3 86.1 88.2 36.0 78.0\nTable 3: Comparison with task-speciﬁc ﬁne-tuning.\nthe most co-viewed (co-read, or co-cited) papers\ncorresponding to the query paper. We also include\nboth easy and hard distractors as"
+      },
+      {
+        "pdf_page": 8,
+        "term": "SciBERT",
+        "context": "iplet\nranking loss. The positive papers are sampled from\nTraining signal CLS USR CITE REC All\nSPECTER 84.2 88.4 91.5 36.9 80.0\nSciBERT ﬁne-tune on co-view 83.0 84.2 84.1 36.4 76.0\nSciBERT ﬁne-tune on co-read 82.3 85.4 86.7 36.3 77.1\nSciBERT ﬁne-tune on co-citation 82.9 84.3 85.2 36.6 76.4\nSciBERT ﬁne-tune on multitask 83.3 86.1 88.2 36.0 78.0\nTable 3: Comparison with task-speciﬁc ﬁne-tuning.\nthe most co-viewed (co-read, or co-cited) papers\ncorresponding to the query paper. We also include\nboth easy and hard distractors as when training\nSPECTER (for hard negatives we choose "
+      },
+      {
+        "pdf_page": 8,
+        "term": "SciBERT",
+        "context": "rom\nTraining signal CLS USR CITE REC All\nSPECTER 84.2 88.4 91.5 36.9 80.0\nSciBERT ﬁne-tune on co-view 83.0 84.2 84.1 36.4 76.0\nSciBERT ﬁne-tune on co-read 82.3 85.4 86.7 36.3 77.1\nSciBERT ﬁne-tune on co-citation 82.9 84.3 85.2 36.6 76.4\nSciBERT ﬁne-tune on multitask 83.3 86.1 88.2 36.0 78.0\nTable 3: Comparison with task-speciﬁc ﬁne-tuning.\nthe most co-viewed (co-read, or co-cited) papers\ncorresponding to the query paper. We also include\nboth easy and hard distractors as when training\nSPECTER (for hard negatives we choose the least\nnon-zero co-viewed (co-read, or co-cited) p"
+      },
+      {
+        "pdf_page": 8,
+        "term": "SciBERT",
+        "context": "4 91.5 36.9 80.0\nSciBERT ﬁne-tune on co-view 83.0 84.2 84.1 36.4 76.0\nSciBERT ﬁne-tune on co-read 82.3 85.4 86.7 36.3 77.1\nSciBERT ﬁne-tune on co-citation 82.9 84.3 85.2 36.6 76.4\nSciBERT ﬁne-tune on multitask 83.3 86.1 88.2 36.0 78.0\nTable 3: Comparison with task-speciﬁc ﬁne-tuning.\nthe most co-viewed (co-read, or co-cited) papers\ncorresponding to the query paper. We also include\nboth easy and hard distractors as when training\nSPECTER (for hard negatives we choose the least\nnon-zero co-viewed (co-read, or co-cited) papers).\nWe also consider training jointly on all task-spe"
+      },
+      {
+        "pdf_page": 8,
+        "term": "SciBERT",
+        "context": "model samples training triplets from a\ndistribution over the sources. As illustrated in Ta-\nble 3, without any additional ﬁnal task-speciﬁc\nﬁne-tuning, SPECTER still outperforms a SciBERT\nmodel ﬁne-tuned on the end tasks as well as their\nmultitask combination, further demonstrating the\neffectiveness and versatility of SPECTER embed-\ndings.15\n7 Related Work\nRecent representation learning methods in NLP\nrely on training large neural language models on un-\nsupervised data (Peters et al., 2018; Radford et al.,\n2018; Devlin et al., 2019; Beltagy et al., 2019; Liu\net al., 2019). "
+      },
+      {
+        "pdf_page": 8,
+        "term": "Beltagy",
+        "context": "Recent representation learning methods in NLP\nrely on training large neural language models on un-\nsupervised data (Peters et al., 2018; Radford et al.,\n2018; Devlin et al., 2019; Beltagy et al., 2019; Liu\net al., 2019). While successful at many sentence-\nand token-level tasks, our focus is on using the\nmodels for document-level representation learning,\nwhich has remained relatively under-explored.\nThere have been other efforts in document repre-\nsentation learning such as extensions of word vec-\ntors to documents (Le and Mikolov, 2014; Ganesh\net al., 2016; Liu et al., 2017"
+      },
+      {
+        "pdf_page": 9,
+        "term": "Beltagy",
+        "context": "eng Yen Li, Marc Najork, and Thorsten Joachims.\n2019. Estimating position bias without intrusive in-\nterventions. In WSDM.\nWaleed Ammar, Dirk Groeneveld, Chandra Bha-\ngavatula, Iz Beltagy, Miles Crawford, Doug\nDowney, Jason Dunkelberger, Ahmed Elgohary,\nSergey Feldman, Vu Ha, Rodney Kinney, Sebas-\ntian Kohlmeier, Kyle Lo, Tyler C. Murray, Hsu-\nHan Ooi, Matthew E. Peters, Joanna Power, Sam\nSkjonsberg, Lucy Lu Wang, Christopher Wilhelm,\nZheng Yuan, Madeleine van Zuylen, and Oren Et-\nzioni. 2018. Construction of the literature graph in\nsemantic scholar. In NAACL-HLT.\nSanjeev A"
+      },
+      {
+        "pdf_page": 10,
+        "term": "Beltagy",
+        "context": "2279\nA simple but tough-to-beat baseline for sentence em-\nbeddings. In ICLR.\nIz Beltagy, Kyle Lo, and Arman Cohan. 2019. SciB-\nERT: A Pretrained Language Model for Scientiﬁc\nText. In EMNLP.\nChandra Bhagavatula, Sergey Feldman, Russell Power,\nand Waleed Ammar. 2018. Content-Based Citation\nRecommendation. In NAACL-HLT.\nPiotr Bojanowski, Edouard Grave, Armand Joulin, and\nTomas Mikolov. 2017. Enriching word vectors with\nsubword information. TACL.\nJoan Bruna, Wojciech Zaremba, Art"
+      },
+      {
+        "pdf_page": 12,
+        "term": "SciBERT",
+        "context": "vectors. We\ntrained our own 300 dimensional fasttext embed-\ndings (Bojanowski et al., 2017) on a corpus of\naround 3.1B tokens from scientiﬁc papers which\nis similar in size to the SciBERT corpus (Beltagy\net al., 2019). We found that these pretrained embed-\ndings substantially outperform alternative off-the-\nshelf embeddings. We also use these embeddings in\nother baselines that require pretrained word vectors\n(i.e., SIF and SGC that are described below). The\nsummed bag of words representation has a number\nof weighting options, which are extensively tuned\non a validation set "
+      },
+      {
+        "pdf_page": 12,
+        "term": "SciBERT",
+        "context": " a validation set. For the node features,\nwe chose the SIF model with a = 0.0001, as this\nmodel was observed to be a high-performing one.\nThis baseline is also 300 dimensional.\n8. SciBERT To isolate the advantage of\nSPECTER ’s citation-based ﬁne-tuning objective,\nwe add a controlled comparison with SciBERT\n(Beltagy et al., 2019). Following Devlin et al.\n(2019) we take the last layer hidden state corre-\nsponding to the [CLS] token as the aggregate\ndocument representation.17\n16There were no other direct comparisons in Wu et al.\n(2019a)\n17We also tried the alternative of avera"
+      },
+      {
+        "pdf_page": 12,
+        "term": "SciBERT",
+        "context": "h-performing one.\nThis baseline is also 300 dimensional.\n8. SciBERT To isolate the advantage of\nSPECTER ’s citation-based ﬁne-tuning objective,\nwe add a controlled comparison with SciBERT\n(Beltagy et al., 2019). Following Devlin et al.\n(2019) we take the last layer hidden state corre-\nsponding to the [CLS] token as the aggregate\ndocument representation.17\n16There were no other direct comparisons in Wu et al.\n(2019a)\n17We also tried the alternative of averaging all token repre-\nsentations, but this resulted in a slight performance decrease\ncompared with the [CLS] pooled toke"
+      },
+      {
+        "pdf_page": 12,
+        "term": "Beltagy",
+        "context": "ned our own 300 dimensional fasttext embed-\ndings (Bojanowski et al., 2017) on a corpus of\naround 3.1B tokens from scientiﬁc papers which\nis similar in size to the SciBERT corpus (Beltagy\net al., 2019). We found that these pretrained embed-\ndings substantially outperform alternative off-the-\nshelf embeddings. We also use these embeddings in\nother baselines that require pretrained word vectors\n(i.e., SIF and SGC that are described below). The\nsummed bag of words representation has a number\nof weighting options, which are extensively tuned\non a validation set for best perform"
+      },
+      {
+        "pdf_page": 12,
+        "term": "Beltagy",
+        "context": "ing one.\nThis baseline is also 300 dimensional.\n8. SciBERT To isolate the advantage of\nSPECTER ’s citation-based ﬁne-tuning objective,\nwe add a controlled comparison with SciBERT\n(Beltagy et al., 2019). Following Devlin et al.\n(2019) we take the last layer hidden state corre-\nsponding to the [CLS] token as the aggregate\ndocument representation.17\n16There were no other direct comparisons in Wu et al.\n(2019a)\n17We also tried the alternative of averaging all token repre-\nsentations, but this resulted in a slight performance decrease\ncompared with the [CLS] pooled token."
+      }
+    ]
+  },
+  {
+    "source_paper_id": "specter",
+    "target_paper_id": "scicite",
+    "review_status": "machine_candidate",
+    "citation_confirmed": null,
+    "intent_labels": [],
+    "hits": []
+  },
+  {
+    "source_paper_id": "qasper",
+    "target_paper_id": "scitldr",
+    "review_status": "machine_candidate",
+    "citation_confirmed": null,
+    "intent_labels": [],
+    "hits": []
+  },
+  {
+    "source_paper_id": "scifact",
+    "target_paper_id": "eraser",
+    "review_status": "machine_candidate",
+    "citation_confirmed": null,
+    "intent_labels": [],
+    "hits": [
+      {
+        "pdf_page": 2,
+        "term": "DeYoung",
+        "context": " citation\nlinks indicate the exact documents likely to contain\nevidence necessary to verify a given claim.\nWe establish performance baselines onSCIFACT\nwith an approach similar to DeYoung et al. (2020a),\nwhich achieves strong performance on the FEVER\nclaim veriﬁcation dataset (Thorne et al., 2018). Our\nbaseline is a pipeline system which retrieves ab-\nstracts related to an input claim, uses a BERT-\nbased (Devlin et al., 2019) sentence selector to iden-\ntify rationale sentences, and labels each abstract\nas SUPPORTS , REFUTES , or NOINFO with respect\nto the claim. We demonstr"
+      },
+      {
+        "pdf_page": 5,
+        "term": "DeYoung",
+        "context": "ons. We conduct evaluations\nin both the “Open” FEVER -style (Thorne et al.,\n2018) setting where the evidence abstracts must\nbe retrieved, and the “Oracle abstract” ERASER -\nstyle (DeYoung et al., 2020a) setting where the\ngold evidence abstractsE(c) are provided.\nAbstract-level evaluation is inspired by the\nFEVER score. Given a claimc, a predicted evidence\nabstracta∈ ˆE(c) is correctly labeled if (1)a is a\ngold evidence abstract forc, and (2) The predicted\nlabel is correct: ˆy(c,a ) = y(c,a ). It is correctly\nrationalized if, in addition, the predicted rationale\nsentences co"
+      },
+      {
+        "pdf_page": 5,
+        "term": "DeYoung",
+        "context": "pusA as input, identiﬁes\nevidence abstracts ˆE(c), and predicts a label ˆy(c,a )\nand rationale sentences ˆS(c,a ) for eacha∈ ˆE(c).\nFollowing the “BERT-to-BERT” model presented\nin DeYoung et al. (2020a); Soleimani et al. (2019),\nVERI SCI is a pipeline of three components:\n1. ABSTRACT RETRIEVAL retrieves k abstracts\nwith highest TF-IDF similarity to the claim.\n2. RATIONALE SELECTION identiﬁes rationale\nsentences ˆS(c,a ) for each abstract.\n3. LABEL PREDICTION makes the ﬁnal label pre-\ndiction ˆy(c,a ).\nRationale selection Given a claim c and ab-\nstract a, we train a model to"
+      },
+      {
+        "pdf_page": 5,
+        "term": "ERASER",
+        "context": "t-level predictions. We conduct evaluations\nin both the “Open” FEVER -style (Thorne et al.,\n2018) setting where the evidence abstracts must\nbe retrieved, and the “Oracle abstract” ERASER -\nstyle (DeYoung et al., 2020a) setting where the\ngold evidence abstractsE(c) are provided.\nAbstract-level evaluation is inspired by the\nFEVER score. Given a claimc, a predicted evidence\nabstracta∈ ˆE(c) is correctly labeled if (1)a is a\ngold evidence abstract forc, and (2) The predicted\nlabel is correct: ˆy(c,a ) = y(c,a ). It is correctly\nrationalized if, in addition, the predicted ration"
+      },
+      {
+        "pdf_page": 6,
+        "term": "DeYoung",
+        "context": "laim-only model makes label predic-\n6Our FEVER -trained RATIONALE SELECTION module\nachieves 79.9 sentence-level F1 on the FEVER test set, virtu-\nally identical to 79.6 reported in DeYoung et al. (2020a)."
+      },
+      {
+        "pdf_page": 9,
+        "term": "DeYoung",
+        "context": " counter disinformation.\nFact-checking is one of a number of tasks where\na model is required to justify a prediction via ra-\ntionales from the source document. The ERASER\ndataset (DeYoung et al., 2020a) provides a suite\nof benchmark datasets (including SCIFACT) for\nevaluating rationalized NLP models.\nRelated scientiﬁc NLP tasks The citation contex-\ntualization task (Cohan et al., 2015; Jaidka et al.,\n2017) is to identify spans in a cited document that\nare relevant to a particular citation in a citing doc-\nument. Unlike SCIFACT, these citations are not\nre-written into atomic"
+      },
+      {
+        "pdf_page": 9,
+        "term": "ERASER",
+        "context": " ﬁndings, not to counter disinformation.\nFact-checking is one of a number of tasks where\na model is required to justify a prediction via ra-\ntionales from the source document. The ERASER\ndataset (DeYoung et al., 2020a) provides a suite\nof benchmark datasets (including SCIFACT) for\nevaluating rationalized NLP models.\nRelated scientiﬁc NLP tasks The citation contex-\ntualization task (Cohan et al., 2015; Jaidka et al.,\n2017) is to identify spans in a cited document that\nare relevant to a particular citation in a citing doc-\nument. Unlike SCIFACT, these citations are not\nre-wri"
+      },
+      {
+        "pdf_page": 10,
+        "term": "DeYoung",
+        "context": " SemEval.\nJacob Devlin, Ming-Wei Chang, Kenton Lee, and\nKristina Toutanova. 2019. Bert: Pre-training of deep\nbidirectional transformers for language understand-\ning. In NAACL.\nJay DeYoung, Sarthak Jain, Nazneen Fatema Rajani,\nEric Lehman, Caiming Xiong, Richard Socher, and\nByron C. Wallace. 2020a. Eraser: A benchmark to\nevaluate rationalized nlp models. In ACL.\nJay DeYoung, Eric Lehman, Ben Nye, Iain James\nMarshall, and Byron C. Wallace. 2020b. Evi-\ndence inference 2.0: More data, better models. In\nBioNLP@ACL.\nRotem Dror, Gili Baumer, Segev Shlomov, and Roi Re-\nichart. 2018"
+      },
+      {
+        "pdf_page": 10,
+        "term": "DeYoung",
+        "context": " Sarthak Jain, Nazneen Fatema Rajani,\nEric Lehman, Caiming Xiong, Richard Socher, and\nByron C. Wallace. 2020a. Eraser: A benchmark to\nevaluate rationalized nlp models. In ACL.\nJay DeYoung, Eric Lehman, Ben Nye, Iain James\nMarshall, and Byron C. Wallace. 2020b. Evi-\ndence inference 2.0: More data, better models. In\nBioNLP@ACL.\nRotem Dror, Gili Baumer, Segev Shlomov, and Roi Re-\nichart. 2018. The hitchhiker’s guide to testing statis-\ntical signiﬁcance in natural language processing. In\nACL.\nBradley Efron and Robert Tibshirani. 1993. An intro-\nduction to the bootstrap.\nWilliam"
+      },
+      {
+        "pdf_page": 10,
+        "term": "DeYoung",
+        "context": "L@JCDL.\nQiao Jin, Bhuwan Dhingra, Zhengping Liu, William W.\nCohen, and Xinghua Lu. 2019. Pubmedqa: A\ndataset for biomedical research question answering.\nIn EMNLP.\nEric Lehman, Jay DeYoung, Regina Barzilay, and By-\nron C. Wallace. 2019. Inferring which medical\ntreatments work from reports of clinical trials. In\nNAACL.\nTao Lei, Regina Barzilay, and Tommi S. Jaakkola.\n2016. Rationalizing neural predictions. In ACL.\nYinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Man-\ndar Joshi, Danqi Chen, Omer Levy, Mike Lewis,\nLuke Zettlemoyer, and Veselin Stoyanov. 2019.\nRoberta: A robustly "
+      },
+      {
+        "pdf_page": 10,
+        "term": "ERASER",
+        "context": "nal transformers for language understand-\ning. In NAACL.\nJay DeYoung, Sarthak Jain, Nazneen Fatema Rajani,\nEric Lehman, Caiming Xiong, Richard Socher, and\nByron C. Wallace. 2020a. Eraser: A benchmark to\nevaluate rationalized nlp models. In ACL.\nJay DeYoung, Eric Lehman, Ben Nye, Iain James\nMarshall, and Byron C. Wallace. 2020b. Evi-\ndence inference 2.0: More data, better models. In\nBioNLP@ACL.\nRotem Dror, Gili Baumer, Segev Shlomov, and Roi Re-\nichart. 2018. The hitchhiker’s guide to testing statis-\ntical signiﬁcance in natural language processing. In\nACL.\nBradley Efron and"
+      }
+    ]
+  },
+  {
+    "source_paper_id": "vitaminc",
+    "target_paper_id": "fever",
+    "review_status": "machine_candidate",
+    "citation_confirmed": null,
+    "intent_labels": [],
+    "hits": [
+      {
+        "pdf_page": 1,
+        "term": "Thorne",
+        "context": "ts it.\nThis type of contrastive structure exposes exist-\ning deﬁciencies in model behavior. To illustrate\nthis, we train a classiﬁer on the popular FEVER\nfact veriﬁcation dataset (Thorne et al., 2018) and\nevaluate it on contrastive claim-evidence pairs. We\nﬁnd that the model ﬂips its prediction from the orig-\ninal verdict on only 56% of the contrastive cases.\nWhen examples from VITAMIN C are included dur-\ning training, however, the model’s sensitivity in-\ncreases, ﬂipping on 86% of contrastive cases.\nSuch context-sensitive inference has two main\nbeneﬁts. First, it ensures t"
+      },
+      {
+        "pdf_page": 1,
+        "term": "FEVER",
+        "context": "en claim, while the other supports it.\nThis type of contrastive structure exposes exist-\ning deﬁciencies in model behavior. To illustrate\nthis, we train a classiﬁer on the popular FEVER\nfact veriﬁcation dataset (Thorne et al., 2018) and\nevaluate it on contrastive claim-evidence pairs. We\nﬁnd that the model ﬂips its prediction from the orig-\ninal verdict on only 56% of the contrastive cases.\nWhen examples from VITAMIN C are included dur-\ning training, however, the model’s sensitivity in-\ncreases, ﬂipping on 86% of contrastive cases.\nSuch context-sensitive inference has two m"
+      },
+      {
+        "pdf_page": 2,
+        "term": "Thorne",
+        "context": "texts allows us to expand on the scope of commonly\nconsidered tasks. Most of the fact veriﬁcation lit-\nerature focuses on resolving claims to be true or\nfalse (Popat et al., 2018; Thorne and Vlachos, 2018;\nWang, 2017). The surrounding ecosystem, how-\never, includes additional challenges, some of which\nwe explore here: Documents such as Wikipedia ar-\nticles are updated frequently; which edits represent\nfactual changes? For a given claim and (refuting or\nsupporting) evidence pair, which words or phrases\nin the evidence are most relevant? If we know that\na certain claim is tru"
+      },
+      {
+        "pdf_page": 2,
+        "term": "Thorne",
+        "context": "performance on standard tasks;\n4. We show how VITAMIN C opens the door to ad-\nditional research directions in fact veriﬁcation.\n2 Related Work\nFact Veriﬁcation. The FEVER dataset (Thorne\net al., 2018) fueled the development of many fact-\nchecking models (e.g., see Hanselowski et al.,\n2018; Nie et al., 2019a,b; Yoneda et al., 2018, in-\nter alia ). The claim creation process, however,\nrequired crowd-workers to write claims related\nto Wikipedia articles, and was found to engender\nbiases that allow an evidence-agnostic model to\nachieve unexpectedly high performance (Schus-\nter "
+      },
+      {
+        "pdf_page": 2,
+        "term": "Thorne",
+        "context": " et al., 2018; Tsuchiya, 2018)\nare no exception. Alleviating this bias requires ei-\nther modeling solutions (Karimi Mahabadi et al.,\n2020; Pratapa et al., 2020; Shah et al., 2020; Thorne\nand Vlachos, 2020; Utama et al., 2020b), which\nhave limited effectiveness (Utama et al., 2020a),\nor adversarially removing troublesome training ex-\namples (Bras et al., 2020) or manually collecting\nnew ones (Nie et al., 2020; Thorne et al., 2019a),\nwhich is model speciﬁc. Instead, our dataset de-\nsign avoids single-sentence artifacts and provides\nmodel-agnostic challenging examples that inc"
+      },
+      {
+        "pdf_page": 2,
+        "term": "Thorne",
+        "context": "\nhave limited effectiveness (Utama et al., 2020a),\nor adversarially removing troublesome training ex-\namples (Bras et al., 2020) or manually collecting\nnew ones (Nie et al., 2020; Thorne et al., 2019a),\nwhich is model speciﬁc. Instead, our dataset de-\nsign avoids single-sentence artifacts and provides\nmodel-agnostic challenging examples that increase\nthe robustness of trained models.\nExplainability. Current fact veriﬁcation datasets\nprovide sentence-level rationales (DeYoung et al.,\n2020; Petroni et al., 2020) but do not enforce the\nmodel’s verdict to rely on them—leading t"
+      },
+      {
+        "pdf_page": 2,
+        "term": "Thorne",
+        "context": "e use the revision history as distant supervision\nfor word-level rationales, allowing for ﬁner-grained\nexplanations (Camburu et al., 2018; Lei et al., 2016;\nPortelli et al., 2020; Thorne et al., 2019b).\nFactually Consistent Generation. Generating\ntexts that match given facts is a known chal-\nlenge (Fan et al., 2020; Kryscinski et al., 2020;\nLewis et al., 2020b; Parikh et al., 2020; Shah et al.,\n2020; Tian et al., 2020) as language models tend to\ndegenerate and hallucinate (Holtzman et al., 2020;\nSchuster et al., 2020; Zhou et al., 2020). More-\nover, evaluation is non-trivia"
+      },
+      {
+        "pdf_page": 2,
+        "term": "FEVER",
+        "context": "eads to better performance on standard tasks;\n4. We show how VITAMIN C opens the door to ad-\nditional research directions in fact veriﬁcation.\n2 Related Work\nFact Veriﬁcation. The FEVER dataset (Thorne\net al., 2018) fueled the development of many fact-\nchecking models (e.g., see Hanselowski et al.,\n2018; Nie et al., 2019a,b; Yoneda et al., 2018, in-\nter alia ). The claim creation process, however,\nrequired crowd-workers to write claims related\nto Wikipedia articles, and was found to engender\nbiases that allow an evidence-agnostic model to\nachieve unexpectedly high performan"
+      },
+      {
+        "pdf_page": 3,
+        "term": "Thorne",
+        "context": "Wikipedia articles4 as of January 2020, along with\nany additional articles referred from them (on aver-\nage 100 per article). We also included all articles\nfrom the FEVER dataset (Thorne et al., 2018). For\neach article, we retrieved up to 500 of its most re-\ncent revisions. In May 2020, we added all COVID-\n19 related articles5 and all of their 41K revisions at\nthe time. Combined together, this resulted in a total\nof∼200 million revisions. For each revision, we\nidentiﬁed all of the modiﬁed sentences and stored\ntwo versions: (1) before, and (2) after the edit.\nIn our task, we"
+      },
+      {
+        "pdf_page": 3,
+        "term": "FEVER",
+        "context": "viewed English\nWikipedia articles4 as of January 2020, along with\nany additional articles referred from them (on aver-\nage 100 per article). We also included all articles\nfrom the FEVER dataset (Thorne et al., 2018). For\neach article, we retrieved up to 500 of its most re-\ncent revisions. In May 2020, we added all COVID-\n19 related articles5 and all of their 41K revisions at\nthe time. Combined together, this resulted in a total\nof∼200 million revisions. For each revision, we\nidentiﬁed all of the modiﬁed sentences and stored\ntwo versions: (1) before, and (2) after the edit.\n"
+      },
+      {
+        "pdf_page": 4,
+        "term": "Thorne",
+        "context": " the FEVER dataset to augment\nVITAMIN C with synthetic revisions to Wikipedia\nsentences.\nWe follow the setting of Schuster et al. (2019) to\nexpand claim-evidence pairs from FEVER (Thorne\net al., 2018). Speciﬁcally, given a false claim from\nFEVER, we ask annotators to edit the sentence that\nrefutes it so that it will then support the originally\nfalse claim. Additionally, we ask them to write a\nnew claim that is refuted by the new, modiﬁed sen-\ntence, but that is supported by the original version.\nFollowing this method, we obtain two claims where\neach can be supported or refu"
+      },
+      {
+        "pdf_page": 4,
+        "term": "FEVER",
+        "context": "ict of a\nclassiﬁer should change based on the version presented. Modiﬁed words are underlined and colored.\nmemorization, which can help it generalize better.\nTherefore, we use the FEVER dataset to augment\nVITAMIN C with synthetic revisions to Wikipedia\nsentences.\nWe follow the setting of Schuster et al. (2019) to\nexpand claim-evidence pairs from FEVER (Thorne\net al., 2018). Speciﬁcally, given a false claim from\nFEVER, we ask annotators to edit the sentence that\nrefutes it so that it will then support the originally\nfalse claim. Additionally, we ask them to write a\nnew claim"
+      },
+      {
+        "pdf_page": 4,
+        "term": "FEVER",
+        "context": " we use the FEVER dataset to augment\nVITAMIN C with synthetic revisions to Wikipedia\nsentences.\nWe follow the setting of Schuster et al. (2019) to\nexpand claim-evidence pairs from FEVER (Thorne\net al., 2018). Speciﬁcally, given a false claim from\nFEVER, we ask annotators to edit the sentence that\nrefutes it so that it will then support the originally\nfalse claim. Additionally, we ask them to write a\nnew claim that is refuted by the new, modiﬁed sen-\ntence, but that is supported by the original version.\nFollowing this method, we obtain two claims where\neach can be supported "
+      },
+      {
+        "pdf_page": 4,
+        "term": "FEVER",
+        "context": "ions to Wikipedia\nsentences.\nWe follow the setting of Schuster et al. (2019) to\nexpand claim-evidence pairs from FEVER (Thorne\net al., 2018). Speciﬁcally, given a false claim from\nFEVER, we ask annotators to edit the sentence that\nrefutes it so that it will then support the originally\nfalse claim. Additionally, we ask them to write a\nnew claim that is refuted by the new, modiﬁed sen-\ntence, but that is supported by the original version.\nFollowing this method, we obtain two claims where\neach can be supported or refuted by the original, or\nthe synthetically revised, sentence."
+      },
+      {
+        "pdf_page": 4,
+        "term": "FEVER",
+        "context": "cell, respectively.\ntional pairs following the synthetic process. The\ndata was partitioned as shown in Table 2. The\nassignment was done randomly by article, and is\nconsistent with FEVER for overlapping articles.\nAppendix A contains additional details.\n4 V ITAMIN C Tasks\nThe unique structure of VITAMIN C allows us to\nderive annotations that provide a novel source of su-\npervision for several fact-veriﬁcation-related tasks.\nWe describe the four main tasks we consider in this\nwork, along with baseline models: (1) factual revi-\nsion ﬂagging, (2) fact veriﬁcation, (3) word-level"
+      },
+      {
+        "pdf_page": 5,
+        "term": "FEVER",
+        "context": "rmer (Lan\net al., 2020) using either only the edited words\n(diff), or the full sentence pair (full).\n4.2 Fact Veriﬁcation\nOur basic setting is similar to the inference\ntask of the FEVER dataset. 8 We predict the\nverdict for a claim given an observed evi-\ndence, fverdict : C×S → { SUP, REF, NEI}.\nThe FEVER dataset, however, contains inde-\npendent claim-evidence pairs. In our setting,\nwe have claims paired with revisions such that\nrel(ci,st−1) ⁄= rel( ci,st), creating contrastive\ntriplets. For example, the claim in Figure 2 states\nthat the COVID-19 outbreak was identiﬁed befo"
+      },
+      {
+        "pdf_page": 5,
+        "term": "FEVER",
+        "context": "\nOur basic setting is similar to the inference\ntask of the FEVER dataset. 8 We predict the\nverdict for a claim given an observed evi-\ndence, fverdict : C×S → { SUP, REF, NEI}.\nThe FEVER dataset, however, contains inde-\npendent claim-evidence pairs. In our setting,\nwe have claims paired with revisions such that\nrel(ci,st−1) ⁄= rel( ci,st), creating contrastive\ntriplets. For example, the claim in Figure 2 states\nthat the COVID-19 outbreak was identiﬁed before\nDecember. VITAMIN C matches it with two differ-\nent contexts (before and after the presented revi-\nsion), that can eit"
+      },
+      {
+        "pdf_page": 6,
+        "term": "Thorne",
+        "context": " by provid-\ning supervision for anchoring words?\n5.1 Related Datasets\nIn addition to VITAMIN C, we train and evaluate on\nseveral related datasets, which we brieﬂy describe:\nFEVER (Thorne et al., 2018): A popular fact ver-\niﬁcation dataset based on Wikipedia. We use the\nprovided SUP and REF claim-evidence pairs. For\nNEI claims, we randomly sample neutral evidence\nfrom the article with the highest BM25 score (Fisch\net al., 2021).\nMNLI (Williams et al., 2018): A large and diverse\ndataset for natural language inference. The three-\nway sentence-pair entailment prediction is simi"
+      },
+      {
+        "pdf_page": 6,
+        "term": "Thorne",
+        "context": "matched” evaluation set.\nSymmetric (Schuster et al., 2019): A set of\nchallenging symmetric, synthetic extensions to\nFEVER’s evaluation set that avoid claim-only bias.\nAdversarial (Thorne et al., 2019c): Adversarial\nexamples created by participants of the FEVER 2.0\nshared task. Teams were asked to create claims that"
+      },
+      {
+        "pdf_page": 6,
+        "term": "FEVER",
+        "context": "ability by provid-\ning supervision for anchoring words?\n5.1 Related Datasets\nIn addition to VITAMIN C, we train and evaluate on\nseveral related datasets, which we brieﬂy describe:\nFEVER (Thorne et al., 2018): A popular fact ver-\niﬁcation dataset based on Wikipedia. We use the\nprovided SUP and REF claim-evidence pairs. For\nNEI claims, we randomly sample neutral evidence\nfrom the article with the highest BM25 score (Fisch\net al., 2021).\nMNLI (Williams et al., 2018): A large and diverse\ndataset for natural language inference. The three-\nway sentence-pair entailment prediction "
+      },
+      {
+        "pdf_page": 6,
+        "term": "FEVER",
+        "context": "e\nclaim and the premise as the evidence and evaluate\non the “mismatched” evaluation set.\nSymmetric (Schuster et al., 2019): A set of\nchallenging symmetric, synthetic extensions to\nFEVER’s evaluation set that avoid claim-only bias.\nAdversarial (Thorne et al., 2019c): Adversarial\nexamples created by participants of the FEVER 2.0\nshared task. Teams were asked to create claims that"
+      },
+      {
+        "pdf_page": 6,
+        "term": "FEVER",
+        "context": "nging symmetric, synthetic extensions to\nFEVER’s evaluation set that avoid claim-only bias.\nAdversarial (Thorne et al., 2019c): Adversarial\nexamples created by participants of the FEVER 2.0\nshared task. Teams were asked to create claims that"
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": " 82.63 84.49 83.18\nTable 3: Factual revision ﬂagging scores for models\naware of the full sentence-pair (full) and aware only of\nthe modiﬁed words (diff). We use ALBERT-base.\nbreak FEVER-trained models. We take all SUP\nand REF claims and their gold evidence sentences.\nTriggers (Atanasova et al., 2020): A set of 186\nFEVER claims paraphrased adversarially to con-\ntain universal adversarial triggers (Wallace et al.,\n2019). Its small size leads to high variance results.\nANLI (Nie et al., 2020): An adversarial dataset for\nMNLI- and FEVER-based models. The creation\nwas performed i"
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": "ﬁed words (diff). We use ALBERT-base.\nbreak FEVER-trained models. We take all SUP\nand REF claims and their gold evidence sentences.\nTriggers (Atanasova et al., 2020): A set of 186\nFEVER claims paraphrased adversarially to con-\ntain universal adversarial triggers (Wallace et al.,\n2019). Its small size leads to high variance results.\nANLI (Nie et al., 2020): An adversarial dataset for\nMNLI- and FEVER-based models. The creation\nwas performed in three iterative rounds in which a\nmodel was trained, and then crowdworkers devised\nadversarial inputs, and the process repeated.\nPA WS"
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": "ly to con-\ntain universal adversarial triggers (Wallace et al.,\n2019). Its small size leads to high variance results.\nANLI (Nie et al., 2020): An adversarial dataset for\nMNLI- and FEVER-based models. The creation\nwas performed in three iterative rounds in which a\nmodel was trained, and then crowdworkers devised\nadversarial inputs, and the process repeated.\nPA WS(Zhang et al., 2019): A dataset of al-\ntered Wikipedia sentences using word swapping\nand back-translation. Human annotators labeled\nwhether the modiﬁed sentence is a paraphrase or\nnot. We evaluate whether a PAWS-trai"
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": "UC by 2 points.\nNevertheless, the best model still only reaches 83\nFigure 3: Test accuracy of models trained on a\ndataset of 100K combined SUP and REF examples\nfrom V ITAMIN C and FEVER. The higher the ratio of\nVITAMIN C in the training data, the better the perfor-\nmance on adversarial evaluation sets (solid lines). The\nshaded areas represent standard error across three runs.\nmacro-F1, indicating the difﬁculty of this task.\n5.3 Fact Veriﬁcation\nTable 4 summarizes the results for classiﬁers\ntrained on fact veriﬁcation and NLI datasets. Veri-\nfying claims against real revisio"
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": "ts. Veri-\nfying claims against real revisions proves to be the\nhardest. The best model achieves 89% accuracy,\nlower than that on either VITAMIN C’s synthetic\ncases or the original FEVER examples. Including\nVITAMIN C examples in the training data drasti-\ncally increases models’ sensitivity to contrastive\nexamples (rightmost column)—while preserving\nthe in-domain accuracy (only−0.42% for FEVER\nand +0.12% for MNLI with ALBERT-xlarge). An-\nother evidence for the generalization properties con-\nferred by VITAMIN C is its zero-shot performance\nto both other datsets. An ALBERT-xlar"
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": "AMIN C examples in the training data drasti-\ncally increases models’ sensitivity to contrastive\nexamples (rightmost column)—while preserving\nthe in-domain accuracy (only−0.42% for FEVER\nand +0.12% for MNLI with ALBERT-xlarge). An-\nother evidence for the generalization properties con-\nferred by VITAMIN C is its zero-shot performance\nto both other datsets. An ALBERT-xlarge model\ntrained only on VITAMIN C reaches 76% and 79%\naccuracy on FEVER and MNLI, respectively. In\ncontrast, the transfer accuracy for MNLI→FEVER\nis 70% and for FEVER→MNLI is only 38%.\nMost importantly, model"
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": "ralization properties con-\nferred by VITAMIN C is its zero-shot performance\nto both other datsets. An ALBERT-xlarge model\ntrained only on VITAMIN C reaches 76% and 79%\naccuracy on FEVER and MNLI, respectively. In\ncontrast, the transfer accuracy for MNLI→FEVER\nis 70% and for FEVER→MNLI is only 38%.\nMost importantly, models trained with VITA-\nMIN C perform better on challenging adversarial\ndatasets. On the otherhand, simply augmenting\nFEVER data with MNLI data has a limited ef-\nfect on adversarial examples.10 We conjecture that\nthe contrastive nature of VITAMIN C helps models"
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": "e\nto both other datsets. An ALBERT-xlarge model\ntrained only on VITAMIN C reaches 76% and 79%\naccuracy on FEVER and MNLI, respectively. In\ncontrast, the transfer accuracy for MNLI→FEVER\nis 70% and for FEVER→MNLI is only 38%.\nMost importantly, models trained with VITA-\nMIN C perform better on challenging adversarial\ndatasets. On the otherhand, simply augmenting\nFEVER data with MNLI data has a limited ef-\nfect on adversarial examples.10 We conjecture that\nthe contrastive nature of VITAMIN C helps models\nbetter learn the relations between the claims and\nevidences—and to avoid "
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": "ts. An ALBERT-xlarge model\ntrained only on VITAMIN C reaches 76% and 79%\naccuracy on FEVER and MNLI, respectively. In\ncontrast, the transfer accuracy for MNLI→FEVER\nis 70% and for FEVER→MNLI is only 38%.\nMost importantly, models trained with VITA-\nMIN C perform better on challenging adversarial\ndatasets. On the otherhand, simply augmenting\nFEVER data with MNLI data has a limited ef-\nfect on adversarial examples.10 We conjecture that\nthe contrastive nature of VITAMIN C helps models\nbetter learn the relations between the claims and\nevidences—and to avoid relying on certain ar"
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": "ER\nis 70% and for FEVER→MNLI is only 38%.\nMost importantly, models trained with VITA-\nMIN C perform better on challenging adversarial\ndatasets. On the otherhand, simply augmenting\nFEVER data with MNLI data has a limited ef-\nfect on adversarial examples.10 We conjecture that\nthe contrastive nature of VITAMIN C helps models\nbetter learn the relations between the claims and\nevidences—and to avoid relying on certain artifacts\nthat do not generalize well.\nTo further probe the value of VITAMIN C exam-\nples compared to FEVER ones ( SUP and REF\n10We’ve also tried augmenting FEVER w"
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": "he relations between the claims and\nevidences—and to avoid relying on certain artifacts\nthat do not generalize well.\nTo further probe the value of VITAMIN C exam-\nples compared to FEVER ones ( SUP and REF\n10We’ve also tried augmenting FEVER with ANLI for an\nALBERT-xlarge model and ﬁnd it to achieve only 73%,\n91%, and 34% on Adver., Sym., and Triggers, respectively."
+      },
+      {
+        "pdf_page": 7,
+        "term": "FEVER",
+        "context": "oid relying on certain artifacts\nthat do not generalize well.\nTo further probe the value of VITAMIN C exam-\nples compared to FEVER ones ( SUP and REF\n10We’ve also tried augmenting FEVER with ANLI for an\nALBERT-xlarge model and ﬁnd it to achieve only 73%,\n91%, and 34% on Adver., Sym., and Triggers, respectively."
+      },
+      {
+        "pdf_page": 8,
+        "term": "FEVER",
+        "context": "631\nModel Train dataset VitC real VitC syn FEVER MNLI Adver. Sym. Triggers ANLI Contrast\nALBERT-\nbase\nFEVER 54.78 79.18 95.07 58.45 62.01 81.18 3.33 32.94 55.53\nMNLI 44.93 69.67 65.70 85.22 49.61 72.89 68.82 30.63 56.67\nFEVER + MNLI 55.93 82.26 95.62 85.58 63.97 85.67 38.71 30.59 61.90\nVitC 86.16 89.78 74.56 69.18 71.41 90.17 86.67 37.25 84.11\nVitC + MNLI 86.68 91.18 77.70 85.95 69.58 91.15 70.97 34.31 85.61\nVitC + FEVER 86.26 91.05 94.24 "
+      },
+      {
+        "pdf_page": 8,
+        "term": "FEVER",
+        "context": "631\nModel Train dataset VitC real VitC syn FEVER MNLI Adver. Sym. Triggers ANLI Contrast\nALBERT-\nbase\nFEVER 54.78 79.18 95.07 58.45 62.01 81.18 3.33 32.94 55.53\nMNLI 44.93 69.67 65.70 85.22 49.61 72.89 68.82 30.63 56.67\nFEVER + MNLI 55.93 82.26 95.62 85.58 63.97 85.67 38.71 30.59 61.90\nVitC 86.16 89.78 74.56 69.18 71.41 90.17 86.67 37.25 84.11\nVitC + MNLI 86.68 91.18 77.70 85.95 69.58 91.15 70.97 34.31 85.61\nVitC + FEVER 86.26 91.05 94.24 68.90 68.80 91.57 72.04 38.50 85.89\nALBERT-\nxlarge\nFEVER 58"
+      },
+      {
+        "pdf_page": 8,
+        "term": "FEVER",
+        "context": "yn FEVER MNLI Adver. Sym. Triggers ANLI Contrast\nALBERT-\nbase\nFEVER 54.78 79.18 95.07 58.45 62.01 81.18 3.33 32.94 55.53\nMNLI 44.93 69.67 65.70 85.22 49.61 72.89 68.82 30.63 56.67\nFEVER + MNLI 55.93 82.26 95.62 85.58 63.97 85.67 38.71 30.59 61.90\nVitC 86.16 89.78 74.56 69.18 71.41 90.17 86.67 37.25 84.11\nVitC + MNLI 86.68 91.18 77.70 85.95 69.58 91.15 70.97 34.31 85.61\nVitC + FEVER 86.26 91.05 94.24 68.90 68.80 91.57 72.04 38.50 85.89\nALBERT-\nxlarge\nFEVER 58.56 84.22 96.47 38.33 72.58 87.08 32.80 36.03 64.59\nMNLI 49.26 74.58 70.47 88.91 53.52 78.65 72.58 36.38 63.41\nFEVER +"
+      },
+      {
+        "pdf_page": 8,
+        "term": "FEVER",
+        "context": "82.26 95.62 85.58 63.97 85.67 38.71 30.59 61.90\nVitC 86.16 89.78 74.56 69.18 71.41 90.17 86.67 37.25 84.11\nVitC + MNLI 86.68 91.18 77.70 85.95 69.58 91.15 70.97 34.31 85.61\nVitC + FEVER 86.26 91.05 94.24 68.90 68.80 91.57 72.04 38.50 85.89\nALBERT-\nxlarge\nFEVER 58.56 84.22 96.47 38.33 72.58 87.08 32.80 36.03 64.59\nMNLI 49.26 74.58 70.47 88.91 53.52 78.65 72.58 36.38 63.41\nFEVER + MNLI 61.21 86.81 96.81 89.04 69.97 89.75 43.55 37.66 70.44\nVitC 88.64 93.84 75.99 78.89 82.51 94.80 67.20 42.66 89.57\nVitC + MNLI 88.69 93.92 76.80 89.03 80.81 94.80 67.20 40.09 89.80\nVitC + FEVER 8"
+      },
+      {
+        "pdf_page": 8,
+        "term": "FEVER",
+        "context": "8 71.41 90.17 86.67 37.25 84.11\nVitC + MNLI 86.68 91.18 77.70 85.95 69.58 91.15 70.97 34.31 85.61\nVitC + FEVER 86.26 91.05 94.24 68.90 68.80 91.57 72.04 38.50 85.89\nALBERT-\nxlarge\nFEVER 58.56 84.22 96.47 38.33 72.58 87.08 32.80 36.03 64.59\nMNLI 49.26 74.58 70.47 88.91 53.52 78.65 72.58 36.38 63.41\nFEVER + MNLI 61.21 86.81 96.81 89.04 69.97 89.75 43.55 37.66 70.44\nVitC 88.64 93.84 75.99 78.89 82.51 94.80 67.20 42.66 89.57\nVitC + MNLI 88.69 93.92 76.80 89.03 80.81 94.80 67.20 40.09 89.80\nVitC + FEVER 88.87 94.01 96.05 62.30 80.94 94.80 65.59 40.31 90.94\nTable 4: Test accuracy"
+      },
+      {
+        "pdf_page": 8,
+        "term": "FEVER",
+        "context": ".05 94.24 68.90 68.80 91.57 72.04 38.50 85.89\nALBERT-\nxlarge\nFEVER 58.56 84.22 96.47 38.33 72.58 87.08 32.80 36.03 64.59\nMNLI 49.26 74.58 70.47 88.91 53.52 78.65 72.58 36.38 63.41\nFEVER + MNLI 61.21 86.81 96.81 89.04 69.97 89.75 43.55 37.66 70.44\nVitC 88.64 93.84 75.99 78.89 82.51 94.80 67.20 42.66 89.57\nVitC + MNLI 88.69 93.92 76.80 89.03 80.81 94.80 67.20 40.09 89.80\nVitC + FEVER 88.87 94.01 96.05 62.30 80.94 94.80 65.59 40.31 90.94\nTable 4: Test accuracy of fact veriﬁcation and NLI models. V ITAMIN C-trained models are more robust to adver-\nsarial examples and more sensi"
+      },
+      {
+        "pdf_page": 8,
+        "term": "FEVER",
+        "context": "86.81 96.81 89.04 69.97 89.75 43.55 37.66 70.44\nVitC 88.64 93.84 75.99 78.89 82.51 94.80 67.20 42.66 89.57\nVitC + MNLI 88.69 93.92 76.80 89.03 80.81 94.80 67.20 40.09 89.80\nVitC + FEVER 88.87 94.01 96.05 62.30 80.94 94.80 65.59 40.31 90.94\nTable 4: Test accuracy of fact veriﬁcation and NLI models. V ITAMIN C-trained models are more robust to adver-\nsarial examples and more sensitive to contrastive contexts. The rightmost column shows the percent of FEVER\nclaims in which the prediction ﬂipped when presented with contrastive contexts.\nToken Edit prediction Word-level rational"
+      },
+      {
+        "pdf_page": 8,
+        "term": "FEVER",
+        "context": "riﬁcation and NLI models. V ITAMIN C-trained models are more robust to adver-\nsarial examples and more sensitive to contrastive contexts. The rightmost column shows the percent of FEVER\nclaims in which the prediction ﬂipped when presented with contrastive contexts.\nToken Edit prediction Word-level rationales\nlabels Prec. Rec. F1 Prec. Rec. F1\n- 31.93 30.56 31.23 31.11 46.64 37.33\n✓ 55.93 62.68 59.11 36.92 66.03 47.36\nTable 5: The distant token-level supervision of VITAM-\nINC improves the edit prediction, and as result identi-\nﬁes the anchoring words (rationales) more accura"
+      },
+      {
+        "pdf_page": 11,
+        "term": "FEVER",
+        "context": "a Schulz, and\nIryna Gurevych. 2018. UKP-athene: Multi-sentence\ntextual entailment for claim veriﬁcation. In Pro-\nceedings of the First Workshop on Fact Extraction\nand VERiﬁcation (FEVER) , pages 103–108, Brus-\nsels, Belgium. Association for Computational Lin-\nguistics.\nAri Holtzman, Jan Buys, Li Du, Maxwell Forbes, and\nYejin Choi. 2020. The curious case of neural text de-\ngeneration. In International Conference on Learn-\ning Representations.\nAlon Jacovi and Yoav Goldberg. 2020. Towards faith-\nfully interpretable NLP systems: How should we de-\nﬁne and evaluate faithfulness? "
+      },
+      {
+        "pdf_page": 12,
+        "term": "Thorne",
+        "context": "ence, pages\n6883–6888, Marseille, France. European Language\nResources Association.\nFabio Petroni, Aleksandra Piktus, Angela Fan, Patrick\nLewis, Majid Yazdani, Nicola De Cao, James\nThorne, Yacine Jernite, Vassilis Plachouras, Tim\nRocktäschel, and Sebastian Riedel. 2020. Kilt: a\nbenchmark for knowledge intensive language tasks.\nFabio Petroni, Tim Rocktäschel, Sebastian Riedel,\nPatrick Lewis, Anton Bakhtin, Yuxiang Wu, and\nAlexander Miller. 2019. Language models as knowl-\nedge bases? In Proceedings of the 2019 Confer-\nence on Empirical Methods in Natural Language\nProcessing an"
+      },
+      {
+        "pdf_page": 12,
+        "term": "FEVER",
+        "context": ", Giuseppe\nSerra, and Enrico Santus. 2020. Distilling the evi-\ndence to augment fact veriﬁcation models. In Pro-\nceedings of the Third Workshop on Fact Extraction\nand VERiﬁcation (FEVER) , pages 47–51, Online.\nAssociation for Computational Linguistics.\nAdithya Pratapa, Sai Muralidhar Jayanthi, and Kavya\nNerella. 2020. Constrained Fact Veriﬁcation for\nFEVER. In Proceedings of the 2020 Conference\non Empirical Methods in Natural Language Process-\ning (EMNLP) , pages 7826–7832, Online. Associa-\ntion for Computational Linguistics.\nColin Raffel, Noam Shazeer, Adam Roberts, Kather"
+      },
+      {
+        "pdf_page": 12,
+        "term": "FEVER",
+        "context": "ation (FEVER) , pages 47–51, Online.\nAssociation for Computational Linguistics.\nAdithya Pratapa, Sai Muralidhar Jayanthi, and Kavya\nNerella. 2020. Constrained Fact Veriﬁcation for\nFEVER. In Proceedings of the 2020 Conference\non Empirical Methods in Natural Language Process-\ning (EMNLP) , pages 7826–7832, Online. Associa-\ntion for Computational Linguistics.\nColin Raffel, Noam Shazeer, Adam Roberts, Katherine\nLee, Sharan Narang, Michael Matena, Yanqi Zhou,\nW. Li, and Peter J. Liu. 2020. Exploring the limits\nof transfer learning with a uniﬁed text-to-text trans-\nformer. J. Mac"
+      },
+      {
+        "pdf_page": 13,
+        "term": "Thorne",
+        "context": "636\nJames Thorne and Andreas Vlachos. 2018. Automated\nfact checking: Task formulations, methods and fu-\nture directions. In Proceedings of the 27th Inter-\nnational Conference on Computational Linguistics ,\npages 3346–3359, Santa Fe, New Mexico, USA. As-\nsociation for Computational Linguistics.\nJames Thorne and Andreas Vlachos. 2020. Avoiding\ncatastrophic forgetting in mitigating model biases in\nsentence-pai"
+      },
+      {
+        "pdf_page": 13,
+        "term": "Thorne",
+        "context": "In Proceedings of the 27th Inter-\nnational Conference on Computational Linguistics ,\npages 3346–3359, Santa Fe, New Mexico, USA. As-\nsociation for Computational Linguistics.\nJames Thorne and Andreas Vlachos. 2020. Avoiding\ncatastrophic forgetting in mitigating model biases in\nsentence-pair classiﬁcation with elastic weight con-\nsolidation.\nJames Thorne, Andreas Vlachos, Christos\nChristodoulopoulos, and Arpit Mittal. 2018.\nFEVER: a large-scale dataset for fact extraction\nand VERiﬁcation. In Proceedings of the 2018\nConference of the North American Chapter of\nthe Association f"
+      },
+      {
+        "pdf_page": 13,
+        "term": "Thorne",
+        "context": "tics.\nJames Thorne and Andreas Vlachos. 2020. Avoiding\ncatastrophic forgetting in mitigating model biases in\nsentence-pair classiﬁcation with elastic weight con-\nsolidation.\nJames Thorne, Andreas Vlachos, Christos\nChristodoulopoulos, and Arpit Mittal. 2018.\nFEVER: a large-scale dataset for fact extraction\nand VERiﬁcation. In Proceedings of the 2018\nConference of the North American Chapter of\nthe Association for Computational Linguistics:\nHuman Language Technologies, Volume 1 (Long\nPapers), pages 809–819, New Orleans, Louisiana.\nAssociation for Computational Linguistics.\nJam"
+      },
+      {
+        "pdf_page": 13,
+        "term": "Thorne",
+        "context": "ciation for Computational Linguistics:\nHuman Language Technologies, Volume 1 (Long\nPapers), pages 809–819, New Orleans, Louisiana.\nAssociation for Computational Linguistics.\nJames Thorne, Andreas Vlachos, Christos\nChristodoulopoulos, and Arpit Mittal. 2019a.\nEvaluating adversarial attacks against multiple\nfact veriﬁcation systems. In Proceedings of the\n2019 Conference on Empirical Methods in Natural\nLanguage Processing and the 9th International\nJoint Conference on Natural Language Processing\n(EMNLP-IJCNLP), pages 2944–2953, Hong Kong,\nChina. Association for Computational Li"
+      },
+      {
+        "pdf_page": 13,
+        "term": "Thorne",
+        "context": "ssing and the 9th International\nJoint Conference on Natural Language Processing\n(EMNLP-IJCNLP), pages 2944–2953, Hong Kong,\nChina. Association for Computational Linguistics.\nJames Thorne, Andreas Vlachos, Christos\nChristodoulopoulos, and Arpit Mittal. 2019b.\nGenerating token-level explanations for natural\nlanguage inference. In Proceedings of the 2019\nConference of the North American Chapter of the\nAssociation for Computational Linguistics: Human\nLanguage Technologies, Volume 1 (Long and Short\nPapers), pages 963–969, Minneapolis, Minnesota.\nAssociation for Computational Lin"
+      },
+      {
+        "pdf_page": 13,
+        "term": "Thorne",
+        "context": "r Computational Linguistics: Human\nLanguage Technologies, Volume 1 (Long and Short\nPapers), pages 963–969, Minneapolis, Minnesota.\nAssociation for Computational Linguistics.\nJames Thorne, Andreas Vlachos, Oana Cocarascu,\nChristos Christodoulopoulos, and Arpit Mittal.\n2019c. The FEVER2.0 shared task. In Proceed-\nings of the Second Workshop on Fact Extraction\nand VERiﬁcation (FEVER), pages 1–6, Hong Kong,\nChina. Association for Computational Linguistics.\nRan Tian, Shashi Narayan, Thibault Sellam, and\nAnkur P. Parikh. 2020. Sticking to the facts: Con-\nﬁdent decoding for faithf"
+      },
+      {
+        "pdf_page": 13,
+        "term": "FEVER",
+        "context": " in mitigating model biases in\nsentence-pair classiﬁcation with elastic weight con-\nsolidation.\nJames Thorne, Andreas Vlachos, Christos\nChristodoulopoulos, and Arpit Mittal. 2018.\nFEVER: a large-scale dataset for fact extraction\nand VERiﬁcation. In Proceedings of the 2018\nConference of the North American Chapter of\nthe Association for Computational Linguistics:\nHuman Language Technologies, Volume 1 (Long\nPapers), pages 809–819, New Orleans, Louisiana.\nAssociation for Computational Linguistics.\nJames Thorne, Andreas Vlachos, Christos\nChristodoulopoulos, and Arpit Mittal. 201"
+      },
+      {
+        "pdf_page": 13,
+        "term": "FEVER",
+        "context": "63–969, Minneapolis, Minnesota.\nAssociation for Computational Linguistics.\nJames Thorne, Andreas Vlachos, Oana Cocarascu,\nChristos Christodoulopoulos, and Arpit Mittal.\n2019c. The FEVER2.0 shared task. In Proceed-\nings of the Second Workshop on Fact Extraction\nand VERiﬁcation (FEVER), pages 1–6, Hong Kong,\nChina. Association for Computational Linguistics.\nRan Tian, Shashi Narayan, Thibault Sellam, and\nAnkur P. Parikh. 2020. Sticking to the facts: Con-\nﬁdent decoding for faithful data-to-text generation.\nMasatoshi Tsuchiya. 2018. Performance impact\ncaused by hidden bias of t"
+      },
+      {
+        "pdf_page": 13,
+        "term": "FEVER",
+        "context": "lachos, Oana Cocarascu,\nChristos Christodoulopoulos, and Arpit Mittal.\n2019c. The FEVER2.0 shared task. In Proceed-\nings of the Second Workshop on Fact Extraction\nand VERiﬁcation (FEVER), pages 1–6, Hong Kong,\nChina. Association for Computational Linguistics.\nRan Tian, Shashi Narayan, Thibault Sellam, and\nAnkur P. Parikh. 2020. Sticking to the facts: Con-\nﬁdent decoding for faithful data-to-text generation.\nMasatoshi Tsuchiya. 2018. Performance impact\ncaused by hidden bias of training data for recog-\nnizing textual entailment. In Proceedings of the\nEleventh International Co"
+      },
+      {
+        "pdf_page": 14,
+        "term": "Thorne",
+        "context": "issκ score (Fleiss, 1971) between the\nfour annotations is 0.7065, which means substantial\nagreement. Similar agreement scores of 0.6841 and\n0.7 were reported for fact veriﬁcation (Thorne et al.,\n2018) and NLI datasets (Bowman et al., 2015), re-\nspectively.\nA.3 Claim-only Classiﬁcation\nAnnotation artifacts are common in crowd-sourced\nsentence-pair inference datasets such as fact veriﬁ-\ncation and NLI. Models can leverage these idiosyn-\ncrasies to achieve unexpectedly high performance\nwhen given only one sentence of the pair. For exam-\nple, Schuster et al. (2019) showed that "
+      },
+      {
+        "pdf_page": 14,
+        "term": "FEVER",
+        "context": "637\nﬁnding (HexaF). In Proceedings of the First Work-\nshop on Fact Extraction and VERiﬁcation (FEVER),\npages 97–102, Brussels, Belgium. Association for\nComputational Linguistics.\nYuan Zhang, Jason Baldridge, and Luheng He. 2019.\nPAWS: Paraphrase adversaries from word scram-\nbling. In Proceedings of the 2019 Conference of\nthe North American Chapter of the Association for\nComputational Linguistics: Human Language Tech-\nnologies, Volume 1 (Long and Short Papers), pages\n1298–1308, Minneapolis, "
+      },
+      {
+        "pdf_page": 14,
+        "term": "FEVER",
+        "context": "parent class of the pages. Labels for\nabout 25% of the articles were missing, and left\nblank in the diagram.\nThe “synthetic” part of VITAMIN C, which is\nbased on the claims of the FEVER dataset, contains\nmany claims about speciﬁc human entities. About\n15% of the claims in VITAMIN C real are about\nCOVID-19.\nCategory Distribution. We sample 100 examples\nfrom the “real” and “synthetic” subsets of VITA-\nMIN C and manually categorize their claims. The\nresults are presented in Table A.1. Due to the cre-\nation methodology of VITAMIN C real, its claims\nmostly describe frequently up"
+      },
+      {
+        "pdf_page": 14,
+        "term": "FEVER",
+        "context": " synthetic mostly covers general\nfacts about speciﬁc entities, (e.g., place of birth,\ndate of birth, occupation, etc.). This is a result of\nthe synthetic claims being based on the FEVER\ndataset, where annotators were asked to come up\nwith claims on popular Wikipedia pages. Com-\nbined, the VITAMIN C dataset holds a diverse set of\nclaims about various topics.\n12http://dbpedia.org/ontology/\nVitC real\nWorkPerson\nDisease\nOrganisation\nPlace\nEvent\nFilm\nMusicalWork\nSoftware\nVideoGam\ne\nTelevisionShow\nAthlete\nArtist\nOﬃceHolder\nFictionalCharacter\nWriter\nComedian\nRoyalty\nCriminal\nScien"
+      },
+      {
+        "pdf_page": 15,
+        "term": "FEVER",
+        "context": "laims from the development split of the real and synthetic subsets. An example claim from each category\nis provided for reference.\n(a) VITAMIN C real\n (b) VITAMIN C synthetic\n (c) FEVER\nFigure A.2: Probability density function of claim-evidence overlap for different labels in the dataset. The overlap\nis computed as the ratio of mutual bigrams in the two sentences.\nAll claims in theVITAMIN C-synthetic are paired\nwith one refuting and one supporting evidence,\nmaking it impossible for a claim-only to perform\nbetter than random. Each claim in the VITAM -\nINC-real is paired with"
+      },
+      {
+        "pdf_page": 15,
+        "term": "FEVER",
+        "context": "es from the evidence to the claim\n(see §3.2).\nFigure A.2 shows the probability density func-\ntion of bigram overlaps between the claim and ev-\nidence for each relation. Similar to FEVER, the\noverlap ratio of supporting pairs in the VITAMIN C\ndataset is only slightly higher than the one of refut-\ning pairs. Also, the overlap ratio of the NEI pairs\nof the VITAMIN C real dataset is on average higher\nthan FEVER.\nB Experimental Setting\nWe implement all our models with the Hugging-\nFace Transformers library (Wolf et al., 2019).\nWhen comparing across training datasets of differ-\ne"
+      },
+      {
+        "pdf_page": 15,
+        "term": "FEVER",
+        "context": "in the VITAMIN C\ndataset is only slightly higher than the one of refut-\ning pairs. Also, the overlap ratio of the NEI pairs\nof the VITAMIN C real dataset is on average higher\nthan FEVER.\nB Experimental Setting\nWe implement all our models with the Hugging-\nFace Transformers library (Wolf et al., 2019).\nWhen comparing across training datasets of differ-\nent sizes, we train the model for the same amount\nof update steps, upsampling the smaller datasets.\nWe pick the checkpoint with the highest accu-\nracy on the development set of the training task\nand report performance on the t"
+      },
+      {
+        "pdf_page": 19,
+        "term": "FEVER",
+        "context": "<prediction>\nFigure C.3: The prompt used for GPT-3 few-shot fact veriﬁcation predictions on numerical claims (examples 1\nand 3 in Table C.1.\nModel Train dataset VitC real VitC syn FEVER MNLI Adversarial Symmetric Triggers ANLI Contrast\nBERT-base\nFEVER 60.55 71.35 87.16 61.90 52.09 73.60 69.89 34.53 54.05\nMNLI 46.31 69.01 70.06 83.80 50.13 73.88 65.05 26.88 51.92\nFEVER + MNLI 56.24 81.80 95.59 85.06 63.05 85.11 37.63 29.63 60.63\nVitC 85.80 90.63 74.21 66.66 76.24 90.17 63.98 33.19 72.49\nVitC + MNLI 84.47 91.00 74.88 83.70 63.05 84.55 66.13 31.00 84.88\nVitC + FEVER 84.72 89.1"
+      },
+      {
+        "pdf_page": 19,
+        "term": "FEVER",
+        "context": "eriﬁcation predictions on numerical claims (examples 1\nand 3 in Table C.1.\nModel Train dataset VitC real VitC syn FEVER MNLI Adversarial Symmetric Triggers ANLI Contrast\nBERT-base\nFEVER 60.55 71.35 87.16 61.90 52.09 73.60 69.89 34.53 54.05\nMNLI 46.31 69.01 70.06 83.80 50.13 73.88 65.05 26.88 51.92\nFEVER + MNLI 56.24 81.80 95.59 85.06 63.05 85.11 37.63 29.63 60.63\nVitC 85.80 90.63 74.21 66.66 76.24 90.17 63.98 33.19 72.49\nVitC + MNLI 84.47 91.00 74.88 83.70 63.05 84.55 66.13 31.00 84.88\nVitC + FEVER 84.72 89.16 87.55 69.28 64.75 90.73 72.58 34.06 84.01\nTable D.1: Fact verifc"
+      },
+      {
+        "pdf_page": 19,
+        "term": "FEVER",
+        "context": " MNLI Adversarial Symmetric Triggers ANLI Contrast\nBERT-base\nFEVER 60.55 71.35 87.16 61.90 52.09 73.60 69.89 34.53 54.05\nMNLI 46.31 69.01 70.06 83.80 50.13 73.88 65.05 26.88 51.92\nFEVER + MNLI 56.24 81.80 95.59 85.06 63.05 85.11 37.63 29.63 60.63\nVitC 85.80 90.63 74.21 66.66 76.24 90.17 63.98 33.19 72.49\nVitC + MNLI 84.47 91.00 74.88 83.70 63.05 84.55 66.13 31.00 84.88\nVitC + FEVER 84.72 89.16 87.55 69.28 64.75 90.73 72.58 34.06 84.01\nTable D.1: Fact verifcation Complementrary results for Table 4 with a BERT-base model.\nClaim the youtube channel chuchu tv is placed 42nd and"
+      },
+      {
+        "pdf_page": 19,
+        "term": "FEVER",
+        "context": "81.80 95.59 85.06 63.05 85.11 37.63 29.63 60.63\nVitC 85.80 90.63 74.21 66.66 76.24 90.17 63.98 33.19 72.49\nVitC + MNLI 84.47 91.00 74.88 83.70 63.05 84.55 66.13 31.00 84.88\nVitC + FEVER 84.72 89.16 87.55 69.28 64.75 90.73 72.58 34.06 84.01\nTable D.1: Fact verifcation Complementrary results for Table 4 with a BERT-base model.\nClaim the youtube channel chuchu tv is placed 42nd and has more than 25 million subscribers .\nEvidence chuchu tv is the 43rd most subscribed youtube channel in the world , with over 20 million subscribers .\nClaim the ramus has sold less than 4.5 million"
+      }
+    ]
+  },
+  {
+    "source_paper_id": "multifc",
+    "target_paper_id": "fever",
+    "review_status": "machine_candidate",
+    "citation_confirmed": null,
+    "intent_labels": [],
+    "hits": [
+      {
+        "pdf_page": 1,
+        "term": "Thorne",
+        "context": "ets consisting of naturally occurring claims\n(e.g. Mihalcea and Strapparava (2009); Zubiaga\net al. (2016)), or datasets consisting of artiﬁcially\nconstructed claims such as FEVER (Thorne et al.,\n2018). While the latter offer valuable contribu-\ntions to further automatic claim veriﬁcation work,\nthey cannot replace real-world datasets.\nFeature Value\nClaimID farg-00004\nClaim Mexico and Canada assemble\ncars with foreign parts and send\nthem to the U.S. with no tax.\nLabel distorts\nClaim URL https://www.factcheck.org/2018/\n10/factchecking-trump-on-trade/\nReason None\nCategory the-f"
+      },
+      {
+        "pdf_page": 1,
+        "term": "FEVER",
+        "context": "l\ndatasets consisting of naturally occurring claims\n(e.g. Mihalcea and Strapparava (2009); Zubiaga\net al. (2016)), or datasets consisting of artiﬁcially\nconstructed claims such as FEVER (Thorne et al.,\n2018). While the latter offer valuable contribu-\ntions to further automatic claim veriﬁcation work,\nthey cannot replace real-world datasets.\nFeature Value\nClaimID farg-00004\nClaim Mexico and Canada assemble\ncars with foreign parts and send\nthem to the U.S. with no tax.\nLabel distorts\nClaim URL https://www.factcheck.org/2018/\n10/factchecking-trump-on-trade/\nReason None\nCategor"
+      },
+      {
+        "pdf_page": 2,
+        "term": "Thorne",
+        "context": "s, or Wikipedia documents, tweets or Face-\nbook posts. Most datasets contain a fairly small\nnumber of claims, and those that do not, often lack\nevidence documents. An exception is Thorne et al.\n(2018), who create a Wikipedia-based fact check-\ning dataset. While a good testbed for develop-\ning deep neural architectures, their dataset is arti-\nﬁcially constructed and can thus not take metadata\n3We use veracity, claim credibility, and fake news predic-\ntion interchangeably here – these terms are often conﬂated in\nthe literature and meant to have the same meaning.\nabout claims "
+      },
+      {
+        "pdf_page": 2,
+        "term": "Thorne",
+        "context": "doc-\numents, often trained on larger datasets, consist\nof evidence identiﬁcation and ranking following a\nneural model that measures the compatibility be-\ntween claim and evidence (Thorne et al., 2018;\nMihaylova et al., 2018; Yin and Roth, 2018).\nContributions: The latter category above is\nthe most related to our paper as we consider ev-\nidence documents. However, existing models are\nnot trained jointly for evidence identiﬁcation, or\nfor stance and veracity prediction, but rather em-\nploy a pipeline approach. Here, we show that a\njoint approach that learns to weigh evidence "
+      },
+      {
+        "pdf_page": 3,
+        "term": "Thorne",
+        "context": " 106 5 Yes Politifact, Channel 4 News\nZubiaga et al. (2016) 330 3 Yes Twitter\nDerczynski et al. (2017) 325 3 Yes Twitter\nBaly et al. (2018) 422 2 No ara.reuters.com, verify-sy.com\nThorne et al. (2018)† 185,445 3 No Wikipedia\nV: Veracity + evidence relevancy\nMultiFC 36,534 2-40 Yes Fact Checking Websites\nTable 2: Comparison of fact checking datasets. † indicates claims are not ‘naturally occuring’: Mitra and Gilbert\n(2015) use events as claims; Ciampaglia et al. (2015) use DBPedia tiples as claims; Shu et al. (2018) use tweets as\nclaims; and Thorne et al. (2018) rewrite sent"
+      },
+      {
+        "pdf_page": 3,
+        "term": "Thorne",
+        "context": "ims are not ‘naturally occuring’: Mitra and Gilbert\n(2015) use events as claims; Ciampaglia et al. (2015) use DBPedia tiples as claims; Shu et al. (2018) use tweets as\nclaims; and Thorne et al. (2018) rewrite sentences in Wikipedia as claims.\n38 websites in total (shown in Table 11). Out of\nthese, ten websites could not be crawled, as fur-\nther detailed in Table 9. In the later experimen-\ntal descriptions, we refer to the part of the dataset\ncrawled from a speciﬁc fact checking website as a\ndomain, and we refer to each website as source.\nFrom each source, we crawled the ID,"
+      },
+      {
+        "pdf_page": 11,
+        "term": "Thorne",
+        "context": "ted Fake News Detec-\ntion in Social Networks. In Proceedings of the Sec-\nond Workshop on Data Science for Social Good (So-\nGood), volume 1960 of CEUR Workshop Proceed-\nings.\nJames Thorne, Andreas Vlachos, Christos\nChristodoulopoulos, and Arpit Mittal. 2018.\nFEVER: a Large-scale Dataset for Fact Extraction\nand VERiﬁcation. In Proceedings of the 2018\nConference of the North American Chapter of\nthe Association for Computational Linguistics:\nHuman Language Technologies, Volume 1 (Long\nPapers), pages 809–819, New Orleans, Louisiana.\nAssociation for Computational Linguistics.\nAnd"
+      },
+      {
+        "pdf_page": 11,
+        "term": "FEVER",
+        "context": "orkshop on Data Science for Social Good (So-\nGood), volume 1960 of CEUR Workshop Proceed-\nings.\nJames Thorne, Andreas Vlachos, Christos\nChristodoulopoulos, and Arpit Mittal. 2018.\nFEVER: a Large-scale Dataset for Fact Extraction\nand VERiﬁcation. In Proceedings of the 2018\nConference of the North American Chapter of\nthe Association for Computational Linguistics:\nHuman Language Technologies, Volume 1 (Long\nPapers), pages 809–819, New Orleans, Louisiana.\nAssociation for Computational Linguistics.\nAndreas Vlachos and Sebastian Riedel. 2014. Fact\nChecking: Task deﬁnition and dat"
+      }
+    ]
+  },
+  {
+    "source_paper_id": "fever2",
+    "target_paper_id": "fever",
+    "review_status": "machine_candidate",
+    "citation_confirmed": null,
+    "intent_labels": [],
+    "hits": [
+      {
+        "pdf_page": 1,
+        "term": "Thorne",
+        "context": "iﬁcation (FEVER), pages 1–6\nHong Kong, November 3, 2019. c©2019 Association for Computational Linguistics\n1\nThe Second Fact Extraction and VERiﬁcation (FEVER2.0) Shared Task\nJames Thorne\nUniversity of Cambridge\njt719@cam.ac.uk\nAndreas Vlachos\nUniversity of Cambridge\nav308@cam.ac.uk\nOana Cocarascu\nImperial College London\noana.cocarascu11@imperial.ac.uk\nChristos Christodoulopoulos\nAmazon\nchrchrs@amazon.co.uk\nArpit Mittal\nAmazon\nmitarpit@amazon.co.uk\nAbstract\nWe present the results of the second Fact Ex-\ntraction and VERiﬁcation (FEVER2.0) Shared\nTask. The task challenged part"
+      },
+      {
+        "pdf_page": 1,
+        "term": "Thorne",
+        "context": "ikely to be unpredictable; such “blind\nspots” can be exposed through adversarial evalu-\nation (Szegedy et al., 2014).\nThe ﬁrst Fact Extraction and VERiﬁcation\n(FEVER) shared task (Thorne et al., 2018b) fo-\ncused on building systems that predict whether a\ntextual claim is S UPPORTED or R EFUTED given\nevidence (see (Thorne et al., 2018a) for a task\ndescription), or N OTENOUGH INFORMATION in\ncase Wikipedia does not have appropriate evi-\ndence to verify it. As automated systems for fact\nchecking have potentially sensitive applications it\nis important to study the vulnerabilitie"
+      },
+      {
+        "pdf_page": 1,
+        "term": "Thorne",
+        "context": "action and VERiﬁcation\n(FEVER) shared task (Thorne et al., 2018b) fo-\ncused on building systems that predict whether a\ntextual claim is S UPPORTED or R EFUTED given\nevidence (see (Thorne et al., 2018a) for a task\ndescription), or N OTENOUGH INFORMATION in\ncase Wikipedia does not have appropriate evi-\ndence to verify it. As automated systems for fact\nchecking have potentially sensitive applications it\nis important to study the vulnerabilities of these\nsystems, as well as the deﬁciencies of the datasets\nthey are trained on. Such vulnerabilities were also\nthe motivation behind"
+      },
+      {
+        "pdf_page": 1,
+        "term": "FEVER",
+        "context": "Proceedings of the Second Workshop on Fact Extraction and VERiﬁcation (FEVER), pages 1–6\nHong Kong, November 3, 2019. c©2019 Association for Computational Linguistics\n1\nThe Second Fact Extraction and VERiﬁcation (FEVER2.0) Shared Task\nJames Thorne\nUniversity of Cambridge\njt719@cam.ac.uk\nAndreas Vlachos\nUniversity of Cambridge\nav308@cam.ac.uk\nOana Cocarascu\nImperial College London\noana.cocarascu11@imperial.ac.uk\nChristos Christodoulopoulos\nAmazon\nchrchrs@amazon.co.uk\n"
+      },
+      {
+        "pdf_page": 1,
+        "term": "FEVER",
+        "context": "p on Fact Extraction and VERiﬁcation (FEVER), pages 1–6\nHong Kong, November 3, 2019. c©2019 Association for Computational Linguistics\n1\nThe Second Fact Extraction and VERiﬁcation (FEVER2.0) Shared Task\nJames Thorne\nUniversity of Cambridge\njt719@cam.ac.uk\nAndreas Vlachos\nUniversity of Cambridge\nav308@cam.ac.uk\nOana Cocarascu\nImperial College London\noana.cocarascu11@imperial.ac.uk\nChristos Christodoulopoulos\nAmazon\nchrchrs@amazon.co.uk\nArpit Mittal\nAmazon\nmitarpit@amazon.co.uk\nAbstract\nWe present the results of the second Fact Ex-\ntraction and VERiﬁcation (FEVER2.0) Shared\nTa"
+      },
+      {
+        "pdf_page": 1,
+        "term": "FEVER",
+        "context": "\nChristos Christodoulopoulos\nAmazon\nchrchrs@amazon.co.uk\nArpit Mittal\nAmazon\nmitarpit@amazon.co.uk\nAbstract\nWe present the results of the second Fact Ex-\ntraction and VERiﬁcation (FEVER2.0) Shared\nTask. The task challenged participants to both\nbuild systems to verify factoid claims using ev-\nidence retrieved from Wikipedia and to gen-\nerate adversarial attacks against other partic-\nipant’s systems. The shared task had three\nphases: building, breaking and ﬁxing . There\nwere 8 systems in the builder’s round, three\nof which were new qualifying submissions for\nthis shared task,"
+      },
+      {
+        "pdf_page": 1,
+        "term": "FEVER",
+        "context": "ifying submissions for\nthis shared task, and 5 adversaries generated\ninstances designed to induce classiﬁcation er-\nrors and one builder submitted a ﬁxed sys-\ntem which had higher FEVER score and re-\nsilience than their ﬁrst submission. All but\none newly submitted systems attained FEVER\nscores higher than the best performing system\nfrom the ﬁrst shared task and under adversar-\nial evaluation, all systems exhibited losses in\nFEVER score. There was a great variety in\nadversarial attack types as well as the tech-\nniques used to generate the attacks, In this pa-\nper, we present"
+      },
+      {
+        "pdf_page": 1,
+        "term": "FEVER",
+        "context": "siﬁcation er-\nrors and one builder submitted a ﬁxed sys-\ntem which had higher FEVER score and re-\nsilience than their ﬁrst submission. All but\none newly submitted systems attained FEVER\nscores higher than the best performing system\nfrom the ﬁrst shared task and under adversar-\nial evaluation, all systems exhibited losses in\nFEVER score. There was a great variety in\nadversarial attack types as well as the tech-\nniques used to generate the attacks, In this pa-\nper, we present the results of the shared task\nand a summary of the systems, highlighting\ncommonalities and innovatio"
+      },
+      {
+        "pdf_page": 1,
+        "term": "FEVER",
+        "context": " newly submitted systems attained FEVER\nscores higher than the best performing system\nfrom the ﬁrst shared task and under adversar-\nial evaluation, all systems exhibited losses in\nFEVER score. There was a great variety in\nadversarial attack types as well as the tech-\nniques used to generate the attacks, In this pa-\nper, we present the results of the shared task\nand a summary of the systems, highlighting\ncommonalities and innovations among partici-\npating systems.\n1 Introduction\nSigniﬁcant progress for a large number of nat-\nural language processing tasks has been made\nthrou"
+      },
+      {
+        "pdf_page": 1,
+        "term": "FEVER",
+        "context": "its be-\nhaviour is likely to be unpredictable; such “blind\nspots” can be exposed through adversarial evalu-\nation (Szegedy et al., 2014).\nThe ﬁrst Fact Extraction and VERiﬁcation\n(FEVER) shared task (Thorne et al., 2018b) fo-\ncused on building systems that predict whether a\ntextual claim is S UPPORTED or R EFUTED given\nevidence (see (Thorne et al., 2018a) for a task\ndescription), or N OTENOUGH INFORMATION in\ncase Wikipedia does not have appropriate evi-\ndence to verify it. As automated systems for fact\nchecking have potentially sensitive applications it\nis important to stud"
+      },
+      {
+        "pdf_page": 1,
+        "term": "FEVER",
+        "context": "e also\nthe motivation behind Ettinger et al. (2017)’s NLP\nshared task that was inspired by the Build It, Break\nIt, Fix It competition1.\nThe second Fact Extraction and VERiﬁcation\n(FEVER2.0) shared task is building on the dataset\nof the ﬁrst FEVER shared task, but adopted the\nsetup of build-it, break-it, ﬁx-it where builders\nsubmitted systems based on the original FEVER\ndataset and task deﬁnition; breakers generated ad-\nversarial examples targeting the systems built in\nthe ﬁrst stage; and ﬁnally, ﬁxers implemented so-\nlutions to remedy the attacks from the second\n1https://bu"
+      },
+      {
+        "pdf_page": 1,
+        "term": "FEVER",
+        "context": "red task that was inspired by the Build It, Break\nIt, Fix It competition1.\nThe second Fact Extraction and VERiﬁcation\n(FEVER2.0) shared task is building on the dataset\nof the ﬁrst FEVER shared task, but adopted the\nsetup of build-it, break-it, ﬁx-it where builders\nsubmitted systems based on the original FEVER\ndataset and task deﬁnition; breakers generated ad-\nversarial examples targeting the systems built in\nthe ﬁrst stage; and ﬁnally, ﬁxers implemented so-\nlutions to remedy the attacks from the second\n1https://builditbreakit.org"
+      },
+      {
+        "pdf_page": 1,
+        "term": "FEVER",
+        "context": ".0) shared task is building on the dataset\nof the ﬁrst FEVER shared task, but adopted the\nsetup of build-it, break-it, ﬁx-it where builders\nsubmitted systems based on the original FEVER\ndataset and task deﬁnition; breakers generated ad-\nversarial examples targeting the systems built in\nthe ﬁrst stage; and ﬁnally, ﬁxers implemented so-\nlutions to remedy the attacks from the second\n1https://builditbreakit.org"
+      },
+      {
+        "pdf_page": 2,
+        "term": "Thorne",
+        "context": " of\nFEVER2.0 in more detail:\nBuild-It In the ﬁrst phase of the shared task,\n“builders” constructed fact veriﬁcation sys-\ntems that were trained using the FEVER\ndataset released in Thorne et al. (2018a). Par-\nticipants were required to submit docker im-\nages of systems which implemented a com-\nmon web API that would facilitate interac-\ntive development of attacks through a sand-\nbox which was hosted for the duration of the\nshared task.\nThe top 4 submission from the ﬁrst shared\ntask were submitted as baseline systems\nfor this shared task: UNC (Nie et al.,\n2019), UCLMR (Yoneda"
+      },
+      {
+        "pdf_page": 2,
+        "term": "Thorne",
+        "context": "d with preparing their submission of\n1000 instances, the organizers hosted a web-\nbased sandbox. Breakers had access to 8 sys-\ntems (4 top systems from the ﬁrst FEVER\nshared task (Thorne et al., 2018b), the base-\nline from (Thorne et al., 2018a) and 3 new\nqualifying submissions from the ‘Build-It‘\nphase) that were hosted by the shared task or-\nganisers. Participants could experiment with\nattacks by submitting small samples of 50 in-\nstances for scoring twice a day via a shared\ntask portal which returned FEVER scores of\nall the hosted systems.\nFix-It Using the adversarial ex"
+      },
+      {
+        "pdf_page": 2,
+        "term": "Thorne",
+        "context": "stances, the organizers hosted a web-\nbased sandbox. Breakers had access to 8 sys-\ntems (4 top systems from the ﬁrst FEVER\nshared task (Thorne et al., 2018b), the base-\nline from (Thorne et al., 2018a) and 3 new\nqualifying submissions from the ‘Build-It‘\nphase) that were hosted by the shared task or-\nganisers. Participants could experiment with\nattacks by submitting small samples of 50 in-\nstances for scoring twice a day via a shared\ntask portal which returned FEVER scores of\nall the hosted systems.\nFix-It Using the adversarial examples, the origi-\nnal builders or teams of "
+      },
+      {
+        "pdf_page": 2,
+        "term": "Thorne",
+        "context": "\nit” phase to improve the system classiﬁcation\nperformance and resilience to adversarial at-\ntack.\n2.2 Scoring Method\nThe submissions were scored using ‘potency’ and\n‘resilience’ (Thorne et al., 2019) that compute a\nweighted average of FEVER scores: accounting\nfor the correctness of adversarial instances.\nPotency Intuitively, better adversarial instances\ninduce more classiﬁcation errors, resulting in\na lower FEVER score of the systems they\nare evaluated on. We measure the effective-\nness of breakers’ adversarial instances ( a)\non a builder’s system ( s) through the aver-\nag"
+      },
+      {
+        "pdf_page": 2,
+        "term": "Thorne",
+        "context": "rrectness rate ca of the adversar-\nial instances. Instances are correct if they\nare grammatical, appropriately labeled and\nmeet the annotation guidelines requirements\ndescribed by Thorne et al. (2018a).\nPotency(a)\ndef\n= ca\n1\n|S|\n∑\ns∈S\n(\n1− f ( ˆYs,a, Ya))\nResilience A system that is resilient will have\nfewer errors induced by the adversarial in-\nstances, reﬂected in higher scores at evalua-\ntion. We wish to penalize systems for making\nmistakes on instances from adversaries with\nhigher correctness rate. We deﬁne resilience\nof a systems as the weighted average FEVER\nscore, we"
+      },
+      {
+        "pdf_page": 2,
+        "term": "FEVER",
+        "context": "t a summary of the sub-\nmissions and the leader board, and highlight future\nresearch directions.\n2 Task Description\n2.1 Task Phases\nIn what follows we describe the three phases of\nFEVER2.0 in more detail:\nBuild-It In the ﬁrst phase of the shared task,\n“builders” constructed fact veriﬁcation sys-\ntems that were trained using the FEVER\ndataset released in Thorne et al. (2018a). Par-\nticipants were required to submit docker im-\nages of systems which implemented a com-\nmon web API that would facilitate interac-\ntive development of attacks through a sand-\nbox which was hosted fo"
+      },
+      {
+        "pdf_page": 2,
+        "term": "FEVER",
+        "context": " describe the three phases of\nFEVER2.0 in more detail:\nBuild-It In the ﬁrst phase of the shared task,\n“builders” constructed fact veriﬁcation sys-\ntems that were trained using the FEVER\ndataset released in Thorne et al. (2018a). Par-\nticipants were required to submit docker im-\nages of systems which implemented a com-\nmon web API that would facilitate interac-\ntive development of attacks through a sand-\nbox which was hosted for the duration of the\nshared task.\nThe top 4 submission from the ﬁrst shared\ntask were submitted as baseline systems\nfor this shared task: UNC (Nie et"
+      },
+      {
+        "pdf_page": 2,
+        "term": "FEVER",
+        "context": "GH IN-\nFORMATION ); half of which were released\nto ﬁxers and half of which were retained\nas a blind test set. We considered only\nnovel claims (i.e. not contained in the orig-\ninal FEVER dataset) as valid entries to the\nshared task. All of the claims in this submis-\nsion were annotated were annotated by the\nshared task organizers for quality assurance\nand to measure correctness.\nTo aid with preparing their submission of\n1000 instances, the organizers hosted a web-\nbased sandbox. Breakers had access to 8 sys-\ntems (4 top systems from the ﬁrst FEVER\nshared task (Thorne et al.,"
+      },
+      {
+        "pdf_page": 2,
+        "term": "FEVER",
+        "context": " correctness.\nTo aid with preparing their submission of\n1000 instances, the organizers hosted a web-\nbased sandbox. Breakers had access to 8 sys-\ntems (4 top systems from the ﬁrst FEVER\nshared task (Thorne et al., 2018b), the base-\nline from (Thorne et al., 2018a) and 3 new\nqualifying submissions from the ‘Build-It‘\nphase) that were hosted by the shared task or-\nganisers. Participants could experiment with\nattacks by submitting small samples of 50 in-\nstances for scoring twice a day via a shared\ntask portal which returned FEVER scores of\nall the hosted systems.\nFix-It Using"
+      },
+      {
+        "pdf_page": 2,
+        "term": "FEVER",
+        "context": " shared task or-\nganisers. Participants could experiment with\nattacks by submitting small samples of 50 in-\nstances for scoring twice a day via a shared\ntask portal which returned FEVER scores of\nall the hosted systems.\nFix-It Using the adversarial examples, the origi-\nnal builders or teams of dedicated “ﬁxers” in-\ncorporate the data generated from the “break-\nit” phase to improve the system classiﬁcation\nperformance and resilience to adversarial at-\ntack.\n2.2 Scoring Method\nThe submissions were scored using ‘potency’ and\n‘resilience’ (Thorne et al., 2019) that compute a\nwe"
+      },
+      {
+        "pdf_page": 2,
+        "term": "FEVER",
+        "context": "ce and resilience to adversarial at-\ntack.\n2.2 Scoring Method\nThe submissions were scored using ‘potency’ and\n‘resilience’ (Thorne et al., 2019) that compute a\nweighted average of FEVER scores: accounting\nfor the correctness of adversarial instances.\nPotency Intuitively, better adversarial instances\ninduce more classiﬁcation errors, resulting in\na lower FEVER score of the systems they\nare evaluated on. We measure the effective-\nness of breakers’ adversarial instances ( a)\non a builder’s system ( s) through the aver-\nage reduction in FEVER score (from a per-\nfect system) on "
+      },
+      {
+        "pdf_page": 2,
+        "term": "FEVER",
+        "context": " of FEVER scores: accounting\nfor the correctness of adversarial instances.\nPotency Intuitively, better adversarial instances\ninduce more classiﬁcation errors, resulting in\na lower FEVER score of the systems they\nare evaluated on. We measure the effective-\nness of breakers’ adversarial instances ( a)\non a builder’s system ( s) through the aver-\nage reduction in FEVER score (from a per-\nfect system) on the set of predictions made\nby the system ˆYs,a. The score is weighted\nby the correctness rate ca of the adversar-\nial instances. Instances are correct if they\nare grammatical,"
+      },
+      {
+        "pdf_page": 2,
+        "term": "FEVER",
+        "context": "ER score of the systems they\nare evaluated on. We measure the effective-\nness of breakers’ adversarial instances ( a)\non a builder’s system ( s) through the aver-\nage reduction in FEVER score (from a per-\nfect system) on the set of predictions made\nby the system ˆYs,a. The score is weighted\nby the correctness rate ca of the adversar-\nial instances. Instances are correct if they\nare grammatical, appropriately labeled and\nmeet the annotation guidelines requirements\ndescribed by Thorne et al. (2018a).\nPotency(a)\ndef\n= ca\n1\n|S|\n∑\ns∈S\n(\n1− f ( ˆYs,a, Ya))\nResilience A system tha"
+      },
+      {
+        "pdf_page": 2,
+        "term": "FEVER",
+        "context": " evalua-\ntion. We wish to penalize systems for making\nmistakes on instances from adversaries with\nhigher correctness rate. We deﬁne resilience\nof a systems as the weighted average FEVER\nscore, weighted by the correctness rate for\neach adversary, a∈ A:\nResilience(s)\ndef\n=\n∑\na∈A ca× f ( ˆYs,a, Ya)∑\na∈A ca"
+      },
+      {
+        "pdf_page": 3,
+        "term": "Thorne",
+        "context": "3\nFor the ‘build-it’ phase, we report both FEVER\nscore of the system over the FEVER shared task\ntest set (Thorne et al., 2018a) and the resilience\nof the system over the FEVER2.0 test set that\ncomprises adversarial instances submitted by the\nbreakers. For the ‘break-it’ phase, we report the\npotency of attack over all systems and the cor-\nrectness rate. For the ‘ﬁx-it’ phase, we report the\nscore delta compared to the system submitted in\nthe ‘build-it’ phase.\n3 Participants and Results\nSystem Resilience"
+      },
+      {
+        "pdf_page": 3,
+        "term": "FEVER",
+        "context": "3\nFor the ‘build-it’ phase, we report both FEVER\nscore of the system over the FEVER shared task\ntest set (Thorne et al., 2018a) and the resilience\nof the system over the FEVER2.0 test set that\ncomprises adversarial instances submitted by the\nbreakers. For the ‘break-it’ phase, we report the\npotency of attack over all systems and the cor-\nrectness rate. For the ‘ﬁx-it’ phase, we report the\nscore delta compared to the system submitted in\nthe"
+      },
+      {
+        "pdf_page": 3,
+        "term": "FEVER",
+        "context": "3\nFor the ‘build-it’ phase, we report both FEVER\nscore of the system over the FEVER shared task\ntest set (Thorne et al., 2018a) and the resilience\nof the system over the FEVER2.0 test set that\ncomprises adversarial instances submitted by the\nbreakers. For the ‘break-it’ phase, we report the\npotency of attack over all systems and the cor-\nrectness rate. For the ‘ﬁx-it’ phase, we report the\nscore delta compared to the system submitted in\nthe ‘build-it’ phase.\n3 Participants a"
+      },
+      {
+        "pdf_page": 3,
+        "term": "FEVER",
+        "context": "3\nFor the ‘build-it’ phase, we report both FEVER\nscore of the system over the FEVER shared task\ntest set (Thorne et al., 2018a) and the resilience\nof the system over the FEVER2.0 test set that\ncomprises adversarial instances submitted by the\nbreakers. For the ‘break-it’ phase, we report the\npotency of attack over all systems and the cor-\nrectness rate. For the ‘ﬁx-it’ phase, we report the\nscore delta compared to the system submitted in\nthe ‘build-it’ phase.\n3 Participants and Results\nSystem Resilience(%) FEVERScore (%)\nPapelo 37.31 57.36\nUCLMR 35.83 62.52\nDOMLIN 3"
+      },
+      {
+        "pdf_page": 3,
+        "term": "FEVER",
+        "context": " the cor-\nrectness rate. For the ‘ﬁx-it’ phase, we report the\nscore delta compared to the system submitted in\nthe ‘build-it’ phase.\n3 Participants and Results\nSystem Resilience(%) FEVERScore (%)\nPapelo 37.31 57.36\nUCLMR 35.83 62.52\nDOMLIN 35.82 68.46\nCUNLP 32.92 67.08\nUNC 30.47 64.21\nAthene 25.35 61.58\nGPLSI 19.63 58.07\nBaseline 11.06 27.45\nTable 1: Results from the FEVER2.0 Builder phase.\nItalicised systems are from the original FEVER shared\ntask – submitted as reference systems for FEVER2.0.\nSystem CorrectRate (%) Potency(%)\nTMLab 84.81 66.83\nCUNLP 81.44 55.79\nNbAuzDrLqg "
+      },
+      {
+        "pdf_page": 3,
+        "term": "FEVER",
+        "context": "e (%)\nPapelo 37.31 57.36\nUCLMR 35.83 62.52\nDOMLIN 35.82 68.46\nCUNLP 32.92 67.08\nUNC 30.47 64.21\nAthene 25.35 61.58\nGPLSI 19.63 58.07\nBaseline 11.06 27.45\nTable 1: Results from the FEVER2.0 Builder phase.\nItalicised systems are from the original FEVER shared\ntask – submitted as reference systems for FEVER2.0.\nSystem CorrectRate (%) Potency(%)\nTMLab 84.81 66.83\nCUNLP 81.44 55.79\nNbAuzDrLqg 64.71 51.54\nRule-based Baseline 82.33 49.68\nPapelo* 91.00 64.79\nTable 2: Results from the FEVER2.0 Breaker phase.\n*Papelo’s submission contained only N OTENOUGH -\nINFO claims which did not "
+      },
+      {
+        "pdf_page": 3,
+        "term": "FEVER",
+        "context": "LP 32.92 67.08\nUNC 30.47 64.21\nAthene 25.35 61.58\nGPLSI 19.63 58.07\nBaseline 11.06 27.45\nTable 1: Results from the FEVER2.0 Builder phase.\nItalicised systems are from the original FEVER shared\ntask – submitted as reference systems for FEVER2.0.\nSystem CorrectRate (%) Potency(%)\nTMLab 84.81 66.83\nCUNLP 81.44 55.79\nNbAuzDrLqg 64.71 51.54\nRule-based Baseline 82.33 49.68\nPapelo* 91.00 64.79\nTable 2: Results from the FEVER2.0 Breaker phase.\n*Papelo’s submission contained only N OTENOUGH -\nINFO claims which did not qualify for the shared task.\nIts potency is reported, but is not "
+      },
+      {
+        "pdf_page": 3,
+        "term": "FEVER",
+        "context": " 19.63 58.07\nBaseline 11.06 27.45\nTable 1: Results from the FEVER2.0 Builder phase.\nItalicised systems are from the original FEVER shared\ntask – submitted as reference systems for FEVER2.0.\nSystem CorrectRate (%) Potency(%)\nTMLab 84.81 66.83\nCUNLP 81.44 55.79\nNbAuzDrLqg 64.71 51.54\nRule-based Baseline 82.33 49.68\nPapelo* 91.00 64.79\nTable 2: Results from the FEVER2.0 Breaker phase.\n*Papelo’s submission contained only N OTENOUGH -\nINFO claims which did not qualify for the shared task.\nIts potency is reported, but is not included in the calcu-\nlations for resilience of the sy"
+      },
+      {
+        "pdf_page": 3,
+        "term": "FEVER",
+        "context": "EVER2.0.\nSystem CorrectRate (%) Potency(%)\nTMLab 84.81 66.83\nCUNLP 81.44 55.79\nNbAuzDrLqg 64.71 51.54\nRule-based Baseline 82.33 49.68\nPapelo* 91.00 64.79\nTable 2: Results from the FEVER2.0 Breaker phase.\n*Papelo’s submission contained only N OTENOUGH -\nINFO claims which did not qualify for the shared task.\nIts potency is reported, but is not included in the calcu-\nlations for resilience of the systems.\nSystem FEVER Score (%) Resilience (%)\nCUNLP 68.80 (+1.72) 36.61 (+3.69)\nTable 3: Results from the FEVER2.0 Fixer phase.\n3.1 Builders Phase\nTeam DOMLIN (Stammbach and Neumann,"
+      },
+      {
+        "pdf_page": 3,
+        "term": "FEVER",
+        "context": "d only N OTENOUGH -\nINFO claims which did not qualify for the shared task.\nIts potency is reported, but is not included in the calcu-\nlations for resilience of the systems.\nSystem FEVER Score (%) Resilience (%)\nCUNLP 68.80 (+1.72) 36.61 (+3.69)\nTable 3: Results from the FEVER2.0 Fixer phase.\n3.1 Builders Phase\nTeam DOMLIN (Stammbach and Neumann,\n2019) used the document retrieval module of\nHanselowski et al. (2018) and a BERT model for\ntwo-staged sentence selection based on the work\nby (Nie et al., 2019). They also use a BERT-based\nmodel for the NLI stage.\nThe CUNLP team (Hi"
+      },
+      {
+        "pdf_page": 3,
+        "term": "FEVER",
+        "context": "eported, but is not included in the calcu-\nlations for resilience of the systems.\nSystem FEVER Score (%) Resilience (%)\nCUNLP 68.80 (+1.72) 36.61 (+3.69)\nTable 3: Results from the FEVER2.0 Fixer phase.\n3.1 Builders Phase\nTeam DOMLIN (Stammbach and Neumann,\n2019) used the document retrieval module of\nHanselowski et al. (2018) and a BERT model for\ntwo-staged sentence selection based on the work\nby (Nie et al., 2019). They also use a BERT-based\nmodel for the NLI stage.\nThe CUNLP team (Hidey et al.) used a combi-\nnation of Google search and TF-IDF for document\nretrieval and a p"
+      },
+      {
+        "pdf_page": 3,
+        "term": "FEVER",
+        "context": "ces were manually added.\nIn addition, the team manually generated claims\nwith S UPPORTS labels to ensure class balance in\ntheir submission.\nOne of the shortcomings of the original FEVER\ndataset was the lack of complex claims that would\nrequire multi-hop inference or temporal reason-\ning and the CUNLP team designed their adver-\nsarial attacks along these principles (Hidey et al.).\nThey produce multi-hop reasoning claims by aug-\nmenting existing claims with conjunctions or rel-\native clauses sourced from linked Wikipedia arti-\ncles. For temporal reasoning adversarial examples"
+      },
+      {
+        "pdf_page": 3,
+        "term": "FEVER",
+        "context": " of Alzantot et al. (2018).\nTeam NbAuzDrLqg (Kim and Allan, 2019) sub-\nmitted mostly manually created adversarial claims\ntargeting the retrieval as well as the NLI compo-\nnents of FEVER systems. For the retrieval attacks,\nthe team created claims that didn’t contain enti-"
+      },
+      {
+        "pdf_page": 4,
+        "term": "Thorne",
+        "context": " it does not qualify for the shared task and\nthis attack is not used in computation of system\nresilience.\nThe rule-based baseline system is a version of\nthe adversary described in Thorne et al. (2019)\nwhere string transformations are applied to claims\nto generate new instances. The rules were\nmanually constructed regular expression patterns\nthat match common patterns of claims in the\ndataset and perform both label-altering and label-\npreserving changes.\n3.3 Fixers Phase\nThe only submission to this phase was from the\nCUNLP team (Hidey et al.). Based on their own\nattacks duri"
+      },
+      {
+        "pdf_page": 4,
+        "term": "FEVER",
+        "context": "4\nBreaker Attack FEVER Score (%) Label Accuracy (%) n\nCUNLP\nMulti-Hop Reasoning 31.54 ± 13.19 51.64 ± 7.18 130\nMulti-Hop Temporal Reasoning 8.33 ± 2.08 24.48 ± 16.98 24\nDate Manipulation 27.53 ± 6.07 34.18 ± 4.50 94\nWord Replacement 28.87 ± 6.79 29.08 ± 9.28 71\nConjunction 38.25 ± 18.01 42.50 ± 15.93 50\nPhrasal Additions 55.63 ± 13.16 55.63 ± 20.22 20\nNbAuzDrLqg NotEnoughInfo 76.39 ± 34.33 76.39 ± 34.33 18SubsetNu"
+      },
+      {
+        "pdf_page": 4,
+        "term": "FEVER",
+        "context": " 0.00 ± 0.00 16.12 ± 17.08 38\nTMLab AI Generated 38.07 ± 13.29 40.63 ± 11.04 44Paraphrase 0.00 ± 0.0 43.06 ± 19.59 9\nTable 4: Breakdown of attack type for each breaker and average FEVER scores and Label accuracy for the 8\nsystems used in the shared task. n = total number of instances of this class\nties that could be used as query terms for evidence\ndocuments/sentences. To target the NLI compo-\nnent, the team created attacks based on arithmetic\noperations, logical inconsistencies, and vague or\nhedged statement. Some of these attack types\nfailed to meet the guidelines of the "
+      },
+      {
+        "pdf_page": 4,
+        "term": "FEVER",
+        "context": "dence. For temporal reasoning they employ a\nset of arithmetic rules on top of predicate argu-\nments extracted with an OpenIE system. As seen\nin Table 3 they improve their system’s FEVER\nscore, but more importantly they increase its re-\nsilience by 3.69%.\n4 Analysis\nIn the ‘break-it’ phase of the competition, break-\ners submitted adversarial instances that were de-\nsigned to induce classiﬁcation errors in fact veriﬁ-\ncation systems. The shared task solicited meta-\ndata with each instance that described how the\nattack was generated. In Table 4 we report the\nFEVER score and ac"
+      },
+      {
+        "pdf_page": 4,
+        "term": "FEVER",
+        "context": "e classiﬁcation errors in fact veriﬁ-\ncation systems. The shared task solicited meta-\ndata with each instance that described how the\nattack was generated. In Table 4 we report the\nFEVER score and accuracy of the systems for each\nof the breaker’s attack types. We report only in-\nstances that were annotated as ‘correct’ and attack\ntypes with more than 5 instances.\nThere were two attack types which had a\nFEVER score of 0: the Paraphrase attack from\nTMLab and the SubsetNum attack from NbAuz-\nDrLqg. While some systems returned the correct\nlabel, no system had the combination of "
+      },
+      {
+        "pdf_page": 4,
+        "term": "FEVER",
+        "context": "ach\nof the breaker’s attack types. We report only in-\nstances that were annotated as ‘correct’ and attack\ntypes with more than 5 instances.\nThere were two attack types which had a\nFEVER score of 0: the Paraphrase attack from\nTMLab and the SubsetNum attack from NbAuz-\nDrLqg. While some systems returned the correct\nlabel, no system had the combination of the correct\nlabel and evidence. The Multi-Hop and Multi-Hop\nTemporal Reasoning attacks from CUNLP also in-\nduced a high number of errors in the systems.\nThe SubsetNum attack from NbAuzDrLqg was\na template-based attack which r"
+      },
+      {
+        "pdf_page": 5,
+        "term": "Thorne",
+        "context": "ubmis-\nsions for the breaker round and one ﬁxer submis-\nsion. All of the breakers submitted adversarial in-\nstances that were more potent than the rule-based\nbaseline presented in Thorne et al. (2019). In this\npaper we summarized the approaches, identifying\ncommonalities and features that could be further\nexplored.\nFuture work will continue to address limitations\nin human-annotated evidence and explore other\nways in which systems can be made more robust\nin predicting the veracity of information extracted\nfrom real-world untrusted sources.\nAcknowledgements\nThe authors with t"
+      },
+      {
+        "pdf_page": 5,
+        "term": "FEVER",
+        "context": " be made more robust\nin predicting the veracity of information extracted\nfrom real-world untrusted sources.\nAcknowledgements\nThe authors with to thank the participants of the\nﬁrst FEVER shared task for making their code\nand models available and for being responsive to\nqueries. The authors with to thank Tim Baldwin\nand Trevor Cohn for their advice.\nReferences\nAimée Alonso-Reina, Robiert Sepúlveda-Torres, Es-\ntela Saquete, and Manuel Palomar. 2019. Team\nGPLSI. approach for automated fact checking. In\nProceedings of the Second Workshop on Fact Ex-\ntraction and VERiﬁcation (FEV"
+      },
+      {
+        "pdf_page": 5,
+        "term": "FEVER",
+        "context": "a-Torres, Es-\ntela Saquete, and Manuel Palomar. 2019. Team\nGPLSI. approach for automated fact checking. In\nProceedings of the Second Workshop on Fact Ex-\ntraction and VERiﬁcation (FEVER). Association for\nComputational Linguistics.\nMoustafa Alzantot, Yash Sharma, Ahmed Elgohary,\nBo-Jhang Ho, Mani Srivastava, and Kai-Wei Chang.\n2018. Generating natural language adversarial ex-\namples. In Proceedings of the 2018 Conference on\nEmpirical Methods in Natural Language Process-\ning, pages 2890–2896, Brussels, Belgium. Associ-\nation for Computational Linguistics.\nSamuel R. Bowman, Ga"
+      },
+      {
+        "pdf_page": 5,
+        "term": "FEVER",
+        "context": "ller, Claudia Schulz, and\nIryna Gurevych. 2018. Multi-sentence textual en-\ntailment for claim veriﬁcation. In Proceedings of the\nFirst Workshop on Fact Extraction and VERiﬁcation\n(FEVER), pages 103–108, Brussels, Belgium. Asso-\nciation for Computational Linguistics.\nTuhin Hidey, Christopherand Chakrabarty, Tariq Al-\nhindi, Siddharth Varia, Kriste Krstovski, Mona\nDiab, and Smaranda Muresan. Non archival shared\ntask submission.\nRobin Jia and Percy Liang. 2017. Adversarial Ex-\namples for Evaluating Reading Comprehension Sys-\ntems.\nYoungwoo Kim and James Allan. 2019. FEVER\nbrea"
+      },
+      {
+        "pdf_page": 5,
+        "term": "FEVER",
+        "context": "n. Non archival shared\ntask submission.\nRobin Jia and Percy Liang. 2017. Adversarial Ex-\namples for Evaluating Reading Comprehension Sys-\ntems.\nYoungwoo Kim and James Allan. 2019. FEVER\nbreaker’s run of team NbAuzDrLqg. In Proceed-\nings of the Second Workshop on Fact Extraction and\nVERiﬁcation (FEVER) . Association for Computa-\ntional Linguistics.\nChristopher Malon. 2018. Team Papelo: Trans-\nformer networks at FEVER. In Proceedings of the\nFirst Workshop on Fact Extraction and VERiﬁcation\n(FEVER), pages 109–113, Brussels, Belgium. Asso-\nciation for Computational Linguistics."
+      },
+      {
+        "pdf_page": 5,
+        "term": "FEVER",
+        "context": "ng Comprehension Sys-\ntems.\nYoungwoo Kim and James Allan. 2019. FEVER\nbreaker’s run of team NbAuzDrLqg. In Proceed-\nings of the Second Workshop on Fact Extraction and\nVERiﬁcation (FEVER) . Association for Computa-\ntional Linguistics.\nChristopher Malon. 2018. Team Papelo: Trans-\nformer networks at FEVER. In Proceedings of the\nFirst Workshop on Fact Extraction and VERiﬁcation\n(FEVER), pages 109–113, Brussels, Belgium. Asso-\nciation for Computational Linguistics.\nYixin Nie, Haonan Chen, and Mohit Bansal. 2019.\nCombining fact extraction and veriﬁcation with neu-\nral semantic ma"
+      },
+      {
+        "pdf_page": 5,
+        "term": "FEVER",
+        "context": "gs of the Second Workshop on Fact Extraction and\nVERiﬁcation (FEVER) . Association for Computa-\ntional Linguistics.\nChristopher Malon. 2018. Team Papelo: Trans-\nformer networks at FEVER. In Proceedings of the\nFirst Workshop on Fact Extraction and VERiﬁcation\n(FEVER), pages 109–113, Brussels, Belgium. Asso-\nciation for Computational Linguistics.\nYixin Nie, Haonan Chen, and Mohit Bansal. 2019.\nCombining fact extraction and veriﬁcation with neu-\nral semantic matching networks. In Association for\nthe Advancement of Artiﬁcial Intelligence (AAAI)."
+      },
+      {
+        "pdf_page": 5,
+        "term": "FEVER",
+        "context": "on for Computa-\ntional Linguistics.\nChristopher Malon. 2018. Team Papelo: Trans-\nformer networks at FEVER. In Proceedings of the\nFirst Workshop on Fact Extraction and VERiﬁcation\n(FEVER), pages 109–113, Brussels, Belgium. Asso-\nciation for Computational Linguistics.\nYixin Nie, Haonan Chen, and Mohit Bansal. 2019.\nCombining fact extraction and veriﬁcation with neu-\nral semantic matching networks. In Association for\nthe Advancement of Artiﬁcial Intelligence (AAAI)."
+      },
+      {
+        "pdf_page": 6,
+        "term": "Thorne",
+        "context": "utskever,\nJoan Bruna, Dumitru Erhan, Ian Goodfellow, and\nRob Fergus. 2014. Intriguing properties of neural\nnetworks. In International Conference on Learning\nRepresentations.\nJames Thorne, Andreas Vlachos, Christos\nChristodoulopoulos, and Arpit Mittal. 2018a.\nFEVER: a large-scale dataset for fact extraction and\nveriﬁcation. In NAACL-HLT.\nJames Thorne, Andreas Vlachos, Christos\nChristodoulopoulos, and Arpit Mittal. 2019.\nEvaluating adversarial attacks against multiple fact\nveriﬁcation systems. In EMNLP-IJCNLP.\nJames Thorne, Andreas Vlachos, Oana Cocarascu,\nChristos Christodou"
+      },
+      {
+        "pdf_page": 6,
+        "term": "Thorne",
+        "context": "tations.\nJames Thorne, Andreas Vlachos, Christos\nChristodoulopoulos, and Arpit Mittal. 2018a.\nFEVER: a large-scale dataset for fact extraction and\nveriﬁcation. In NAACL-HLT.\nJames Thorne, Andreas Vlachos, Christos\nChristodoulopoulos, and Arpit Mittal. 2019.\nEvaluating adversarial attacks against multiple fact\nveriﬁcation systems. In EMNLP-IJCNLP.\nJames Thorne, Andreas Vlachos, Oana Cocarascu,\nChristos Christodoulopoulos, and Arpit Mittal.\n2018b. The Fact Extraction and VERiﬁcation\n(FEVER) Shared Task. In Proceedings of the\nFirst Workshop on Fact Extraction and VERiﬁcation\n("
+      },
+      {
+        "pdf_page": 6,
+        "term": "Thorne",
+        "context": "ames Thorne, Andreas Vlachos, Christos\nChristodoulopoulos, and Arpit Mittal. 2019.\nEvaluating adversarial attacks against multiple fact\nveriﬁcation systems. In EMNLP-IJCNLP.\nJames Thorne, Andreas Vlachos, Oana Cocarascu,\nChristos Christodoulopoulos, and Arpit Mittal.\n2018b. The Fact Extraction and VERiﬁcation\n(FEVER) Shared Task. In Proceedings of the\nFirst Workshop on Fact Extraction and VERiﬁcation\n(FEVER), pages 1–9, Brussels, Belgium. Associa-\ntion for Computational Linguistics.\nTakuma Yoneda, Jeff Mitchell, Johannes Welbl, Pon-\ntus Stenetorp, and Sebastian Riedel. 2018"
+      },
+      {
+        "pdf_page": 6,
+        "term": "FEVER",
+        "context": "inski, Maria Pszona, and Maria Janicka.\n2019. GEM: Generative enhanced model for adver-\nsarial attacks. In Proceedings of the Second Work-\nshop on Fact Extraction and VERiﬁcation (FEVER).\nAssociation for Computational Linguistics.\nAdam Poliak, Jason Naradowsky, Aparajita Haldar,\nRachel Rudinger, and Benjamin Van Durme. 2018.\nHypothesis Only Baselines in Natural Language In-\nference. (1):180–191.\nPranav Rajpurkar, Jian Zhang, Konstantin Lopyrev, and\nPercy Liang. 2016. SQuAD: 100,000+ Questions\nfor Machine Comprehension of Text. pages 2383–\n2392.\nDominik Stammbach and Guenter"
+      },
+      {
+        "pdf_page": 6,
+        "term": "FEVER",
+        "context": "6. SQuAD: 100,000+ Questions\nfor Machine Comprehension of Text. pages 2383–\n2392.\nDominik Stammbach and Guenter Neumann. 2019.\nTeam DOMLIN: Exploiting evidence enhancement\nfor the fever shared task. In Proceedings of the Sec-\nond Workshop on Fact Extraction and VERiﬁcation\n(FEVER). Association for Computational Linguis-\ntics.\nChristian Szegedy, Wojciech Zaremba, Ilya Sutskever,\nJoan Bruna, Dumitru Erhan, Ian Goodfellow, and\nRob Fergus. 2014. Intriguing properties of neural\nnetworks. In International Conference on Learning\nRepresentations.\nJames Thorne, Andreas Vlachos, Chri"
+      },
+      {
+        "pdf_page": 6,
+        "term": "FEVER",
+        "context": "bach and Guenter Neumann. 2019.\nTeam DOMLIN: Exploiting evidence enhancement\nfor the fever shared task. In Proceedings of the Sec-\nond Workshop on Fact Extraction and VERiﬁcation\n(FEVER). Association for Computational Linguis-\ntics.\nChristian Szegedy, Wojciech Zaremba, Ilya Sutskever,\nJoan Bruna, Dumitru Erhan, Ian Goodfellow, and\nRob Fergus. 2014. Intriguing properties of neural\nnetworks. In International Conference on Learning\nRepresentations.\nJames Thorne, Andreas Vlachos, Christos\nChristodoulopoulos, and Arpit Mittal. 2018a.\nFEVER: a large-scale dataset for fact extract"
+      },
+      {
+        "pdf_page": 6,
+        "term": "FEVER",
+        "context": "iguing properties of neural\nnetworks. In International Conference on Learning\nRepresentations.\nJames Thorne, Andreas Vlachos, Christos\nChristodoulopoulos, and Arpit Mittal. 2018a.\nFEVER: a large-scale dataset for fact extraction and\nveriﬁcation. In NAACL-HLT.\nJames Thorne, Andreas Vlachos, Christos\nChristodoulopoulos, and Arpit Mittal. 2019.\nEvaluating adversarial attacks against multiple fact\nveriﬁcation systems. In EMNLP-IJCNLP.\nJames Thorne, Andreas Vlachos, Oana Cocarascu,\nChristos Christodoulopoulos, and Arpit Mittal.\n2018b. The Fact Extraction and VERiﬁcation\n(FEVER) "
+      },
+      {
+        "pdf_page": 6,
+        "term": "FEVER",
+        "context": "act\nveriﬁcation systems. In EMNLP-IJCNLP.\nJames Thorne, Andreas Vlachos, Oana Cocarascu,\nChristos Christodoulopoulos, and Arpit Mittal.\n2018b. The Fact Extraction and VERiﬁcation\n(FEVER) Shared Task. In Proceedings of the\nFirst Workshop on Fact Extraction and VERiﬁcation\n(FEVER), pages 1–9, Brussels, Belgium. Associa-\ntion for Computational Linguistics.\nTakuma Yoneda, Jeff Mitchell, Johannes Welbl, Pon-\ntus Stenetorp, and Sebastian Riedel. 2018. Ucl ma-\nchine reading group: Four factor framework for fact\nﬁnding (HexaF). In Proceedings of the First Work-\nshop on Fact Extract"
+      },
+      {
+        "pdf_page": 6,
+        "term": "FEVER",
+        "context": "stos Christodoulopoulos, and Arpit Mittal.\n2018b. The Fact Extraction and VERiﬁcation\n(FEVER) Shared Task. In Proceedings of the\nFirst Workshop on Fact Extraction and VERiﬁcation\n(FEVER), pages 1–9, Brussels, Belgium. Associa-\ntion for Computational Linguistics.\nTakuma Yoneda, Jeff Mitchell, Johannes Welbl, Pon-\ntus Stenetorp, and Sebastian Riedel. 2018. Ucl ma-\nchine reading group: Four factor framework for fact\nﬁnding (HexaF). In Proceedings of the First Work-\nshop on Fact Extraction and VERiﬁcation (FEVER),\npages 97–102, Brussels, Belgium. Association for\nComputational L"
+      },
+      {
+        "pdf_page": 6,
+        "term": "FEVER",
+        "context": " and Sebastian Riedel. 2018. Ucl ma-\nchine reading group: Four factor framework for fact\nﬁnding (HexaF). In Proceedings of the First Work-\nshop on Fact Extraction and VERiﬁcation (FEVER),\npages 97–102, Brussels, Belgium. Association for\nComputational Linguistics."
+      }
+    ]
+  }
+]
