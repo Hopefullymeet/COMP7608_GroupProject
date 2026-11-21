@@ -45,10 +45,25 @@ type Note = Revision & {note_id:Id,session_id?:Id,history:Revision[]}
 |---|---|---|
 | `library.preview_identifier` | topic_id,identifier | {preview_id,topic_id,metadata,existing_paper_id?}。用 DOI 或 arXiv ID 查询公开书目。 |
 | `library.commit_identifier` | W,topic_id,preview_id,paper_id? | {paper_id,source_version_id,available_scope,already_linked}。预览限当前主题。指定 paper_id 时补该论文的书目。 |
-| `library.metadata` | topic_id,paper_id | {paper_id,revision,metadata,manual_fields} |
+| `library.metadata` | topic_id,paper_id,edition_year? | {paper_id,revision,metadata,manual_fields,rankings} |
 | `library.update_metadata` | W,topic_id,paper_id,base_revision,changes | 同上。版本冲突报 STALE_REVISION，标识符冲突报 IDENTIFIER_ALREADY_LINKED。 |
 
-metadata 包含 title、authors，可附 year、venue、doi、arxiv_id、provider、metadata_url 和 source_id。可编辑字段为标题、作者、年份、出版场所、DOI 与 arXiv ID。手动字段优先于后续补全。无附件书目可用 `library.import_pdf` 加同一个 paper_id 上传。
+metadata 包含 title、authors，可附 year、venue、doi、arxiv_id、provider、metadata_url、source_id、issns、venue_type 和 publication_track。可编辑字段包括书目、ISSN、发表类型（journal、conference、preprint）和会议论文类别（regular、other）。手动字段优先于后续补全。无附件书目可用 `library.import_pdf` 加同一个 paper_id 上传。
+
+### 发表场所的分区、收录和等级
+
+`rankings.items` 每个体系一项，含 scheme、label、metric（quartile、index、rank）、status 和 entries。加载目录时附 edition、year 和 source_url。每条 entries 有 venue、venue_type、value、category、source_url、matched_by。分类适用于发表场所。日常显示各体系已加载的最新目录，传 edition_year 按目录年份查；年份不足时返回 catalog_missing。
+
+| status | 页面含义 |
+|---|---|
+| matched | 找到匹配条目，同一体系可有多个学科 |
+| catalog_missing | 对应年份或体系还未加载名录 |
+| venue_unknown | 书目中缺少可匹配的刊名、会议名或 ISSN |
+| not_found | 已加载名录里未匹配 |
+| ambiguous | 名称歧义或目录结果有冲突 |
+| not_applicable | 体系与发表类型不相符 |
+
+期刊优先匹配 ISSN 或 eISSN。会议使用规范化全称和名录别名。CCF 会议附 `applicability`，`verify_track` 表示需要确认论文类别，已识别的 Findings、Workshop 等不显示主会等级。新导入 PDF 的首页若明确标出了刊名、会议名或 ISSN，可用于匹配。缺少字段时补正式书目或手动更正。数据准备见 [后端运行说明](../../backend/README.md#发表场所分区收录和等级)。
 
 PDF 位置使用从 1 开始的 page、倍率 zoom（0.1 至 10）和归一化页内纵向 offset（0 至 1）。存储以主题、会话和论文版本为键，版本更新后仍可读取旧位置。传 passage_id 的旧写法继续可用。
 

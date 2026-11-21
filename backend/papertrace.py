@@ -22,6 +22,7 @@ from citations import CitationWorkspace, init_citations
 from reader import Reader
 from bibliography import (OPENALEX, PROVIDERS, PublicServiceError, arxiv_id, doi, identity_keys,
                           lookup_target, metadata_from_provider, normalize_venue, openalex_search, selected_metadata)
+from venue_ranks import init_venue_ranks, issns, lookup_rankings
 
 
 def encode(value):
@@ -103,6 +104,7 @@ class Worker:
         """)
         init_corpus(self.db)
         init_citations(self.db)
+        init_venue_ranks(self.db)
         self.citations = CitationWorkspace(self, identifier)
         self.research = Workbench(self, identifier)
         self.reader = Reader(self, identifier)
@@ -511,7 +513,10 @@ class Worker:
             paper, linked = self.add_bibliographic_paper(topic, preview["metadata"], target)
             return {"paper_id": paper["paper_id"], **paper["source_versions"][0], "already_linked": linked}
         if method == "library.metadata":
-            return self.paper_metadata(self.paper_in_topic(params))
+            year = params.get("edition_year")
+            if year is not None and (type(year) is not int or not 1900 <= year <= 9999):
+                raise invalid("Enter a valid catalog year.")
+            return self.paper_details(self.paper_in_topic(params), year)
         if method == "library.update_metadata":
             return self.update_metadata(params)
         if method in ("library.list", "library.catalog"):
@@ -678,6 +683,28 @@ class Worker:
                 "manual_fields": paper.get("manual_metadata_fields", []),
                 "metadata": {"title": paper["title"], "authors": paper["authors"], **paper.get("metadata", {})}}
 
+    def paper_details(self, paper, year=None):
+        details = self.paper_metadata(paper)
+        metadata = details["metadata"]
+        source = metadata.get("provider")
+        if not metadata.get("venue") and not metadata.get("issns") and not (
+                set(details["manual_fields"]) & {"venue", "issns", "venue_type"}):
+            version = paper["source_versions"][0]["source_version_id"]
+            row = self.db.execute("SELECT data FROM citation_index WHERE version_id=?", (version,)).fetchone()
+            if row:
+                found = json.loads(row[0])
+                if not metadata.get("doi") and "doi" not in details["manual_fields"] and found.get("doi"):
+                    metadata["doi"] = found["doi"]
+                if metadata.get("venue_type") != "preprint" and found.get("publication"):
+                    metadata.update(found["publication"])
+                    source = "PDF"
+        details["rankings"] = lookup_rankings(self.db, metadata, year)
+        if set(details["manual_fields"]) & {"venue", "issns"}:
+            source = "Manual"
+        if source:
+            details["rankings"]["venue_source"] = source
+        return details
+
     def set_paper_metadata(self, paper, metadata):
         previous = self.paper_metadata(paper)["metadata"]
         if previous != metadata:
@@ -690,7 +717,8 @@ class Worker:
         if required(params, "base_revision") != current["revision"]:
             raise RpcError(-32011, "STALE_REVISION", "refresh_data", "Paper metadata changed. Reload and try again.")
         edits = params.get("changes")
-        allowed = {"title", "authors", "year", "venue", "doi", "arxiv_id"}
+        allowed = {"title", "authors", "year", "venue", "doi", "arxiv_id",
+                   "issns", "venue_type", "publication_track"}
         if not isinstance(edits, dict) or not edits or set(edits) - allowed:
             raise invalid("Specify editable bibliographic fields.")
         edits = dict(edits)
@@ -703,6 +731,15 @@ class Worker:
             elif field == "year":
                 if value is not None and (type(value) is not int or not 1 <= value <= 9999):
                     raise invalid("Enter a valid year.")
+            elif field == "issns":
+                if (not isinstance(value, list) or len(value) > 8 or not all(isinstance(code, str)
+                        and re.fullmatch(r"\d{4}-?\d{3}[\dXx]", code) and issns(code) for code in value)):
+                    raise invalid("Enter valid ISSN or eISSN values.")
+                edits[field] = issns(value)
+            elif field in ("venue_type", "publication_track"):
+                allowed_values = ("journal", "conference", "preprint", "") if field == "venue_type" else ("regular", "other", "")
+                if value not in allowed_values:
+                    raise invalid(f"Invalid {field}.")
             else:
                 if not isinstance(value, str) or len(value) > 1000 or (field == "title" and not value.strip()):
                     raise invalid(f"Invalid {field}.")
@@ -712,6 +749,10 @@ class Worker:
                     raise invalid(f"Invalid {field}.")
                 edits[field] = normalized
         metadata = {**current["metadata"], **edits}
+        if "venue" in edits and normalize_venue(edits["venue"]) != normalize_venue(current["metadata"].get("venue", "")):
+            for field in ("issns", "venue_type", "publication_track"):
+                if field not in edits:
+                    metadata.pop(field, None)
         matches = identity_keys(metadata)
         if any(p["paper_id"] != paper["paper_id"] and identity_keys(p) & matches for p in self.rows("paper")):
             raise RpcError(-32018, "IDENTIFIER_ALREADY_LINKED", "refresh_data", "Another paper already uses this identifier.")
@@ -721,7 +762,7 @@ class Worker:
                 paper["metadata_revision"] = identifier()
             paper["manual_metadata_fields"] = sorted(set(edits) | set(current["manual_fields"]))
             self.put("paper", paper["paper_id"], paper)
-        return self.paper_metadata(paper)
+        return self.paper_details(paper)
 
     def add_bibliographic_paper(self, topic, record, target=None):
         metadata = selected_metadata(record)
@@ -752,8 +793,12 @@ class Worker:
                 raise RpcError(-32018, "IDENTIFIER_ALREADY_LINKED", "refresh_data",
                                "The PDF record already has a different identifier.")
             manual = paper.get("manual_metadata_fields", [])
+            confirmed_venue = (current.get("venue_type") == "preprint"
+                               and metadata.get("venue_type") in ("journal", "conference")
+                               and metadata.get("provider") == "Crossref")
             for key, value in metadata.items():
-                if key not in manual and value and (not current.get(key) or (target and key == "title")):
+                if key not in manual and value and (not current.get(key) or (target and key == "title") or
+                        (confirmed_venue and key in {"venue", "venue_type", "provider", "metadata_url"})):
                     current[key] = value
             self.set_paper_metadata(paper, current)
         linked = topic in paper["topic_ids"]

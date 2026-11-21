@@ -96,7 +96,16 @@ def identity_keys(record):
 
 def selected_metadata(record):
     return {key: record[key] for key in ("title", "authors", "year", "venue", "doi", "arxiv_id", "source_id",
-                                        "metadata_url", "provider") if key in record}
+                                        "metadata_url", "provider", "issns", "venue_type", "publication_track")
+            if key in record}
+
+
+def conference_track(name):
+    if re.search(r"\b(findings|workshops?|companion|demos?|tutorials?|posters?|short papers?)\b", name, re.I):
+        return "other"
+    if re.search(r"\b(?:long|full|regular) papers?\b", name, re.I):
+        return "regular"
+    return ""
 
 
 def lookup_target(value):
@@ -127,6 +136,16 @@ def metadata_from_provider(provider, identifier):
                               for a in row.get("author") or []],
                   "year": next(iter(dates[0]), None), "venue": venue,
                   "metadata_url": f"https://doi.org/{identifier}"}
+        if row.get("type") == "journal-article":
+            result.update(venue_type="journal", issns=row.get("ISSN") or [])
+        if row.get("type") == "proceedings-article":
+            result["venue_type"] = "conference"
+            container = " ".join(row.get("container-title") or [])
+            track = conference_track(f"{container} {venue}")
+            if track:
+                result["publication_track"] = track
+                if track == "other":
+                    result["venue"] = container if conference_track(container) else venue
     else:
         try:
             feed = ET.fromstring(fetch(ARXIV + "?" + urlencode({"id_list": identifier, "max_results": 1})))
@@ -145,7 +164,8 @@ def metadata_from_provider(provider, identifier):
         result = {"title": field("a:title"), "arxiv_id": returned,
                   "authors": [a.findtext("a:name", "", ATOM) for a in entry.findall("a:author", ATOM)],
                   "year": int(published) if published.isdigit() else None,
-                  "venue": field("x:journal_ref"), "metadata_url": f"https://arxiv.org/abs/{returned}"}
+                  "venue": field("x:journal_ref"), "metadata_url": f"https://arxiv.org/abs/{returned}",
+                  "venue_type": "preprint"}
         if publication_doi := doi(field("x:doi")):
             result["doi"] = publication_doi
     if not result["title"]:
@@ -204,7 +224,7 @@ def openalex_search(query, filters, key):
                           if f" {venue_filter} " in f" {normalize_venue(name)} "), None)
             if not match:
                 continue
-            source = {"display_name": match}
+            source = {"display_name": match, "type": "conference"}
         if work_id in seen or (work_doi and work_doi in seen):
             continue
         seen.update(filter(None, (work_id, work_doi)))
@@ -216,6 +236,8 @@ def openalex_search(query, filters, key):
                            "metadata_url": work_id, "provider": "OpenAlex", "abstract": abstract,
                            **({"venue": {"name": source["display_name"], "source": "OpenAlex"}}
                               if source.get("display_name") else {}),
+                           **({"venue_type": source["type"], "issns": source.get("issn") or []}
+                              if source.get("type") in ("journal", "conference") else {}),
                            "available_scope": "abstract" if abstract else "metadata", "read_scope": "none",
                            "reason": "Matched the OpenAlex search query."})
     if venue_filter:

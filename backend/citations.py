@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 from uuid import uuid4
 from dsh import DshFailure, MODEL
 from literature import LiteratureError, digest, extract_pdf, pdf_content, render_pdf_page
+from venue_ranks import pdf_venue
 
 
 HEADING = re.compile(r"(?im)^\s*(?:references|bibliography|works cited)\s*$")
@@ -59,6 +60,8 @@ def parse_document(pages):
                             pages[0] if pages else "")
     metadata["year"] = publication[1] if publication else ""
     metadata["doi"], metadata["arxiv"] = identifiers("\n".join(header[:7]))
+    if pages:
+        metadata["publication"] = pdf_venue(pages[0])
     body, references = [], []
     in_refs = False
     for page, raw in enumerate(pages, 1):

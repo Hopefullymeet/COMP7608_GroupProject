@@ -51,10 +51,21 @@ export type PdfPosition = { page: number; zoom: number; offset: number }
 export type ReadingPosition = { passage_id?: string } & Partial<PdfPosition>
 export type PaperMetadata = {
   title: string; authors: string[]; year?: number | null; venue?: string; doi?: string; arxiv_id?: string
+  issns?: string[]; venue_type?: 'journal' | 'conference' | 'preprint' | ''; publication_track?: 'regular' | 'other' | ''
 }
 export type MetadataRecord = PaperMetadata & { source_id?: string; provider?: string; metadata_url?: string }
+export type VenueRankings = {
+  venue_type: 'journal' | 'conference' | 'preprint' | 'unknown'; venue_source?: string
+  items: {
+    scheme: string; label: string; metric: 'quartile' | 'rank' | 'index'
+    status: 'matched' | 'catalog_missing' | 'venue_unknown' | 'not_found' | 'ambiguous' | 'not_applicable'
+    edition?: string; year?: number; source_url?: string; applicability?: 'confirmed' | 'verify_track'
+    entries: { venue: string; venue_type: 'journal' | 'conference'; value: string; category: string
+      source_url: string; matched_by: 'issn' | 'name' }[]
+  }[]
+}
 type PaperDetails = {
-  paper_id: string; revision: string; manual_fields: (keyof PaperMetadata)[]; metadata: MetadataRecord
+  paper_id: string; revision: string; manual_fields: (keyof PaperMetadata)[]; metadata: MetadataRecord; rankings: VenueRankings
 }
 export type LibraryMethods = {
   'file.pick': [{ purpose: 'papers' | 'draft' | 'backup' }, { files: Picked[] }]
@@ -68,7 +79,7 @@ export type LibraryMethods = {
     Write & { topic_id: string; preview_id: string; paper_id?: string },
     { paper_id: string; source_version_id: string; available_scope: 'metadata' | 'abstract' | 'full_text'; already_linked: boolean },
   ]
-  'library.metadata': [PaperKey, PaperDetails]
+  'library.metadata': [PaperKey & { edition_year?: number }, PaperDetails]
   'library.update_metadata': [Write & PaperKey & { base_revision: string; changes: Partial<PaperMetadata> }, PaperDetails]
   'library.resolve_import': [
     Write & { review_id: string; decision: 'link' | 'separate' },

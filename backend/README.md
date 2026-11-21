@@ -83,3 +83,19 @@ export PAPERTRACE_VISION_PORT=11434
 ```
 
 图像请求连接 `127.0.0.1`。使用本地模型并在启动 Ollama 前设置 `OLLAMA_NO_CLOUD=1` 可以关闭 Ollama 云端服务。在阅读器选择「用视觉模型补充图像描述」可为当前 PDF 每批处理至多 24 张图，已生成的描述按模型与图块缓存。描述参与图块检索，图注、关键词和可识别的图形特征也能离线搜索。批注单独写入 SQLite，导出时生成包含 PDF 注解的副本。
+
+## 发表场所分区、收录和等级
+
+用目录提供方发布且有权使用的文件初始化工作区。安装后，论文详情自动查本地目录，无需逐篇查站。使用与桌面端相同的工作区路径。目录可以按体系和版本分别安装，替换同一版时会整体更新，其他年份仍可查。
+
+```sh
+python3 backend/venue_ranks.py /path/to/workspace doaj.csv \
+  --scheme doaj --format doaj --edition '2026-10-21 public export' --year 2026 \
+  --source-url https://doaj.org/docs/journal-csv
+```
+
+日期用下载页列出的目录更新日期。原生格式包括 DOAJ CSV、SCImago SJR CSV、Master Journal List 单个索引 CSV 和 ICORE 查询表格 HTML。SJR CSV 中的 Best Quartile 会按最佳分区标注。ICORE 分页可先保存需要的页，再把所有文件交给同一次导入，使用表格 Source 列的版本名，例如 ICORE2026。只导入部分页面时，未匹配仅表示该快照中没有对应条目。 [DOAJ 导出](https://doaj.org/docs/journal-csv) · [SCImago 下载说明](https://www.scimagojr.com/help.php) · [Master Journal List](https://mjl.clarivate.com/scope/scope_ahci/) · [ICORE 目录](https://portal.core.edu.au/conf-ranks/)
+
+标准 UTF-8 CSV 的必填列是 `venue,venue_type,value`，可选列是 `issns,aliases,category,source_url`。venue_type 使用 journal 或 conference。aliases 用竖线分隔，按学科保留多行。自定义体系使用新的 `--scheme` 并提供 `--label`、`--metric` 和一个或多个 `--venue-type`。完整内置体系见[目录导入器](venue_ranks.py)。
+
+JCR、CiteScore、CCF、CSSCI、CSCD、北大核心、ABDC、AJG 等可将有权使用的目录转成标准 CSV 后导入。JCR 分区每个学科单独一行。中科院分区表支持已获授权的历史目录，使用 1区–4区和实际版本。 [Clarivate 访问说明](https://developer.clarivate.com/apis/wos-journal) · [Scopus 来源说明](https://www.elsevier.support/scopus/answer/how-do-i-use-the-scopus-sources-feature) · [CCF 目录说明](https://www.ccf.org.cn/service/pj/2024-03-14/814278.shtml) · [中科院公告](https://www.las.cas.cn/news/tzgg/202603/t20260327_8178738.html)
