@@ -104,6 +104,7 @@ function paperFromAbstract(source: Abstract | DocumentView, paper?: Paper): Pape
     venue: paper?.venue ?? '',
     venueSource: paper?.venueSource ?? '',
     year: paper?.year ?? 0,
+    pdfAvailable: paper?.pdfAvailable,
     stored: source.passages.some((p) => 'page' in p && typeof p.page === 'number' && p.page > 0)
       ? 'full-text'
       : 'abstract',
@@ -230,6 +231,7 @@ export function MainlineProvider({
           venueSource: '',
           year: 0,
           passages: [],
+          pdfAvailable: version.pdf_available ?? (!demo && version.available_scope === 'full_text'),
           stored: version.available_scope === 'full_text' ? 'full-text' : version.available_scope,
         }),
       ),
@@ -535,7 +537,7 @@ export function MainlineProvider({
           setPosition({ version: id, passage: passage_id })
         })
         .catch(reveal)
-    if (!id || papers[id]?.stored === 'metadata' || papers[id]?.passages.length) return
+    if (!id || papers[id]?.pdfAvailable || papers[id]?.stored === 'metadata' || papers[id]?.passages.length) return
     selection.current = undefined
     void (
       papers[id]?.stored === 'full-text'
@@ -603,7 +605,9 @@ export function MainlineProvider({
         setView((state) => ({
           ...state,
           readerPaperId: version,
-          activeEvidence: { id, anchor: 'active-abstract-passage', scroll: true },
+          activeEvidence: { id, anchor: 'active-abstract-passage', scroll: true,
+            pdfPage: located.region?.page ?? source.passages.find((p) => p.passage_id === located.passage_id)?.page,
+            region: located.region?.rect },
         }))
       })
       .catch((cause) => {
@@ -906,7 +910,10 @@ export function MainlineProvider({
           setFiles((old) => [...old, ...selected.filter((f) => !old.some((o) => o.file_id === f.file_id))])
         })
       },
-      original: (id) => void api.call('source.original', { source_version_id: id }).catch(reveal),
+      rename: async (kind, topic_id, id, title) => {
+        if (kind === 'topic') await workspace.write('topic.rename', { topic_id, title })
+        else await workspace.write('session.rename', { topic_id, session_id: id, title })
+      },
       bookmark: (id, passage_id) =>
         void keyedWrite(JSON.stringify(['bookmark', session, id, passage_id]), (operation_id) =>
           api.call('reader.bookmark', {

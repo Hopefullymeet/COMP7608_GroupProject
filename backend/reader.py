@@ -508,6 +508,8 @@ class Reader:
                 item = {"id": key, "topic_id": topic, "source_version_id": version, "page": page,
                         "rect": params["rect"], "question": question, "answer": answer,
                         "medium": params["medium"], "source_excerpt": selected}
+                if "session_id" in task:
+                    item["session_id"] = task["session_id"]
                 self.host.put("reader_answer", key, item)
                 event = self.host.finish(current, "completed", result={"record_id": key, "kind": "reader_question"})
                 self.host.send_events([event])

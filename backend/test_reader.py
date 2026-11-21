@@ -89,7 +89,9 @@ class ReaderTest(unittest.TestCase):
         with self.engine.open(stream=base64.b64decode(original), filetype="pdf") as document:
             width, height = document[0].rect.width, document[0].rect.height
         selected = [102 / width, 136 / height, 180 / width, 155 / height]
-        request = {"topic_id": self.topic, "kind": "reader_question", "input": {
+        session = call(self.worker, "session.create", topic_id=self.topic)["session_id"]
+        other_session = call(self.worker, "session.create", topic_id=self.topic)["session_id"]
+        request = {"topic_id": self.topic, "session_id": session, "kind": "reader_question", "input": {
             "source_version_id": version, "page": 1, "rect": selected, "rects": [selected],
             "question": "What does this label mean?", "medium": "text"}}
         prepare = call(self.worker, "task.prepare", **request)
@@ -105,6 +107,8 @@ class ReaderTest(unittest.TestCase):
         answer = call(self.worker, "reader.answers", topic_id=self.topic)["items"][0]
         self.assertEqual(answer["rect"], selected)
         self.assertEqual(answer["source_excerpt"], "Retrieval")
+        self.assertEqual(call(self.worker, "reader.answers", topic_id=self.topic, session_id=session)["items"], [answer])
+        self.assertEqual(call(self.worker, "reader.answers", topic_id=self.topic, session_id=other_session)["items"], [])
 
     def test_visual_descriptions_are_retryable_and_reused(self):
         paper = call(self.worker, "library.import_pdf", topic_id=self.topic, name="Flow.pdf",

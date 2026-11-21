@@ -1,11 +1,19 @@
 import { count, useLanguage } from '../i18n'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
 import { NEW_SESSION, allEvidence, currentTopic, evidenceFor, paperFor, papersOfTopic, sourceStatus, useStore } from '../data/store'
 import { QUESTIONS } from '../data/scripts'
 import { Icon, Spinner } from '../components/Icon'
 import { Disclosure } from '../components/Disclosure'
 import { scrollWithin } from '../components/util'
-import type { ChatMessage, Passage } from '../data/types'
+import { useRead, useWorkspace } from '../data/WorkspaceProvider'
+import { Dialog } from '../components/PageHead'
+import { FigureSearch } from '../components/FigureSearch'
+import type { ReaderAnswer, Rect, Selection } from '../api/reader'
+import type { ChatMessage, Paper, Passage } from '../data/types'
+
+const PdfReader = lazy(() => import('./PdfReader'))
+
+type Location = { page: number; rect?: Rect }
 
 function AgentMessage({ m }: { m: ChatMessage }) {
   const { tr } = useLanguage()
@@ -60,7 +68,7 @@ function AgentMessage({ m }: { m: ChatMessage }) {
   )
 }
 
-function Chat() {
+function Chat({ selections = [], onSource }: { selections?: ReaderAnswer[]; onSource?: (answer: ReaderAnswer) => void }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
   const [text, setText] = useState('')
@@ -70,7 +78,7 @@ function Chat() {
   const asked = new Set(messages.filter((m) => m.role === 'user').map((m) => m.segments[0]?.text))
   const papers = papersOfTopic(state, currentTopic(state))
 
-  useEffect(() => { scrollWithin(endRef.current, '.chat-scroll', 'end') }, [messages.length, state.messages])
+  useEffect(() => { scrollWithin(endRef.current, '.chat-scroll', 'end') }, [messages.length, state.messages, selections.length])
 
   const send = (t: string) => {
     if (!t.trim() || state.qaRunning) return
@@ -92,10 +100,10 @@ function Chat() {
           <Icon name="message" size={14} /> <span className="grow">{tr(session?.title ?? NEW_SESSION)}</span>
           {messages.length > 0 && <button className="link-btn" onClick={() => act.newSession(currentTopic(state))}><Icon name="plus" size={13} />{' '}{tr('New session')}</button>}
         </div>
-        {messages.length === 0 && (
+        {messages.length === 0 && selections.length === 0 && (
           <div className="chat-empty">
             <h2>{tr('Start a fresh reading question')}</h2>
-            <p>{tr('Explore dataset size and question collection, then compare evaluation results. Papers are shared across this topic; this conversation starts empty.')}</p>
+            <p>{tr(state.mainline?.demo || !state.mainline ? 'Explore dataset size and question collection, then compare evaluation results. Papers are shared across this topic; this conversation starts empty.' : 'Ask about a paper or select a passage to use it in your question.')}</p>
           </div>
         )}
         {messages.map((m) =>
@@ -103,6 +111,16 @@ function Chat() {
             ? <div key={m.id} className="msg user"><p>{m.segments[0]?.text}</p></div>
             : <AgentMessage key={m.id} m={m} />,
         )}
+        {selections.map((answer) => <div key={answer.id}>
+          <div className="msg user"><p>{answer.question}</p></div>
+          <div className="msg agent">
+            <div className="msg-who"><span className="avatar">P</span> PaperTrace</div>
+            <p className="answer pt-reader-response">{answer.answer}</p>
+            <button className="link-btn" onClick={() => onSource?.(answer)}>
+              {paperFor(state, answer.source_version_id)?.short} · {tr('PDF page {0}', answer.page)}
+            </button>
+          </div>
+        </div>)}
         <div ref={endRef} />
       </div>
 
@@ -174,13 +192,63 @@ function PassageText({ p, highlight }: { p: Passage; highlight: Set<string> }) {
   return <>{out} </>
 }
 
-function Reader() {
+type PdfActions = {
+  location?: { version: string } & Location
+  open: (version: string, page: number, rect?: Rect) => void
+  ask: (version: string, picked: Selection) => void
+  find: () => void
+}
+
+function PaperInsights({ paper, mode, onOpen }: { paper: Paper; mode: 'scan' | 'analysis'; onOpen: (version: string, page: number) => void }) {
+  const { tr } = useLanguage()
+  const { state } = useStore()
+  const topic_id = currentTopic(state)
+  const [direction, setDirection] = useState<'outgoing' | 'incoming'>('outgoing')
+  const refs = useRead('literature.refs', { topic_id, source_version_id: paper.id, direction }, mode === 'analysis')
+  const catalog = useRead('library.catalog', {}, mode === 'scan')
+  const entry = catalog?.papers.find((item) => item.source_versions.some((version) => version.source_version_id === paper.id))
+  return <div className="reader-scroll scroll pt-paper-insights">
+    <article className="paper">
+      <h1>{paper.title}</h1>
+      {mode === 'scan' ? <>
+        {!!(entry?.authors.length || paper.authors.length) && <p className="paper-authors">{(entry?.authors.length ? entry.authors : paper.authors).join(' · ')}</p>}
+        {paper.venue && <p>{paper.venue} {paper.year || ''}</p>}
+        {entry?.identity && <p className="fine">{entry.identity}</p>}
+        <button className="link-btn" onClick={() => onOpen(paper.id, 1)}>{tr('Read paper')}</button>
+      </> : <>
+        <div className="lib-tools">
+          <button className="ghost-btn" aria-pressed={direction === 'outgoing'} onClick={() => setDirection('outgoing')}>{tr('References')}</button>
+          <button className="ghost-btn" aria-pressed={direction === 'incoming'} onClick={() => setDirection('incoming')}>{tr('Cited by')}</button>
+        </div>
+        {!refs && <p role="status">{tr('Loading references…')}</p>}
+        {!!refs?.pending_versions.length && <p>{tr('Reference indexing is pending.')}</p>}
+        {refs && !refs.items.length && <p>{tr('No indexed references found.')}</p>}
+        {!!refs?.items.length && <ul>{refs.items.map((ref) => {
+          const linked = direction === 'outgoing' ? ref.target_version_id : ref.citing_version_id
+          return <li key={ref.citing_version_id + ':' + ref.key}>
+            {linked ? <button className="link-btn" onClick={() => onOpen(linked, 1)}>
+              {direction === 'outgoing' ? ref.target_title || ref.title : ref.citing_title}
+            </button> : ref.title || ref.text}
+            {ref.mentions.filter((item) => item.page > 0).slice(0, 3).map((item, index) =>
+              <button className="link-btn" key={index} onClick={() => onOpen(ref.citing_version_id, item.page)}>
+                {tr('PDF page {0}', item.page)}
+              </button>)}
+          </li>
+        })}</ul>}
+      </>}
+    </article>
+  </div>
+}
+
+function Reader({ pdf }: { pdf?: PdfActions }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
   const papers = papersOfTopic(state, currentTopic(state)).map((id) => paperFor(state, id))
   const historical = state.mainline && state.activeEvidence && paperFor(state, state.readerPaperId)
   const paper = historical || (papers.find((p) => p.id === state.readerPaperId) ?? papers[0])
 
+  const [mode, setMode] = useState<'scan' | 'reading' | 'analysis'>('reading')
+  useEffect(() => { setMode('reading') }, [paper?.id, state.activeEvidence?.id, pdf?.location])
   const scrollTimer=useRef<ReturnType<typeof setTimeout>>()
   useEffect(()=>()=>clearTimeout(scrollTimer.current),[paper?.id,state.activeSessionId])
   if (!paper) return <div className="empty-state"><h2>{tr('No papers in this topic')}</h2><button className="primary" onClick={() => act.openTopic(currentTopic(state), 'discover')}>{tr('Find papers')}</button></div>
@@ -189,6 +257,10 @@ function Reader() {
     const version = p.short === `${p.title} · ${p.id}` ? p.id.slice(0, 8) : undefined
     return { paper: p, label: version ? p.title : p.short, version }
   })
+  const withPdf = Boolean(pdf && paper.pdfAvailable)
+  const location = pdf?.location?.version === paper.id ? pdf.location : undefined
+  const evidencePage = state.activeEvidence?.pdfPage
+  const currentLocation = location ?? { page: evidencePage && evidencePage > 0 ? evidencePage : 1, rect: state.activeEvidence?.region }
   const used = new Set<string>()
   state.messages.filter((m) => m.sessionId === state.activeSessionId)
     .forEach((m) => m.segments.forEach((s) => s.evidenceId && used.add(s.evidenceId)))
@@ -214,12 +286,22 @@ function Reader() {
             <option key={p.id} value={p.id}>{version ? `${version} · ${label}` : label}</option>
           ))}
         </select>
-        <div className="view-toggle">
-          <button className="on" aria-pressed="true">{tr('Reading')}</button>
-          <button disabled={!state.mainline?.original} onClick={()=>state.mainline?.original?.(paper.id)}>{tr('Original PDF')}</button>
-        </div>
+        {withPdf && <div className="view-toggle paper-modes" role="group" aria-label={tr('Paper views')}>
+          {(['scan', 'reading', 'analysis'] as const).map((item) =>
+            <button key={item} className={mode === item ? 'on' : ''} aria-pressed={mode === item}
+              onClick={() => setMode(item)}>{tr({ scan: 'Scan', reading: 'Reading', analysis: 'Analysis' }[item])}</button>)}
+        </div>}
       </div>
 
+      {pdf && withPdf ? mode === 'reading' ? <Suspense fallback={<p className="pt-pdf-loading" role="status">{tr('Opening PDF…')}</p>}>
+        <PdfReader key={paper.id} topic={currentTopic(state)} version={paper.id} page={currentLocation.page}
+          target={currentLocation.rect} onPage={(page, rect) => pdf.open(paper.id, page, rect)}
+          onAsk={(selection) => pdf.ask(paper.id, selection)} onFind={pdf.find}
+          onWiki={() => act.navigate({ view: 'wiki', topicId: currentTopic(state) })} />
+      </Suspense> : <PaperInsights key={paper.id} paper={paper} mode={mode} onOpen={(version, page) => {
+        pdf.open(version, page)
+        setMode('reading')
+      }} /> :
       <div className="reader-scroll scroll" onScroll={e=>{
         if(!state.mainline?.bookmark || state.activeEvidence)return
         const scroller=e.currentTarget
@@ -273,9 +355,68 @@ function Reader() {
             </div>
           )}
         </article>
-      </div>
+      </div>}
     </section>
   )
+}
+
+function LiveReading({ topic, session }: { topic: string; session: string }) {
+  const { tr } = useLanguage()
+  const { state, act } = useStore()
+  const workspace = useWorkspace()
+  const [location, setLocation] = useState<PdfActions['location']>()
+  const [finding, setFinding] = useState(false)
+  const [picked, setPicked] = useState<{ version: string; selection: Selection }>()
+  const [question, setQuestion] = useState('')
+  const answers = useRead('reader.answers', { topic_id: topic, session_id: session })?.items.slice().reverse()
+  const vision = useRead('visual.capabilities', {}, picked?.selection.medium === 'image')
+  const papers = papersOfTopic(state, topic).map((id) => paperFor(state, id)).filter((paper) => paper.pdfAvailable)
+  const names = Object.fromEntries(papers.map((paper) => [paper.id, paper.short]))
+
+  useEffect(() => {
+    if (state.activeEvidence?.id) setLocation(undefined)
+  }, [state.activeEvidence?.id])
+
+  function open(version: string, page: number, rect?: Rect) {
+    if (state.readerPaperId !== version || state.activeEvidence) act.setReader(version)
+    setLocation({ version, page, rect })
+  }
+
+  function ask(version: string, selection: Selection) {
+    setQuestion('')
+    setPicked({ version, selection })
+  }
+
+  return <div className="read">
+    <Chat selections={answers} onSource={(answer) => open(answer.source_version_id, answer.page, answer.rect)} />
+    <Reader pdf={{ location, open, ask, find: () => setFinding(true) }} />
+    {finding && <FigureSearch topic={topic} versions={papers.map((paper) => paper.id)} names={names}
+      onOpen={(figure) => open(figure.source_version_id, figure.page, figure.rect)}
+      onAsk={(figure) => {
+        open(figure.source_version_id, figure.page, figure.rect)
+        ask(figure.source_version_id, { page: figure.page, rect: figure.rect, rects: [figure.rect], quote: figure.caption, medium: 'image' })
+      }} onClose={() => setFinding(false)} />}
+    {picked && <Dialog title={tr('Ask about this selection')} onClose={() => setPicked(undefined)}>
+      <form className="pt-reader-note" onSubmit={(event) => {
+        event.preventDefault()
+        if (!question.trim()) return
+        const { page, rect, rects, medium } = picked.selection
+        void workspace.prepare({ topic_id: topic, session_id: session, kind: 'reader_question',
+          input: { source_version_id: picked.version, question: question.trim(), page, rect, rects, medium } })
+        setPicked(undefined)
+      }}>
+        {picked.selection.quote && <blockquote className="evidence-excerpt">{picked.selection.quote}</blockquote>}
+        <textarea autoFocus required maxLength={2000} aria-label={tr('Question')}
+          placeholder={tr('Ask a follow-up…')} value={question} onChange={(event) => setQuestion(event.currentTarget.value)} />
+        {picked.selection.medium === 'image' && vision && !vision.vision &&
+          <p className="fine">{tr('Configure a local vision model to ask about images.')}</p>}
+        <div className="dialog-actions">
+          <button type="button" className="ghost-btn" onClick={() => setPicked(undefined)}>{tr('Cancel')}</button>
+          <button className="primary" disabled={workspace.busy || !question.trim() || (picked.selection.medium === 'image' && !vision?.vision)}>{tr('Ask AI')}</button>
+        </div>
+      </form>
+    </Dialog>}
+  </div>
 }
 
 export function Read() {
@@ -283,6 +424,9 @@ export function Read() {
   const { state, act } = useStore()
   if (!state.activeSessionId) {
     return <div className="empty-state"><Icon name="message" size={22} /><h2>{tr('No sessions yet')}</h2><p>{tr('Create a session to start asking about the papers in this topic.')}</p><button className="primary" onClick={() => act.newSession(currentTopic(state))}><Icon name="plus" size={15} />{' '}{tr('New session')}</button></div>
+  }
+  if (state.mainline && !state.mainline.demo) {
+    return <LiveReading key={state.activeSessionId} topic={currentTopic(state)} session={state.activeSessionId} />
   }
   return (
     <div className="read">

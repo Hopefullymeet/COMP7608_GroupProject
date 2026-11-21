@@ -21,6 +21,7 @@
 | 页面 | 操作 | 方法 | 状态 | 实现说明 |
 |---|---|---|---|---|
 | Home 与侧栏 | 创建主题或会话 | `topic.create`、`session.create` | [已细化](discover-read-locate.md#11-方法与类型) | |
+| | 修改主题和会话名称 | `topic.rename`、`session.rename` | [方法与类型](discover-read-locate.md#11-方法与类型) | |
 | | 查看主题和会话 | `topic.list`、`session.list` | [已细化](discover-read-locate.md#11-方法与类型) | [待办与变化](services-workspace.md) |
 | | 导入材料 | `file.pick`、`file.stage_drop`、`paper_import` | [已细化](library-reading.md) | |
 | | 归档与恢复主题、会话 | `workspace.archive/archived/unarchive` | [已细化](library-reading.md) | |

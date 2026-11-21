@@ -75,6 +75,8 @@ export type Methods = ReaderMethods & SynthesisMethods & LibraryMethods & Resear
   'protocol.version': [Record<string, never>, { major: number; minor: number }]
   'topic.list': [Record<string, never>, { items: Topic[] }]
   'topic.create': [Write & { title: string }, InTopic]
+  'topic.rename': [Write & InTopic & { title: string }, InTopic & { title: string }]
+  'session.rename': [Write & InSession & { title: string }, InSession & { title: string }]
   'session.list': [InTopic, { items: Session[] }]
   'session.create': [Write & InTopic, InSession]
   'session.get': [InSession, { turns: Turn[]; active_task_id?: Id;reader?:{source_version_id:Id;passage_id?:Id} }]

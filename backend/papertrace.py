@@ -71,7 +71,7 @@ def required(params, key):
 class Worker:
     writes = {
         "comparison.save", "draft.import", "draft.resolve_reference", "audit.review", "audit.save_to_wiki", "export.create",
-        "topic.create", "session.create", "task.prepare", "task.start", "task.cancel",
+        "topic.create", "topic.rename", "session.create", "session.rename", "task.prepare", "task.start", "task.cancel",
         "candidate.decide", "reader.bookmark", "note.save", "library.import_pdf", "synthesis.review",
         "reader.mark_save", "reader.mark_delete", "reader.answer_save", "reader.mark_to_wiki",
     }
@@ -226,11 +226,22 @@ class Worker:
             topic, sid = self.topic(params), identifier()
             self.put("session", sid, {"session_id": sid, "topic_id": topic, "updated_at": now(), "turns": []})
             return {"topic_id": topic, "session_id": sid}
+        if method in ("topic.rename", "session.rename"):
+            title = required(params, "title").strip()
+            if len(title) > 160:
+                raise invalid("Name must be at most 160 characters.")
+            kind = method.split(".")[0]
+            record = self.session(params) if kind == "session" else self.get("topic", self.topic(params))
+            key = f"{kind}_id"
+            record["title"] = title
+            self.put(kind, record[key], record)
+            return {key: record[key], "title": title, **({"topic_id": record["topic_id"]} if kind == "session" else {})}
         if method == "session.list":
             topic = self.topic(params)
             return {"items": [
                 {"session_id": s["session_id"], "updated_at": s["updated_at"], "has_turns": bool(s["turns"]),
-                 **({"title": s["turns"][0]["question"]} if s["turns"] else {})}
+                 **({"title": s["title"]} if "title" in s else
+                    {"title": s["turns"][0]["question"]} if s["turns"] else {})}
                 for s in self.rows("session") if s["topic_id"] == topic
             ]}
         if method == "session.get":
@@ -344,7 +355,9 @@ class Worker:
             return self.reader.delete(self.topic(params), params)
         if method == "reader.answers":
             topic = self.topic(params)
-            return {"items": [item for item in self.rows("reader_answer") if item["topic_id"] == topic]}
+            session = self.session(params)["session_id"] if "session_id" in params else None
+            return {"items": [item for item in self.rows("reader_answer") if item["topic_id"] == topic
+                              and (session is None or item.get("session_id") == session)]}
         if method == "reader.answer_save":
             required(params, "answer_id")
             return self.reader.save_answer_to_wiki(self.topic(params), params)
@@ -531,6 +544,8 @@ class Worker:
             audit_pending = [j for j in audit_jobs if j["usable"] and j["cached"] is None]
         elif kind == "reader_question":
             target, _, label = self.reader.question(topic, input_)
+            if "session_id" in params:
+                task_data["session_id"] = self.session(params)["session_id"]
         elif kind == "visual_index":
             target = required(input_, "source_version_id")
             source, _ = self.reader.content(topic, target)

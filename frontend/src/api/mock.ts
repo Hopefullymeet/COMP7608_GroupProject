@@ -651,6 +651,18 @@ export function createMock(): Client {
       state.topics.unshift({ topic_id, title })
       return { topic_id }
     },
+    'topic.rename': ({ topic_id, title }) => {
+      const topic = state.topics.find((item) => item.topic_id === topic_id)
+      if (!topic || !title.trim() || title.trim().length > 160) throw new Error('Invalid name or topic.')
+      topic.title = title.trim()
+      return { topic_id, title: topic.title }
+    },
+    'session.rename': ({ topic_id, session_id, title }) => {
+      const session = state.sessions[topic_id]?.find((item) => item.session_id === session_id)
+      if (!session || !title.trim() || title.trim().length > 160) throw new Error('Invalid name or session.')
+      session.title = title.trim()
+      return { topic_id, session_id, title: session.title }
+    },
     'session.list': ({ topic_id }) => ({
       items: (state.sessions[topic_id] ?? [])
         .filter((s) => !state.shelf.archive.some((a) => a.id === s.session_id))

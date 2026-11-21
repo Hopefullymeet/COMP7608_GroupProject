@@ -22,6 +22,7 @@ export interface Paper {
   doi?: string
   /** What the prototype library holds for this paper. */
   stored: 'full-text' | 'abstract' | 'excerpt' | 'metadata'
+  pdfAvailable?: boolean
   passages: Passage[]
 }
 

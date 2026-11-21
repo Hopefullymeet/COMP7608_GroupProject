@@ -4,6 +4,8 @@ import { hasMessages, sessionsOf, useStore, type Page } from '../data/store'
 import { Icon } from './Icon'
 import { LanguagePicker } from './LanguagePicker'
 import { Logo } from './Logo'
+import { Dialog } from './PageHead'
+import { errorText } from '../api/contract'
 
 const PAGES: { page: Page; icon: string; label: string }[] = [
   { page: 'library', icon: 'library', label: 'Library' },
@@ -30,6 +32,10 @@ function ShowMore({ hidden, open, onToggle }: { hidden: number; open: boolean; o
 export function Sidebar() {
   const { tr } = useLanguage()
   const { state, act } = useStore()
+  const rename = state.mainline?.rename
+  const [editing, setEditing] = useState<{ kind: 'topic' | 'session'; topicId: string; id: string; title: string }>()
+  const [renameError, setRenameError] = useState('')
+  const [savingName, setSavingName] = useState(false)
   const [filter, setFilter] = useState('')
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [allTopics, setAllTopics] = useState(false)
@@ -49,6 +55,15 @@ export function Sidebar() {
 
   const isOpen = (topicId: string) => !!q || (expanded[topicId] ?? topicId === activeTopic)
   const toggle = (topicId: string) => setExpanded((e) => ({ ...e, [topicId]: !isOpen(topicId) }))
+
+  function renameButton(kind: 'topic' | 'session', topicId: string, id: string, title: string) {
+    if (!rename) return null
+    const label = tr(kind === 'topic' ? 'Rename topic' : 'Rename session')
+    return <button className="side-delete side-rename" title={label} aria-label={label} onClick={() => {
+      setRenameError('')
+      setEditing({ kind, topicId, id, title })
+    }}><Icon name="edit" size={14} /></button>
+  }
 
   return (
     <aside className="sidebar">
@@ -95,6 +110,7 @@ export function Sidebar() {
                   title={tr('New session in {0}', t.title)} aria-label={tr('New session in {0}', t.title)}>
                   <Icon name="plus" size={14} />
                 </button>
+                {renameButton('topic', t.id, t.id, t.title)}
                 {<button className="side-delete" onClick={() => act.deleteTopic(t.id)}
                   title={tr('Delete topic: {0}', t.title)} aria-label={tr('Delete topic: {0}', t.title)}>
                   <Icon name="trash" size={14} />
@@ -108,6 +124,7 @@ export function Sidebar() {
                         <span className="grow">{tr(s.title)}</span>
                         <small>{tr(s.updated)}</small>
                       </button>
+                      {renameButton('session', s.topicId, s.id, s.title)}
                       {<button className="side-delete" onClick={() => act.deleteSession(s.id)}
                         title={tr('Delete session: {0}', s.title)} aria-label={tr('Delete session: {0}', s.title)}>
                         <Icon name="trash" size={14} />
@@ -153,6 +170,35 @@ export function Sidebar() {
         {(!state.mainline || state.mainline.demo) && <small>{tr('Local workspace · nothing leaves this page')}</small>}
       </div>
       <LanguagePicker />
+      {editing && rename && <Dialog title={tr(editing.kind === 'topic' ? 'Rename topic' : 'Rename session')}
+        onClose={() => { if (!savingName) setEditing(undefined) }}>
+        <form onSubmit={async (event) => {
+          event.preventDefault()
+          const title = editing.title.trim()
+          if (!title || savingName) return
+          setSavingName(true)
+          setRenameError('')
+          try {
+            await rename(editing.kind, editing.topicId, editing.id, title)
+            setEditing(undefined)
+          } catch (cause) {
+            setRenameError(errorText(cause))
+          } finally {
+            setSavingName(false)
+          }
+        }}>
+          <label className="rename-field">{tr('Name')}
+            <input autoFocus value={editing.title} maxLength={160} required
+              onFocus={(event) => event.currentTarget.select()}
+              onChange={(event) => setEditing({ ...editing, title: event.currentTarget.value })} />
+          </label>
+          {renameError && <p role="alert">{tr(renameError)}</p>}
+          <div className="dialog-actions">
+            <button type="button" className="ghost-btn" disabled={savingName} onClick={() => setEditing(undefined)}>{tr('Cancel')}</button>
+            <button className="primary" disabled={savingName || !editing.title.trim()}>{tr('Save')}</button>
+          </div>
+        </form>
+      </Dialog>}
     </aside>
   )
 }

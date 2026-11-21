@@ -211,3 +211,40 @@
 .pt-selection-question blockquote, .pt-reader-answer > p { white-space: pre-wrap; }
 .pt-parsed-table { max-width: 100%; overflow-x: auto; }
 .pt-parsed-table th, .pt-parsed-table td { padding: .35rem; text-align: left; vertical-align: top; }
+
+.pt-pdf-bar, .pt-pdf-pages { display: flex; align-items: center; gap: .35rem; }
+.pt-pdf-bar { min-height: 42px; padding: 2px 10px; border-bottom: 1px solid var(--line); color: var(--ink-2); }
+.pt-pdf-pages { margin-right: auto; font-variant-numeric: tabular-nums; font-size: 12px; }
+.pt-pdf-options { position: relative; }
+.pt-pdf-options summary { cursor: pointer; list-style: none; border-radius: 6px; padding: 4px 10px; font-weight: 700; }
+.pt-pdf-options summary::-webkit-details-marker { display: none; }
+.pt-pdf-menu { position: absolute; z-index: 4; right: 0; min-width: max-content; padding: 4px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: var(--shadow); }
+.pt-pdf-menu button { display: block; padding: 7px 10px; width: 100%; text-align: left; border-radius: 4px; }
+.pt-pdf-menu button:hover:not(:disabled), .pt-selection-actions button:hover { background: var(--accent-faint); }
+.pt-pdf-loading { margin: 12px; }
+.pt-selection-actions { position: fixed; z-index: 30; display: flex; max-width: calc(100vw - 16px); gap: 2px; padding: 3px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); font-size: 13px; }
+.pt-selection-actions[hidden] { display: none; }
+.pt-selection-actions button { border-radius: 5px; padding: 7px 9px; }
+.reader > .pt-reader { min-height: 0; flex: 1; display: flex; flex-direction: column; }
+.reader > .pt-reader .pt-reader-frame { max-height: none; flex: 1; }
+.reader > .pt-reader .pt-annotation-list { overflow: auto; max-height: 24vh; margin: 0; padding: 6px 12px; border-top: 1px solid var(--line); }
+.pt-paper-insights .paper { min-width: 0; }
+.pt-paper-insights li + li { margin-top: .65rem; }
+.pt-paper-insights button { text-align: left; }
+@container reader (max-width: 420px) {
+  .reader-bar:has(.paper-modes) { grid-template-columns: minmax(0, 1fr); }
+  .paper-modes { justify-self: start; }
+}
+
+.pt-reader-response { white-space: pre-wrap; }
+@media (max-width: 780px) {
+  .app:has(.read) { min-width: 0; flex-direction: column; }
+  .app:has(.read) .sidebar { width: 100%; max-height: 24dvh; border-right: 0; border-bottom: 1px solid var(--line); }
+  .app:has(.read) .main { min-height: 0; }
+  .app:has(.read) .topic-head { flex-wrap: wrap; height: auto; padding: 8px; gap: 8px; }
+  .app:has(.read) .topic-head .tabs { order: 1; max-width: 100%; overflow: auto; }
+  .topic-body > .read { display: block; overflow: auto; }
+  .read .chat { min-height: 36dvh; max-height: 50dvh; }
+  .read .reader { min-height: 56dvh; }
+  .reader > .pt-reader .pt-reader-frame { max-height: 68dvh; }
+}

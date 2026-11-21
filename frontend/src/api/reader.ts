@@ -20,7 +20,7 @@ export type ReaderAnswer = Omit<Selection, 'rects' | 'quote'> & {
   id: string; source_version_id: string; question: string; answer: string
 }
 export type ReaderTask = Topic & (
-  { kind: 'reader_question'; input: Omit<Selection, 'quote'> & { source_version_id: string; question: string } } |
+  { kind: 'reader_question'; session_id?: string; input: Omit<Selection, 'quote'> & { source_version_id: string; question: string } } |
   { kind: 'visual_index'; input: { source_version_id: string } }
 )
 export type ReaderMethods = {
@@ -28,7 +28,7 @@ export type ReaderMethods = {
   'reader.marks': [Source, { items: Mark[] }]
   'reader.mark_save': [Page & Write & Omit<Mark, 'mark_id' | 'revision'> & { mark_id?: string; base_revision?: string }, Mark]
   'reader.mark_delete': [Source & Write & { mark_id: string; base_revision: string }, { deleted: true }]
-  'reader.answers': [Topic, { items: ReaderAnswer[] }]
+  'reader.answers': [Topic & { session_id?: string }, { items: ReaderAnswer[] }]
   'reader.answer_save': [Topic & Write & { answer_id: string }, { item_id: string }]
   'reader.mark_to_wiki': [Source & Write & { mark_id: string }, { item_id: string }]
   'reader.export': [Source, { content: string; name: string }]

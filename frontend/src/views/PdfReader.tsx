@@ -1,4 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { Icon } from '../components/Icon'
+import { Dialog } from '../components/PageHead'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { getDocument, GlobalWorkerOptions, TextLayer } from 'pdfjs-dist'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
@@ -30,12 +33,12 @@ function clamp(v: number) { return Math.min(1, Math.max(0, v)) }
 
 export default function PdfReader({ topic, version, page, target, onPage, onAsk, onFind, onWiki }: {
   topic: string; version: string; page: number; target?: Rect; onPage: (page: number, rect?: Rect) => void
-  onAsk: (selection: Selection) => void; onFind: () => void; onWiki: () => void
+  onAsk: (selection: Selection) => void; onFind?: () => void; onWiki: () => void
 }) {
   const { tr } = useLanguage()
   const workspace = useWorkspace()
   const scope = { topic_id: topic, source_version_id: version }
-  const content = useRead('reader.pdf', scope)?.content
+  const { api } = workspace
   const marks = useRead('reader.marks', scope)?.items ?? []
   const [document, setDocument] = useState<PDFDocumentProxy>()
   const [width, setWidth] = useState(0)
@@ -45,8 +48,9 @@ export default function PdfReader({ topic, version, page, target, onPage, onAsk,
   const [error, setError] = useState('')
   const fallback = useRead('source.page', { ...scope, page }, Boolean(error))
   const [tool, setTool] = useState<'select' | 'region' | 'ink'>('select')
-  const [color, setColor] = useState<Mark['color']>('amber')
+  const color: Mark['color'] = 'amber'
   const [selection, setSelection] = useState<Selection>()
+  const popup = useRef<HTMLDivElement>(null)
   const [editor, edit] = useState<{ value: string; mark?: Mark }>()
   const [history, setHistory] = useState<{ undo: Mark[]; redo: Mark[] }>({ undo: [], redo: [] })
   const [drawing, setDrawing] = useState<Point[]>([])
@@ -64,14 +68,16 @@ export default function PdfReader({ topic, version, page, target, onPage, onAsk,
     return () => observer.disconnect()
   }, [])
   useEffect(() => {
-    setDocument(undefined)
-    if (!content) return
     let live = true
-    const loading = getDocument({ data: Uint8Array.from(atob(content), (v) => v.charCodeAt(0)) })
-    void loading.promise.then((pdf) => { if (live) setDocument(pdf) })
-      .catch(() => { if (live) setError('The PDF could not be opened.') })
-    return () => { live = false; void loading.destroy().catch(() => undefined) }
-  }, [content])
+    let loading: ReturnType<typeof getDocument> | undefined
+    void api.call('reader.pdf', { topic_id: topic, source_version_id: version }).then(async ({ content }) => {
+      if (!live) return
+      loading = getDocument({ data: Uint8Array.from(atob(content), (v) => v.charCodeAt(0)) })
+      const pdf = await loading.promise
+      if (live) setDocument(pdf)
+    }).catch(() => { if (live) setError('The PDF could not be opened.') })
+    return () => { live = false; void loading?.destroy().catch(() => undefined) }
+  }, [api, topic, version])
   useEffect(() => {
     if (!document || !width || !canvas.current || !layer.current) return
     const raster = canvas.current
@@ -106,6 +112,46 @@ export default function PdfReader({ topic, version, page, target, onPage, onAsk,
         left: target ? Math.max(0, target[0] * size.width - 24) : 0 })
   }, [page, ready, target, size])
 
+  useLayoutEffect(() => {
+    const menu = popup.current
+    const paper = surface.current
+    const scroller = frame.current
+    if (!selection || !menu || !paper || !scroller) return
+    function place() {
+      if (!menu || !paper || !scroller || !selection) return
+      const box = paper.getBoundingClientRect()
+      const visible = scroller.getBoundingClientRect()
+      const top = box.top + selection.rect[1] * box.height
+      const bottom = box.top + selection.rect[3] * box.height
+      const center = box.left + (selection.rect[0] + selection.rect[2]) * box.width / 2
+      const menuTop = top - menu.offsetHeight - 8
+      menu.hidden = bottom < visible.top || top > visible.bottom
+      menu.style.left = Math.max(8, Math.min(window.innerWidth - menu.offsetWidth - 8, center - menu.offsetWidth / 2)) + 'px'
+      menu.style.top = Math.max(8, Math.min(window.innerHeight - menu.offsetHeight - 8,
+        menuTop >= Math.max(visible.top, 8) ? menuTop : bottom + 8)) + 'px'
+    }
+    place()
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => {
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+    }
+  }, [selection, editor, size, tr])
+
+  useEffect(() => {
+    if (!selection) return
+    function dismiss(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !editor) {
+        setSelection(undefined)
+        window.getSelection()?.removeAllRanges()
+        layer.current?.focus({ preventScroll: true })
+      }
+    }
+    window.addEventListener('keydown', dismiss)
+    return () => window.removeEventListener('keydown', dismiss)
+  }, [selection, editor])
+
   function position(event: ReactPointerEvent): Point {
     const box = surface.current!.getBoundingClientRect()
     return [clamp((event.clientX - box.left) / box.width), clamp((event.clientY - box.top) / box.height)]
@@ -126,13 +172,14 @@ export default function PdfReader({ topic, version, page, target, onPage, onAsk,
     if (rects.length && rects.length <= 150 && quote) setSelection({ page, rect: union(rects), rects, quote, medium: 'text' })
   }
   function start(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!ready || tool === 'select' || event.button !== 0) return
+    if (!ready || event.button !== 0) return
+    setSelection(undefined)
+    if (tool === 'select') return
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     drawingPointer.current = event.pointerId
     strokes.current = [position(event)]
     setDrawing(strokes.current)
-    setSelection(undefined)
   }
   function move(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.pointerId !== drawingPointer.current) return
@@ -205,18 +252,28 @@ export default function PdfReader({ topic, version, page, target, onPage, onAsk,
   }
 
   return <div className="pt-reader">
-    <div className="lib-tools" aria-label={tr('PDF tools')}>
-      <button className="ghost-btn" disabled={page <= 1} onClick={() => onPage(page - 1)}>{tr('Previous page')}</button>
-      <span>{tr('PDF page {0}', page)}{document && ' / ' + document.numPages}</span>
-      <button className="ghost-btn" disabled={!document || page >= document.numPages} onClick={() => onPage(page + 1)}>{tr('Next page')}</button>
-      <button className="link-btn" onClick={() => setZoom((z) => z > 1 ? 1 : 1.5)}>{zoom === 1 ? '150%' : '100%'}</button>
+    <div className="pt-pdf-bar" aria-label={tr('PDF tools')}>
+      <div className="pt-pdf-pages">
+        <button className="icon-btn" disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label={tr('Previous page')}><Icon name="arrowLeft" size={15} /></button>
+        <span>{tr('PDF page {0}', page)}{document && ' / ' + document.numPages}</span>
+        <button className="icon-btn" disabled={!document || page >= document.numPages} onClick={() => onPage(page + 1)} aria-label={tr('Next page')}><Icon name="arrowRight" size={15} /></button>
+      </div>
+      <button className="link-btn" onClick={() => setZoom((z) => z > 1 ? 1 : 1.5)}>{tr(zoom === 1 ? 'Zoom in' : 'Fit to width')}</button>
+      {tool !== 'select' && <button className="ghost-btn" onClick={() => setTool('select')}>{tr(tool === 'region' ? 'Cancel region selection' : 'Finish drawing')}</button>}
+      <details className="pt-pdf-options">
+        <summary title={tr('PDF tools')} aria-label={tr('PDF tools')}>···</summary>
+        <div className="pt-pdf-menu">
+          {onFind && <button onClick={(e) => { e.currentTarget.closest('details')!.open = false; onFind() }}>{tr('Find a figure')}</button>}
+          <button onClick={(e) => { e.currentTarget.closest('details')!.open = false; setTool('region') }}>{tr('Select region')}</button>
+          <button onClick={(e) => { e.currentTarget.closest('details')!.open = false; setTool('ink') }}>{tr('Draw')}</button>
+          <button disabled={workspace.busy} onClick={() => void save('bookmark', [], [], '', '')}>{tr('Bookmark page')}</button>
+          <button disabled={workspace.busy || !history.undo.length} onClick={() => void undo()}>{tr('Undo mark')}</button>
+          <button disabled={workspace.busy || !history.redo.length} onClick={() => void redo()}>{tr('Redo mark')}</button>
+          <button disabled={!marks.length} onClick={() => void exportCopy()}>{tr('Export annotated PDF')}</button>
+        </div>
+      </details>
     </div>
-    <div className="lib-tools">
-      <button className="ghost-btn" aria-pressed={tool === 'region'} onClick={() => setTool(tool === 'region' ? 'select' : 'region')}>{tr('Select region')}</button>
-      <button className="ghost-btn" aria-pressed={tool === 'ink'} onClick={() => setTool(tool === 'ink' ? 'select' : 'ink')}>{tr('Draw')}</button>
-      <button className="link-btn" onClick={onFind}>{tr('Find a figure')}</button>
-      <button className="link-btn" disabled={workspace.busy} onClick={() => void save('bookmark', [], [], '', '')}>{tr('Bookmark page')}</button>
-    </div>
+    {!ready && !error && <p className="pt-pdf-loading" role="status">{tr('Opening PDF…')}</p>}
     {error && <p role="alert">{tr(error)}</p>}
     {fallback && <img className="evidence-pdf-page" alt={tr('Original PDF page {0}', page)}
       src={'data:image/png;base64,' + fallback.png} />}
@@ -242,32 +299,33 @@ export default function PdfReader({ topic, version, page, target, onPage, onAsk,
         <div className="textLayer" ref={layer} tabIndex={0} aria-label={tr('Selectable PDF text')} />
       </div>
     </div>
-    {selection && <div className="lib-tools pt-selection-actions" role="group" aria-label={tr('Selection actions')}>
-      {selection.medium === 'text' && <>
-        <button className="ghost-btn" disabled={workspace.busy} onClick={() => void save('highlight', selection.rects, [], selection.quote, '')}>{tr('Highlight')}</button>
-        <button className="ghost-btn" disabled={workspace.busy} onClick={() => void save('underline', selection.rects, [], selection.quote, '')}>{tr('Underline')}</button>
-        <button className="link-btn" onClick={() => void navigator.clipboard.writeText(selection.quote).catch(workspace.report)}>{tr('Copy')}</button>
-      </>}
-      <button className="ghost-btn" onClick={() => edit({ value: '' })}>{tr('Add annotation')}</button>
-      <button className="primary" onClick={() => onAsk(selection)}>{tr('Ask AI')}</button>
-      <select aria-label={tr('Annotation color')} value={color} onChange={(e) => setColor(e.target.value as Mark['color'])}>
-        {Object.keys(colors).map((value) => <option key={value} value={value}>{tr(value)}</option>)}
-      </select>
-    </div>}
-    {editor && <form className="pt-reader-note" onSubmit={(e) => {
-      e.preventDefault()
-      if (editor.mark) {
-        const m = editor.mark
-        void save(m.kind, m.rects, m.points, m.quote, editor.value, m)
-      } else if (selection) {
-        void save(selection.medium === 'text' ? 'note' : 'region', selection.rects, [], selection.quote, editor.value)
-      }
-    }}>
-      <textarea aria-label={tr('Annotation')} value={editor.value} maxLength={5000} autoFocus
-        onChange={(e) => edit({ ...editor, value: e.target.value })} />
-      <button className="primary" disabled={workspace.busy || !editor.value.trim()}>{tr('Save annotation')}</button>
-      <button type="button" className="link-btn" onClick={() => edit(undefined)}>{tr('Cancel')}</button>
-    </form>}
+    {selection && !editor && createPortal(
+      <div ref={popup} className="pt-selection-actions" role="group" aria-label={tr('Selection actions')}>
+        {selection.medium === 'text' && <>
+          <button disabled={workspace.busy} onClick={() => void save('highlight', selection.rects, [], selection.quote, '')}>{tr('Highlight')}</button>
+          <button disabled={workspace.busy} onClick={() => void save('underline', selection.rects, [], selection.quote, '')}>{tr('Underline')}</button>
+        </>}
+        <button onClick={() => edit({ value: '' })}>{tr('Add annotation')}</button>
+        <button onClick={() => { onAsk(selection); setSelection(undefined); window.getSelection()?.removeAllRanges() }}>{tr('Ask AI')}</button>
+      </div>, window.document.body)}
+    {editor && <Dialog title={tr('Annotation')} onClose={() => edit(undefined)}>
+      <form className="pt-reader-note" onSubmit={(e) => {
+        e.preventDefault()
+        if (editor.mark) {
+          const m = editor.mark
+          void save(m.kind, m.rects, m.points, m.quote, editor.value, m)
+        } else if (selection) {
+          void save(selection.medium === 'text' ? 'note' : 'region', selection.rects, [], selection.quote, editor.value)
+        }
+      }}>
+        <textarea aria-label={tr('Annotation')} value={editor.value} maxLength={5000} autoFocus
+          onChange={(e) => edit({ ...editor, value: e.target.value })} />
+        <div className="dialog-actions">
+          <button type="button" className="ghost-btn" onClick={() => edit(undefined)}>{tr('Cancel')}</button>
+          <button className="primary" disabled={workspace.busy || !editor.value.trim()}>{tr('Save annotation')}</button>
+        </div>
+      </form>
+    </Dialog>}
     {marks.length > 0 && <details className="pt-annotation-list">
       <summary>{tr('Annotations')} ({marks.length})</summary>
       {marks.map((m) => <article key={m.mark_id} className="synthesis-claim">
@@ -283,10 +341,5 @@ export default function PdfReader({ topic, version, page, target, onPage, onAsk,
         </button>}
       </article>)}
     </details>}
-    <div className="lib-tools">
-      <button className="link-btn" disabled={workspace.busy || !history.undo.length} onClick={() => void undo()}>{tr('Undo mark')}</button>
-      <button className="link-btn" disabled={workspace.busy || !history.redo.length} onClick={() => void redo()}>{tr('Redo mark')}</button>
-      <button className="link-btn" disabled={!marks.length} onClick={() => void exportCopy()}>{tr('Export annotated PDF')}</button>
-    </div>
   </div>
 }

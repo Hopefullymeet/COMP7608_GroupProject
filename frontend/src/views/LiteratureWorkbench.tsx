@@ -5,8 +5,9 @@ import type { DragEvent } from 'react'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { isTauri } from '../api/desktop'
 import type { Located } from '../api/library'
-import type { PdfObject, Rect, Selection } from '../api/reader'
+import type { Rect, Selection } from '../api/reader'
 import type { Assessment, OutlinePoint, PaperRelation } from '../api/synthesis'
+import { FigureSearch } from '../components/FigureSearch'
 import { Dialog } from '../components/PageHead'
 import { Icon } from '../components/Icon'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
@@ -28,20 +29,21 @@ function entryTitle(entry: OutlinePoint | PaperRelation) {
 }
 
 export function TopicWikiPage() {
+  const { tr } = useLanguage()
   const { state, act } = useStore()
   const [selected, select] = useState('')
   const topic = selected || state.topics[0]?.id
   return <div className="page">
-    <PageHead title="Evidence Wiki" sub="" icon="book">
-      {topic && <button className="icon-btn synthesis-mobile-back" aria-label="Open topic"
+    <PageHead title={tr('Evidence Wiki')} sub="" icon="book">
+      {topic && <button className="icon-btn synthesis-mobile-back" aria-label={tr('Open topic')}
         onClick={() => act.openTopic(topic, 'synthesis')}><Icon name="arrowLeft" size={16} /></button>}
-      {topic && <select className="lib-select" aria-label="Research topic" value={topic}
+      {topic && <select className="lib-select" aria-label={tr('Research topic')} value={topic}
         onChange={(event) => select(event.currentTarget.value)}>
         {state.topics.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
       </select>}
     </PageHead>
     {topic ? <LiteratureWorkbench key={topic} topicId={topic} initialView="wiki" /> :
-      <p className="page-body">Create a topic to start its Wiki.</p>}
+      <p className="page-body">{tr('Create a topic to start its Wiki.')}</p>}
   </div>
 }
 
@@ -58,10 +60,6 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
   const [direction, setDirection] = useState<'outgoing' | 'incoming'>('outgoing')
   const [referencePage, setReferencePage] = useState<{ version: string; page: number; quote?: string; rect?: Rect }>()
   const [figureDialog, findFigure] = useState(false)
-  const [figureQuery, setFigureQuery] = useState('')
-  const [figures, setFigures] = useState<PdfObject[]>()
-  const [skippedFigures, setSkippedFigures] = useState(0)
-  const [finding, setFinding] = useState(false)
   const [selection, setSelection] = useState<Selection & { version: string }>()
   const [selectionQuestion, setSelectionQuestion] = useState('')
   const answers = useRead('reader.answers', scope, !workspace.demo)?.items ?? []
@@ -172,18 +170,6 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
     }
   }
 
-  async function searchFigures() {
-    if (!figureQuery.trim() || !versions.length) return
-    setFinding(true)
-    try {
-      const result = await workspace.api.call('visual.search', { ...scope, source_versions: versions,
-        query: figureQuery.trim() })
-      setFigures(result.items)
-      setSkippedFigures(result.skipped)
-    } catch (error) { workspace.report(error) }
-    finally { setFinding(false) }
-  }
-
   function openPage(version: string, next: number, rect?: Rect) {
     request.current++
     setReaderPending(false)
@@ -193,7 +179,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
 
   function anchors(ids: string[], label = 'Source') {
     return ids.map((id, index) => <button key={id} className="link-btn" onClick={() => void open(id)}>
-      {label}{ids.length > 1 ? ' ' + (index + 1) : ''}
+      {tr(label)}{ids.length > 1 ? ' ' + (index + 1) : ''}
     </button>)
   }
 
@@ -235,9 +221,9 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
   }
 
   return (
-    <section className="synthesis-workbench" aria-label="Literature synthesis">
+    <section className="synthesis-workbench" aria-label={tr('Literature synthesis')}>
       <div className="synthesis-main">
-        {initialView === 'outline' && <h2>Literature synthesis</h2>}
+        {initialView === 'outline' && <h2>{tr('Literature synthesis')}</h2>}
         {!workspace.demo && <div className="lib-tools">
           <button className="ghost-btn" disabled={!versions.length} onClick={() => findFigure(true)}>{tr('Find a figure')}</button>
         </div>}
@@ -280,20 +266,20 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
             question: question.trim(), source_versions: versions,
           } })
         }}>
-          <label htmlFor="synthesis-question">Research question</label>
+          <label htmlFor="synthesis-question">{tr('Research question')}</label>
           <textarea id="synthesis-question" value={question} maxLength={2000}
             onChange={(event) => setQuestion(event.currentTarget.value)}
-            placeholder="What would you like to explain in your related work?" required />
+            placeholder={tr('What would you like to explain in your related work?')} required />
           <button className="primary" disabled={workspace.busy || imports > 0 || versions.length < 2 ||
-            versions.length > 12 || !question.trim()}>Build outline</button>
+            versions.length > 12 || !question.trim()}>{tr('Build outline')}</button>
         </form>}
-        {results?.active_task_id && <p role="status">Researching the selected papers…</p>}
-        <nav className="synthesis-views" aria-label="Research results">
-          <button className="ghost-btn" aria-pressed={view === 'outline'} onClick={() => setView('outline')}>Outline</button>
-          <button className="ghost-btn" aria-pressed={view === 'wiki'} onClick={() => setView('wiki')}>Topic Wiki</button>
+        {results?.active_task_id && <p role="status">{tr('Researching the selected papers…')}</p>}
+        <nav className="synthesis-views" aria-label={tr('Research results')}>
+          <button className="ghost-btn" aria-pressed={view === 'outline'} onClick={() => setView('outline')}>{tr('Outline')}</button>
+          <button className="ghost-btn" aria-pressed={view === 'wiki'} onClick={() => setView('wiki')}>{tr('Topic Wiki')}</button>
         </nav>
         {view === 'outline' && outline && <>
-          {results && results.items.length > 1 && <label className="synthesis-history">Previous outlines
+          {results && results.items.length > 1 && <label className="synthesis-history">{tr('Previous outlines')}
             <select value={outline.record_id} onChange={(event) => { setResultId(event.currentTarget.value); setChecked([]) }}>
               {results.items.map((item) => <option key={item.record_id} value={item.record_id}>{item.question}</option>)}
             </select>
@@ -303,25 +289,25 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
             <h4>{point.title}</h4>
             {point.claims.map((claim, i) => <div key={i} className="synthesis-claim">
               <p>{claim.text}</p>
-              {claim.assessment !== 'supported' && <strong className="synthesis-open">{assessmentLabel[claim.assessment]}</strong>}
+              {claim.assessment !== 'supported' && <strong className="synthesis-open">{tr(assessmentLabel[claim.assessment])}</strong>}
               {claim.conditions && <p className="fine">{claim.conditions}</p>}
               {claim.contributions.map((contribution, j) => <div key={j} className="synthesis-contribution">
-                <p><strong>{names[contribution.source_version_id] ?? 'Paper'}</strong> · {contribution.role}</p>
-                {contribution.reported_from && <p className="fine">Reports a result from {names[contribution.reported_from]}
+                <p><strong>{names[contribution.source_version_id] ?? tr('Paper')}</strong> · {contribution.role}</p>
+                {contribution.reported_from && <p className="fine">{tr('Reports a result from {0}', names[contribution.reported_from])}
                   {anchors(contribution.attribution_anchor_ids ?? [], 'Citation context')}</p>}
-                {contribution.assessment !== 'supported' && <small>{assessmentLabel[contribution.assessment]} · </small>}
+                {contribution.assessment !== 'supported' && <small>{tr(assessmentLabel[contribution.assessment])} · </small>}
                 {anchors(contribution.anchor_ids)}
               </div>)}
               {claim.gap && <p className="fine">{claim.gap}</p>}
             </div>)}
           </article>)}
           {!!outline.relations.length && <details className="synthesis-item">
-            <summary>Relationships between papers</summary>
+            <summary>{tr('Relationships between papers')}</summary>
             {outline.relations.map((relation) => <div key={relation.id} className="synthesis-claim">
-              <p><strong>{names[relation.from] ?? 'Paper'}</strong> → <strong>{names[relation.to] ?? 'Paper'}</strong></p>
-              <p>{relationLabel[relation.kind]} · {relation.subject}</p>
-              {relation.status === 'proposed' && <p className="synthesis-open">Evidence still needed</p>}
-              {relation.comparability === 'not_comparable' && <p className="synthesis-open">Results are not directly comparable</p>}
+              <p><strong>{names[relation.from] ?? tr('Paper')}</strong> → <strong>{names[relation.to] ?? tr('Paper')}</strong></p>
+              <p>{tr(relationLabel[relation.kind] ?? relation.kind)} · {relation.subject}</p>
+              {relation.status === 'proposed' && <p className="synthesis-open">{tr('Evidence still needed')}</p>}
+              {relation.comparability === 'not_comparable' && <p className="synthesis-open">{tr('Results are not directly comparable')}</p>}
               {relation.conditions && <p className="fine">{relation.conditions}</p>}
               {Object.values(relation.alignment).some(Boolean) && <dl className="synthesis-alignment">
                 {Object.entries(relation.alignment).filter(([, value]) => value).map(([axis, value]) =>
@@ -329,28 +315,28 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
               </dl>}
               {relation.open_question && <p className="fine">{relation.open_question}</p>}
               {anchors(relation.anchor_ids)}
-              <button className="link-btn" onClick={() => compare(relation)}>Focus on these two papers</button>
+              <button className="link-btn" onClick={() => compare(relation)}>{tr('Focus on these two papers')}</button>
             </div>)}
           </details>}
           <details className="synthesis-item">
-            <summary>Papers consulted</summary>
+            <summary>{tr('Papers consulted')}</summary>
             <ul>{outline.reads.map((paper) => <li key={paper.source_version_id}>
-              {paper.title} · {paper.passages_read ? paper.passages_read + ' passages read' : 'Not consulted'}
+              {paper.title} · {paper.passages_read ? tr('{0} passages read', paper.passages_read) : tr('Not consulted')}
             </li>)}</ul>
           </details>
           {!!outline.gaps.length && <details className="synthesis-item">
-            <summary>Open questions and missing evidence</summary>
+            <summary>{tr('Open questions and missing evidence')}</summary>
             <ul>{[...new Set(outline.gaps)].map((gap) => <li key={gap}>{gap}</li>)}</ul>
             {anchors(outline.read_anchor_ids, 'Read passage')}
           </details>}
           {wiki && !!(outline.points.length || outline.relations.length) && <button className="ghost-btn"
-            onClick={() => { setChecked([]); setReview(true) }}>Review for Wiki</button>}
+            onClick={() => { setChecked([]); setReview(true) }}>{tr('Review for Wiki')}</button>}
         </>}
         {view === 'wiki' && !!papers.length && <details className="synthesis-item">
-          <summary>Paper cards</summary>
+          <summary>{tr('Paper cards')}</summary>
           {papers.map((paper) => <article key={paper.paper_id} className="synthesis-claim">
             <h4>{paper.title}</h4>
-            <p className="fine">{paper.source_versions[0].available_scope.replace('_', ' ')} · {paper.source_versions.length} saved version{paper.source_versions.length > 1 ? 's' : ''}</p>
+            <p className="fine">{tr(paper.source_versions[0].available_scope.replace('_', ' '))} · {tr(paper.source_versions.length === 1 ? '{0} saved version' : '{0} saved versions', paper.source_versions.length)}</p>
           </article>)}
         </details>}
         {view === 'wiki' && (wiki?.items.length ? wiki.items.map((item) => <article className="synthesis-item" key={item.id}>
@@ -361,21 +347,21 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
               setQuestion('Recheck this finding against the selected paper versions: ' + entryTitle(item.entry))
               setView('outline')
               window.requestAnimationFrame(() => document.getElementById('synthesis-question')?.focus())
-            }}>Recheck finding</button>
+            }}>{tr('Recheck finding')}</button>
           </>}
           {'claims' in item.entry && item.entry.claims.map((claim, i) => <p key={i}>{claim.text}</p>)}
           {anchors(item.anchor_ids)}
-        </article>) : <p className="fine">Review and save findings from an outline to build this topic’s Wiki.</p>)}
+        </article>) : <p className="fine">{tr('Review and save findings from an outline to build this topic’s Wiki.')}</p>)}
       </div>
 
-      <aside className="synthesis-reader" aria-label="Papers and source evidence">
+      <aside className="synthesis-reader" aria-label={tr('Papers and source evidence')}>
         <div className={dragging ? 'synthesis-papers drag-over' : 'synthesis-papers'}
           onDragOver={(event) => { event.preventDefault(); setDragging(true) }}
           onDragLeave={() => setDragging(false)} onDrop={drop}>
           <div className="synthesis-paper-heading">
-            <h3>Papers</h3>
+            <h3>{tr('Papers')}</h3>
             <button className="ghost-btn" disabled={imports > 0} onClick={() => chooseFiles()}>
-              <Icon name="plus" size={14} /> Add PDFs
+              <Icon name="plus" size={14} /> {tr('Add PDFs')}
             </button>
             <input ref={picker} hidden type="file" accept=".pdf,application/pdf" multiple
               onChange={(event) => {
@@ -384,7 +370,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
                 void importFiles(files, replace.current)
               }} />
           </div>
-          {!papers.length && <p className="fine">Drop two or more papers from the same topic here.</p>}
+          {!papers.length && <p className="fine">{tr('Drop two or more papers from the same topic here.')}</p>}
           {papers.map((paper) => {
             const checkedVersion = versions.find((version) => paper.source_versions.some((v) => v.source_version_id === version))
             return <div key={paper.paper_id} className="synthesis-paper">
@@ -393,39 +379,39 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
                   const selected = event.currentTarget.checked
                   setChoices((old) => ({ ...old, [paper.paper_id]: selected ? paper.source_versions[0].source_version_id : undefined }))
                 }} /> <span>{paper.title}</span></label>
-              {checkedVersion && paper.source_versions.length > 1 && <select aria-label={'Version of ' + paper.title} value={checkedVersion}
+              {checkedVersion && paper.source_versions.length > 1 && <select aria-label={tr('Version of {0}', paper.title)} value={checkedVersion}
                 onChange={(event) => {
                   const value = event.currentTarget.value
                   setChoices((old) => ({ ...old, [paper.paper_id]: value }))
                 }}>
                 {paper.source_versions.map((v, index) => <option key={v.source_version_id} value={v.source_version_id}>
-                  {index === 0 ? 'Latest version' : 'Version ' + (paper.source_versions.length - index)}
+                  {index === 0 ? tr('Latest version') : tr('Version {0}', paper.source_versions.length - index)}
                 </option>)}
               </select>}
-              <button className="link-btn" disabled={imports > 0} onClick={() => chooseFiles(paper.paper_id)}>Add version</button>
+              <button className="link-btn" disabled={imports > 0} onClick={() => chooseFiles(paper.paper_id)}>{tr('Add version')}</button>
               <button className="link-btn" onClick={() => referencesFor(checkedVersion ?? paper.source_versions[0].source_version_id)}>
                 {tr('Paper references')}
               </button>
               {!workspace.demo && pdfVersions.has(checkedVersion ?? paper.source_versions[0].source_version_id) && <button className="link-btn"
                 onClick={() => openPage(checkedVersion ?? paper.source_versions[0].source_version_id, 1)}>{tr('Open PDF')}</button>}
-              {paper.source_versions[0].available_scope === 'metadata' && <small>Text unavailable</small>}
+              {paper.source_versions[0].available_scope === 'metadata' && <small>{tr('Text unavailable')}</small>}
             </div>
           })}
-          {imports > 0 && <p role="status">Importing and indexing PDFs…</p>}
+          {imports > 0 && <p role="status">{tr('Importing and indexing PDFs…')}</p>}
           {notice && <p role="alert">{notice}</p>}
         </div>
 
-        {readerPending && <p role="status">Opening source…</p>}
+        {readerPending && <p role="status">{tr('Opening source…')}</p>}
         {referencePage && <section className="synthesis-evidence">
           <h3>{names[referencePage.version]}</h3><p>{tr('PDF page {0}', page)}</p>
           {referencePage.quote && <blockquote className="evidence-excerpt">{referencePage.quote}</blockquote>}
         </section>}
         {reader && <section ref={shownEvidence} className="synthesis-evidence">
-          <h3>{names[reader.source.source_version_id] ?? 'Source'}</h3>
-          {page > 0 && <p className="fine">PDF page {page}</p>}
+          <h3>{names[reader.source.source_version_id] ?? tr('Source')}</h3>
+          {page > 0 && <p className="fine">{tr('PDF page {0}', page)}</p>}
           <blockquote className="evidence-excerpt">{reader.quote}</blockquote>
           {reader.source.passages[0] && <details>
-            <summary>Passage text</summary>
+            <summary>{tr('Passage text')}</summary>
             <p>{reader.source.passages[0].text}</p>
           </details>}
         </section>}
@@ -441,38 +427,14 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
         </Suspense>}
       </aside>
 
-      {figureDialog && <Dialog title={tr('Find a figure')} onClose={() => findFigure(false)}>
-        <form className="synthesis-question" onSubmit={(e) => { e.preventDefault(); void searchFigures() }}>
-          <label htmlFor="pt-figure-query">{tr('Describe the figure, table or equation')}</label>
-          <input id="pt-figure-query" value={figureQuery} maxLength={400} onChange={(e) => setFigureQuery(e.target.value)} />
-          <button className="primary" disabled={finding || !figureQuery.trim()}>{tr('Search figures')}</button>
-        </form>
-        {figures?.length === 0 && <p>{tr('No matching regions. Try another description.')}</p>}
-        {skippedFigures > 0 && <p className="fine">{tr('{0} selected papers could not be indexed.', skippedFigures)}</p>}
-        {figures?.map((figure) => <article className="synthesis-item" key={figure.object_id}>
-          <strong>{names[figure.source_version_id]} · {figure.label}</strong>
-          {figure.caption && <p className="fine">{figure.caption}</p>}
-          <button className="link-btn" onClick={() => {
-            openPage(figure.source_version_id, figure.page, figure.rect)
-            findFigure(false)
-          }}>{tr('PDF page {0}', figure.page)}</button>
-          <button className="link-btn" onClick={() => {
-            openPage(figure.source_version_id, figure.page, figure.rect)
-            setSelection({ page: figure.page, rect: figure.rect, rects: [figure.rect], version: figure.source_version_id,
-              quote: figure.caption, medium: 'image' })
-            setSelectionQuestion('')
-            findFigure(false)
-          }}>{tr('Ask AI')}</button>
-          {Boolean(figure.rows?.length) && <details className="pt-parsed-table">
-            <summary>{tr('Extracted table')}</summary>
-            <table><thead><tr>{figure.rows?.[0].map((cell, col) => <th key={col} scope="col">{cell}</th>)}</tr></thead>
-              <tbody>{figure.rows?.slice(1).map((row, i) => <tr key={i}>
-                {row.map((cell, col) => <td key={col}>{cell}</td>)}
-              </tr>)}</tbody>
-            </table>
-          </details>}
-        </article>)}
-      </Dialog>}
+      {figureDialog && <FigureSearch topic={topicId} versions={versions} names={names}
+        onOpen={(figure) => openPage(figure.source_version_id, figure.page, figure.rect)}
+        onAsk={(figure) => {
+          openPage(figure.source_version_id, figure.page, figure.rect)
+          setSelection({ page: figure.page, rect: figure.rect, rects: [figure.rect], version: figure.source_version_id,
+            quote: figure.caption, medium: 'image' })
+          setSelectionQuestion('')
+        }} onClose={() => findFigure(false)} />}
       {referenceVersion && <Dialog title={tr('Paper references')} onClose={() => referencesFor('')}>
         <div className="lib-tools">
           <button className="ghost-btn" aria-pressed={direction === 'outgoing'} onClick={() => setDirection('outgoing')}>{tr('References')}</button>
@@ -509,7 +471,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
       {exported.length > 0 && <Dialog title={tr('Export evidence')} onClose={() => setExported([])}>
         {exported.map((file) => <p key={file.name}><button className="link-btn" onClick={() => downloadText(file)}>{file.name}</button></p>)}
       </Dialog>}
-      {review && outline && <Dialog title="Save findings to Topic Wiki" onClose={() => setReview(false)}>
+      {review && outline && <Dialog title={tr('Save findings to Topic Wiki')} onClose={() => setReview(false)}>
         {[...outline.points, ...outline.relations].map((item) => {
           const previous = wiki?.items.find((saved) => saved.id === item.prior_id)
           return <div className="synthesis-review-item" key={item.id}>
@@ -518,19 +480,19 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
               setChecked((old) => selected ? [...old, item.id] : old.filter((id) => id !== item.id))
             }} /> {entryTitle(item)}</label>
             {previous && <details>
-              <summary>Review changes</summary>
-              <p>Previously · {entryTitle(previous.entry)}</p>
+              <summary>{tr('Review changes')}</summary>
+              <p>{tr('Previously')} · {entryTitle(previous.entry)}</p>
               {'claims' in previous.entry && previous.entry.claims.map((claim, i) => <p key={i}>{claim.text}</p>)}
-              {'claims' in item && item.claims.map((claim, i) => <p key={i}><strong>Proposed</strong> · {claim.text}</p>)}
-              {'conditions' in item && <p><strong>Proposed</strong> · {item.conditions || item.subject}</p>}
+              {'claims' in item && item.claims.map((claim, i) => <p key={i}><strong>{tr('Proposed')}</strong> · {claim.text}</p>)}
+              {'conditions' in item && <p><strong>{tr('Proposed')}</strong> · {item.conditions || item.subject}</p>}
             </details>}
           </div>
         })}
         <div className="dialog-actions">
-          <button className="ghost-btn" onClick={() => setReview(false)}>Cancel</button>
+          <button className="ghost-btn" onClick={() => setReview(false)}>{tr('Cancel')}</button>
           <button className="ghost-btn" disabled={workspace.busy || !outline.points.some((p) => checked.includes(p.id))}
             onClick={() => void exportPoints()}>{tr('Export selected points')}</button>
-          <button className="primary" disabled={!checked.length || workspace.busy} onClick={() => void save()}>Save selected findings</button>
+          <button className="primary" disabled={!checked.length || workspace.busy} onClick={() => void save()}>{tr('Save selected findings')}</button>
         </div>
       </Dialog>}
     </section>

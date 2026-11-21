@@ -114,6 +114,22 @@ class ContractTest(unittest.TestCase):
             "task.start", operation_id=key, confirmation_id=confirmation["confirmation_id"], **params
         )
 
+    def test_topic_and_session_names_survive_restart(self):
+        topic, session = self.context()
+        topic_rename = {"operation_id": "topic-name", **topic, "title": "  文献研究  "}
+        self.assertEqual(self.client.result("topic.rename", **topic_rename), {**topic, "title": "文献研究"})
+        self.assertEqual(self.client.result("topic.rename", **topic_rename), {**topic, "title": "文献研究"})
+        self.assertIn("error", self.client.call("session.rename", operation_id="blank", **session, title=" "))
+        other = self.client.result("topic.create", operation_id="other", title="Other topic")
+        self.assertIn("error", self.client.call("session.rename", **other, session_id=session["session_id"],
+                                                operation_id="outside", title="Different"))
+        self.assertEqual(self.client.result("session.rename", **session, operation_id="new-name", title="阅读笔记"),
+                         {**session, "title": "阅读笔记"})
+        self.restart()
+        self.assertIn({**topic, "title": "文献研究"}, self.client.result("topic.list")["items"])
+        self.assertEqual(self.client.result("session.list", **topic)["items"][0]["title"], "阅读笔记")
+        self.assertEqual(self.client.result("session.get", **session)["turns"], [])
+
     def test_pubmedqa_desktop_contract_and_recovery(self):
         self.assertEqual(self.client.result("protocol.version"), {"major": 0, "minor": 4})
         topic, session = self.context()
