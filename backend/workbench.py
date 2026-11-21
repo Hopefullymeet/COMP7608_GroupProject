@@ -216,7 +216,8 @@ class Workbench:
             anchors = [host.get("anchor", aid)["value"] for aid in item["anchor_ids"]]
             leads.append({"id": item["id"], "kind": item["kind"], "search_text": text[:1600],
                           "record_id": item["record_id"], "needs_review": item["needs_review"],
-                          "passage_ids": list(dict.fromkeys(a["location"]["passage_id"] for a in anchors))[:12]})
+                          "passage_ids": list(dict.fromkeys(a["location"]["passage_id"] for a in anchors
+                                                             if a["location"].get("passage_id")))[:12]})
         return sources, leads
 
     def run(self, task, cancelled):

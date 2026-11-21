@@ -1,3 +1,4 @@
+import type { ReaderMethods, ReaderTask } from './reader'
 import type { SynthesisMethods, SynthesisTask } from './synthesis'
 import type { Budget, ServiceMethods, ResumeTask } from './services'
 import type { CitationTask, CitationMethods } from './citation'
@@ -6,10 +7,10 @@ import type { ImportTask, ImportResult, LibraryMethods, Located } from './librar
 export type Id = string
 export type NonEmpty<T> = [T, ...T[]]
 export type Scope = 'abstract' | 'full_text'
-export type Version = { source_version_id: Id; available_scope: 'metadata' | Scope }
+export type Version = { source_version_id: Id; available_scope: 'metadata' | Scope; pdf_available?: boolean }
 export type Topic = { topic_id: Id; title: string }
 export type Session = { session_id: Id; title?: string;updated_at?:string;has_turns?:boolean }
-export type LibraryItem = { paper_id: Id; title: string; topic_ids: Id[]; source_versions: NonEmpty<Version> }
+export type LibraryItem = { paper_id: Id; title: string; alias?: string; topic_ids: Id[]; source_versions: NonEmpty<Version> }
 export type Action = 'pending' | 'hold' | 'exclude' | 'add'
 export type Decision = Exclude<Action, 'add'> | 'added'
 export type Candidate = {
@@ -43,12 +44,12 @@ export type MainTask = { topic_id: Id } & (
   { kind: 'discovery'; input: { query: string; filters?: { year_from?: number; year_to?: number; venue?:string } } | { previous_search_id: Id } } |
   { kind: 'reading_qa'; session_id: Id; input: { question: string; selection?: { source_version_id: Id; passage_id: Id; quote:string }; sources: NonEmpty<Source> } }
 )
-export type WorkspaceTask = ResumeTask | ImportTask | ResearchTask | CitationTask | SynthesisTask
+export type WorkspaceTask = ResumeTask | ImportTask | ResearchTask | CitationTask | SynthesisTask | ReaderTask
 export type TaskInput = MainTask | WorkspaceTask
 export type Transfer = { endpoint: string; purpose: string; data_categories: NonEmpty<string> }
 export type Issue = { reason: string; retryable: boolean; next_action: string; details?: Record<string, unknown> }
 export type Start = { task_id: Id; run_id: Id; status: 'queued'; scope_id?: Id }
-type Result = Discovery | Reading | ImportResult | {record_id:string; kind?: 'literature_synthesis' | 'citation_audit'}
+type Result = Discovery | Reading | ImportResult | {record_id:string; kind?: 'literature_synthesis' | 'citation_audit' | 'reader_question' | 'visual_index'}
 export type Finished =
   | { status: 'completed'; result: Result }
   | { status: 'partial'; result: Result; issue: Issue }
@@ -70,10 +71,12 @@ type InTopic = { topic_id: Id }
 type InSession = InTopic & { session_id: Id }
 type ForTask = { task_id: Id }
 type InSearch = InTopic & { search_id: Id }
-export type Methods = SynthesisMethods & LibraryMethods & ResearchMethods & CitationMethods & ServiceMethods & {
+export type Methods = ReaderMethods & SynthesisMethods & LibraryMethods & ResearchMethods & CitationMethods & ServiceMethods & {
   'protocol.version': [Record<string, never>, { major: number; minor: number }]
   'topic.list': [Record<string, never>, { items: Topic[] }]
   'topic.create': [Write & { title: string }, InTopic]
+  'topic.rename': [Write & InTopic & { title: string }, InTopic & { title: string }]
+  'session.rename': [Write & InSession & { title: string }, InSession & { title: string }]
   'session.list': [InTopic, { items: Session[] }]
   'session.create': [Write & InTopic, InSession]
   'session.get': [InSession, { turns: Turn[]; active_task_id?: Id;reader?:{source_version_id:Id;passage_id?:Id} }]

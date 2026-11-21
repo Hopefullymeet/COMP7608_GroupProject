@@ -1,3 +1,4 @@
+import type { Rect } from './reader'
 import type { Evidence, LibraryItem } from './contract'
 
 export type Write = { operation_id: string }
@@ -26,6 +27,7 @@ export type Located = {
   topic_id?: string
   source: DocumentView
   passage_id: string
+  region?: { page: number; rect: Rect }
   quote: string
   read_scope: 'abstract' | 'full_text'
   rect?: { page: number; x: number; y: number; width: number; height: number }
@@ -46,6 +48,7 @@ type Changed = { changed: number }
 type Position = { topic_id: string; source_version_id: string; session_id?: string }
 export type LibraryMethods = {
   'file.pick': [{ purpose: 'papers' | 'draft' | 'backup' }, { files: Picked[] }]
+  'library.set_alias': [Write & { topic_id: string; paper_id: string; alias: string }, { paper_id: string; alias: string }]
   'library.catalog': [Record<string, never>, Catalog]
   'library.resolve_import': [
     Write & { review_id: string; decision: 'link' | 'separate' },

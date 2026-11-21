@@ -496,6 +496,18 @@ export function createMock(): Client {
     ...shelf.handlers,
     ...research.handlers,
     ...citation.handlers,
+    'reader.pdf': () => { throw new Error('PDF reading requires the desktop workspace.') },
+    'reader.marks': () => ({ items: [] }),
+    'reader.mark_save': () => { throw new Error('Annotations require the desktop workspace.') },
+    'reader.mark_delete': () => { throw new Error('Annotations require the desktop workspace.') },
+    'reader.answers': () => ({ items: [] }),
+    'reader.answer_save': () => { throw new Error('Selection answers require the desktop workspace.') },
+    'reader.mark_to_wiki': () => { throw new Error('Annotations require the desktop workspace.') },
+    'reader.export': () => { throw new Error('PDF export requires the desktop workspace.') },
+    'visual.capabilities': () => ({ vision: false }),
+    'visual.objects': () => ({ items: [] }),
+    'visual.search': () => ({ items: [], skipped: 0 }),
+    'visual.crop': () => { throw new Error('PDF regions require the desktop workspace.') },
     'library.import_pdf': () => { throw new Error('PDF import requires the desktop workspace.') },
     'literature.refs': () => ({ items: [], pending_versions: [] }),
     'source.page': () => { throw new Error('PDF rendering requires the desktop workspace.') },
@@ -638,6 +650,18 @@ export function createMock(): Client {
       const topic_id = id()
       state.topics.unshift({ topic_id, title })
       return { topic_id }
+    },
+    'topic.rename': ({ topic_id, title }) => {
+      const topic = state.topics.find((item) => item.topic_id === topic_id)
+      if (!topic || !title.trim() || title.trim().length > 160) throw new Error('Invalid name or topic.')
+      topic.title = title.trim()
+      return { topic_id, title: topic.title }
+    },
+    'session.rename': ({ topic_id, session_id, title }) => {
+      const session = state.sessions[topic_id]?.find((item) => item.session_id === session_id)
+      if (!session || !title.trim() || title.trim().length > 160) throw new Error('Invalid name or session.')
+      session.title = title.trim()
+      return { topic_id, session_id, title: session.title }
     },
     'session.list': ({ topic_id }) => ({
       items: (state.sessions[topic_id] ?? [])

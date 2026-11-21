@@ -114,6 +114,48 @@ class ContractTest(unittest.TestCase):
             "task.start", operation_id=key, confirmation_id=confirmation["confirmation_id"], **params
         )
 
+    def test_topic_and_session_names_survive_restart(self):
+        topic, session = self.context()
+        topic_rename = {"operation_id": "topic-name", **topic, "title": "  文献研究  "}
+        self.assertEqual(self.client.result("topic.rename", **topic_rename), {**topic, "title": "文献研究"})
+        self.assertEqual(self.client.result("topic.rename", **topic_rename), {**topic, "title": "文献研究"})
+        self.assertIn("error", self.client.call("session.rename", operation_id="blank", **session, title=" "))
+        other = self.client.result("topic.create", operation_id="other", title="Other topic")
+        self.assertIn("error", self.client.call("session.rename", **other, session_id=session["session_id"],
+                                                operation_id="outside", title="Different"))
+        self.assertEqual(self.client.result("session.rename", **session, operation_id="new-name", title="阅读笔记"),
+                         {**session, "title": "阅读笔记"})
+        self.restart()
+        self.assertIn({**topic, "title": "文献研究"}, self.client.result("topic.list")["items"])
+        self.assertEqual(self.client.result("session.list", **topic)["items"][0]["title"], "阅读笔记")
+        self.assertEqual(self.client.result("session.get", **session)["turns"], [])
+
+    def test_paper_alias_survives_restart_and_keeps_original_title(self):
+        topic, _ = self.context()
+        search = self.start("alias-discovery", **topic, kind="discovery",
+                            input={"query": "Which scientific QA datasets use abstracts?"})
+        result = self.client.finish(search["task_id"])["result"]
+        candidate = result["candidates"][0]
+        paper = self.client.result("candidate.decide", **topic, operation_id="add-alias-paper",
+                                   search_id=result["search_id"], candidate_id=candidate["candidate_id"], decision="add")
+        paper_id = paper["paper_id"]
+        args = {**topic, "paper_id": paper_id}
+        outside = self.client.result("topic.create", operation_id="outside-alias", title="Other")
+        self.assertIn("error", self.client.call("library.set_alias", **outside, paper_id=paper_id,
+                                                operation_id="outside-write", alias="Outside"))
+        self.assertIn("error", self.client.call("library.set_alias", **args, operation_id="too-long", alias="字" * 81))
+        request = {**args, "operation_id": "save-alias", "alias": "  论文速记  "}
+        expected = {"paper_id": paper_id, "alias": "论文速记"}
+        self.assertEqual(self.client.result("library.set_alias", **request), expected)
+        self.assertEqual(self.client.result("library.set_alias", **request), expected)
+        self.restart()
+        item = self.client.result("library.list", **topic)["items"][0]
+        self.assertEqual(item["alias"], "论文速记")
+        self.assertEqual(item["title"], candidate["title"])
+        self.assertEqual(item["source_versions"][0]["source_version_id"], paper["source_version_id"])
+        self.client.result("library.set_alias", **args, operation_id="clear-alias", alias="   ")
+        self.assertNotIn("alias", self.client.result("library.list", **topic)["items"][0])
+
     def test_pubmedqa_desktop_contract_and_recovery(self):
         self.assertEqual(self.client.result("protocol.version"), {"major": 0, "minor": 4})
         topic, session = self.context()

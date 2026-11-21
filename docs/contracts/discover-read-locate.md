@@ -14,6 +14,8 @@
 | `topic.list` | `{}` | `{ items: { topic_id: Id; title: NonEmptyText }[] }` |
 | `session.create` | `{ operation_id: Id, topic_id: Id }` | `{ topic_id: Id, session_id: Id }` |
 | `session.list` | `{ topic_id: Id }` | `{ items: { session_id: Id; title?: NonEmptyText }[] }` |
+| `topic.rename` | `{ operation_id: Id, topic_id: Id, title: NonEmptyText }` | `{ topic_id: Id, title: NonEmptyText }` |
+| `session.rename` | `{ operation_id: Id, topic_id: Id, session_id: Id, title: NonEmptyText }` | `{ topic_id: Id, session_id: Id, title: NonEmptyText }` |
 | `session.get` | `{ topic_id: Id; session_id: Id }` | `{ turns: ReadingTurn[]; active_task_id?: Id }` |
 | `task.prepare` | `{ operation_id: Id } & TaskInput` | `{ confirmation_id: Id; transfers: Transfer[] }` |
 | `task.start` | `{ operation_id: Id; confirmation_id: Id } & TaskInput` | `StartResult`，阅读问答另返回 `scope_id: Id` |
@@ -24,6 +26,8 @@
 | `source.read_abstract` | `{ topic_id: Id; source_version_id: Id }` | `AbstractView` |
 | `evidence.locate` | `{ topic_id: Id; message_id: Id; anchor_id: Id }` | `{ anchor: AbstractAnchor; source: AbstractView }` |
 | `discovery.steps` | `{ task_id: Id }` | `{ steps: DiscoveryStep[] }` |
+
+改名保留原有标识与内容。名称去除首尾空白后须为 1–160 字符。对象不存在或会话不属于指定主题时，返回未找到错误。手动保存的会话标题优先于首条问题。
 
 `task.subscribe`、`task.get`、`task.cancel` 见[共用协议 §4](protocol.md#4-任务与事件)，其中 `R` 取 `TaskResult`。
 

@@ -1,5 +1,6 @@
 """Local PaperTrace v0.4 worker. Stdout is reserved for newline-delimited RPC."""
 
+import base64
 import datetime
 import json
 from pathlib import Path
@@ -13,6 +14,7 @@ from dsh import Dsh, DshFailure, ENDPOINT, MODEL
 from literature import LiteratureError, MAX_VERSIONS, digest, init_corpus
 from workbench import Workbench
 from citations import CitationWorkspace, init_citations
+from reader import Reader
 
 
 def encode(value):
@@ -69,8 +71,9 @@ def required(params, key):
 class Worker:
     writes = {
         "comparison.save", "draft.import", "draft.resolve_reference", "audit.review", "audit.save_to_wiki", "export.create",
-        "topic.create", "session.create", "task.prepare", "task.start", "task.cancel",
-        "candidate.decide", "reader.bookmark", "note.save", "library.import_pdf", "synthesis.review",
+        "topic.create", "topic.rename", "session.create", "session.rename", "task.prepare", "task.start", "task.cancel",
+        "candidate.decide", "reader.bookmark", "note.save", "library.import_pdf", "library.set_alias", "synthesis.review",
+        "reader.mark_save", "reader.mark_delete", "reader.answer_save", "reader.mark_to_wiki",
     }
 
     def __init__(self, directory, send):
@@ -93,6 +96,7 @@ class Worker:
         init_citations(self.db)
         self.citations = CitationWorkspace(self, identifier)
         self.research = Workbench(self, identifier)
+        self.reader = Reader(self, identifier)
         self.send = send
         self.lock = threading.RLock()
         self.dsh = Dsh.configured(directory.resolve())
@@ -222,11 +226,22 @@ class Worker:
             topic, sid = self.topic(params), identifier()
             self.put("session", sid, {"session_id": sid, "topic_id": topic, "updated_at": now(), "turns": []})
             return {"topic_id": topic, "session_id": sid}
+        if method in ("topic.rename", "session.rename"):
+            title = required(params, "title").strip()
+            if len(title) > 160:
+                raise invalid("Name must be at most 160 characters.")
+            kind = method.split(".")[0]
+            record = self.session(params) if kind == "session" else self.get("topic", self.topic(params))
+            key = f"{kind}_id"
+            record["title"] = title
+            self.put(kind, record[key], record)
+            return {key: record[key], "title": title, **({"topic_id": record["topic_id"]} if kind == "session" else {})}
         if method == "session.list":
             topic = self.topic(params)
             return {"items": [
                 {"session_id": s["session_id"], "updated_at": s["updated_at"], "has_turns": bool(s["turns"]),
-                 **({"title": s["turns"][0]["question"]} if s["turns"] else {})}
+                 **({"title": s["title"]} if "title" in s else
+                    {"title": s["turns"][0]["question"]} if s["turns"] else {})}
                 for s in self.rows("session") if s["topic_id"] == topic
             ]}
         if method == "session.get":
@@ -329,6 +344,37 @@ class Worker:
             source = self.source(required(params, "source_version_id"), self.topic(params))
             return (self.research.document(source) if method == "source.read"
                     else self.research.page(source, params.get("page")))
+        if method == "reader.pdf":
+            _, pdf = self.reader.content(self.topic(params), required(params, "source_version_id"))
+            return {"content": base64.b64encode(pdf).decode("ascii")}
+        if method == "reader.marks":
+            return self.reader.list(self.topic(params), required(params, "source_version_id"))
+        if method == "reader.mark_save":
+            return self.reader.save(self.topic(params), params)
+        if method == "reader.mark_delete":
+            return self.reader.delete(self.topic(params), params)
+        if method == "reader.answers":
+            topic = self.topic(params)
+            session = self.session(params)["session_id"] if "session_id" in params else None
+            return {"items": [item for item in self.rows("reader_answer") if item["topic_id"] == topic
+                              and (session is None or item.get("session_id") == session)]}
+        if method == "reader.answer_save":
+            required(params, "answer_id")
+            return self.reader.save_answer_to_wiki(self.topic(params), params)
+        if method == "reader.mark_to_wiki":
+            required(params, "source_version_id")
+            required(params, "mark_id")
+            return self.reader.save_mark_to_wiki(self.topic(params), params)
+        if method == "reader.export":
+            return self.reader.export(self.topic(params), required(params, "source_version_id"))
+        if method == "visual.search":
+            return self.reader.search(self.topic(params), params)
+        if method == "visual.objects":
+            return {"items": self.reader.objects(self.topic(params), required(params, "source_version_id"))}
+        if method == "visual.crop":
+            return self.reader.material(self.topic(params), params)
+        if method == "visual.capabilities":
+            return {"vision": self.reader.has_vision}
         if method == "evidence.open":
             anchor = self.get("anchor", required(params, "anchor_id"))
             value = anchor["value"]
@@ -336,14 +382,39 @@ class Worker:
             if topic != anchor["topic_id"]:
                 raise missing("Evidence is outside the selected topic.")
             source = self.source(value["source_version_id"], topic)
+            if value["location"].get("precision") == "region":
+                return {"anchor_id": value["anchor_id"], "topic_id": topic, "read_scope": "full_text",
+                        "source": {"source_version_id": source["source_version_id"], "paper_id": source["paper_id"],
+                                   "passages": []}, "passage_id": "", "quote": value["quote"],
+                        "region": {"page": value["location"]["page"], "rect": value["location"]["rect"]}}
             pid = value["location"]["passage_id"]
             return {"anchor_id": value["anchor_id"], "topic_id": topic, "source": self.research.document(source, pid),
                     "passage_id": pid, "quote": value["quote"], "read_scope": value["read_scope"]}
+        if method == "library.set_alias":
+            topic = self.topic(params)
+            paper_id = required(params, "paper_id")
+            paper = self.get("paper", paper_id)
+            if topic not in paper["topic_ids"]:
+                raise missing("Paper is outside the selected topic.")
+            alias = params.get("alias")
+            if not isinstance(alias, str) or len(alias.strip()) > 80:
+                raise invalid("A paper alias must be at most 80 characters.")
+            alias = alias.strip()
+            if alias:
+                paper["alias"] = alias
+            else:
+                paper.pop("alias", None)
+            self.put("paper", paper_id, paper)
+            return {"paper_id": paper_id, "alias": alias}
         if method in ("library.list", "library.catalog"):
             topic = self.topic(params) if "topic_id" in params else None
             papers = [p for p in self.rows("paper") if topic is None or topic in p["topic_ids"]]
             if method == "library.list":
-                return {"items": [{k: p[k] for k in ("paper_id", "title", "topic_ids", "source_versions")} for p in papers]}
+                items = [{**{k: p[k] for k in ("paper_id", "title", "topic_ids", "alias") if k in p},
+                          "source_versions": [{**v, "pdf_available": bool(
+                              self.get("source", v["source_version_id"]).get("page_count"))}
+                              for v in p["source_versions"]]} for p in papers]
+                return {"items": items}
             return {"papers": papers, "reviews": [], "trash": []}
         if method in ("source.read_abstract", "reader.position", "reader.bookmark"):
             source = self.source(required(params, "source_version_id"), self.topic(params))
@@ -370,6 +441,8 @@ class Worker:
             if anchor["topic_id"] != self.topic(params) or anchor["message_id"] != required(params, "message_id"):
                 raise missing("Evidence does not belong to that answer.")
             value = anchor["value"]
+            if value["location"].get("precision") == "region":
+                return self.dispatch("evidence.open", params, after)
             source = self.get("source", value["source_version_id"])
             if value["read_scope"] == "full_text":
                 pid = value["location"]["passage_id"]
@@ -485,6 +558,16 @@ class Worker:
             draft, _, audit_jobs = self.citations.jobs(topic, input_)
             target, label = draft["draft_id"], draft["name"]
             audit_pending = [j for j in audit_jobs if j["usable"] and j["cached"] is None]
+        elif kind == "reader_question":
+            target, _, label = self.reader.question(topic, input_)
+            if "session_id" in params:
+                task_data["session_id"] = self.session(params)["session_id"]
+        elif kind == "visual_index":
+            target = required(input_, "source_version_id")
+            source, _ = self.reader.content(topic, target)
+            label = self.get("paper", source["paper_id"])["title"]
+            if not self.reader.has_vision:
+                raise RpcError(-32015, "VISION_UNAVAILABLE", "configure_service", "Configure a local vision model.")
         elif kind in ("literature_synthesis", "paper_comparison"):
             label = required(input_, "question").strip()
             if len(label) > 2000:
@@ -511,8 +594,10 @@ class Worker:
             raise RpcError(-32601, "METHOD_NOT_FOUND", "refresh_data", "This task is not available in the local integration worker.")
         synthesis = kind in ("literature_synthesis", "paper_comparison")
         audit = kind == "citation_audit"
+        reader_question = kind == "reader_question"
         live = synthesis or (kind == "reading_qa" and self.dsh is not None) or (
             audit and bool(audit_pending) and self.dsh is not None and bool(self.dsh.key))
+        live = live or (reader_question and input_["medium"] == "text")
         if audit:
             task_data["audit_sources"] = {j["job_id"]: j["source"]["source_version_id"] for j in audit_pending} if live else {}
 
@@ -531,6 +616,9 @@ class Worker:
             if audit:
                 transfers = [{"endpoint": ENDPOINT, "purpose": "Check cited claims against selected papers",
                               "data_categories": ["Selected manuscript sentences and cited full-text excerpts"]}] if live else []
+            if reader_question:
+                transfers = [{"endpoint": ENDPOINT, "purpose": "Answer from the selected PDF text",
+                              "data_categories": ["Only the selected text and the question"]}] if live else []
             if synthesis:
                 transfers = [{"endpoint": ENDPOINT,
                               "purpose": ("Compare selected papers" if kind == "paper_comparison"
@@ -618,7 +706,8 @@ class Worker:
                 task["status"] = "running"
                 discovery = task["kind"] == "discovery"
                 audit = task["kind"] == "citation_audit"
-                live = audit or (not discovery and self.dsh is not None)
+                reader_task = task["kind"] in ("reader_question", "visual_index")
+                live = audit or reader_task or (not discovery and self.dsh is not None)
                 if live:
                     signal = threading.Event()
                     self.inflight[task_id] = signal
@@ -632,6 +721,9 @@ class Worker:
             if live:
                 if audit:
                     self.citations.run(task, signal)
+                elif reader_task:
+                    run = self.reader.run_question if task["kind"] == "reader_question" else self.reader.run_index
+                    run(task, signal)
                 elif task["kind"] in ("literature_synthesis", "paper_comparison"):
                     self.research.run(task, signal)
                 else:

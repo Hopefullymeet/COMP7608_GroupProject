@@ -32,7 +32,7 @@ export interface State {
     interval?:number
     watch?:(days:number)=>void
     activity?:{id:string;title:string;detail:string;topic:string;open:()=>void}[]
-    original?:(version:string)=>void
+    rename?: (kind: 'topic' | 'session', topic: string, id: string, title: string) => Promise<void>
     bookmark?:(version:string,passage:string)=>void
     selectQuote?:(version:string,passage:string,quote:string)=>void
     saveAnswer?:(message:ChatMessage)=>void
@@ -54,7 +54,7 @@ export interface State {
   comparison: { status: TaskState; rows: ComparisonRow[]; verdict?: string; summary?: string }
   cited: string[]
   noted: string[]
-  activeEvidence: { id: string; anchor: string; scroll: boolean } | null
+  activeEvidence: { id: string; anchor: string; scroll: boolean; region?: import('../api/reader').Selection['rect']; pdfPage?: number } | null
   trace: { open: boolean; focus: string | null }
   readerPaperId: string
   dropped: string[]
