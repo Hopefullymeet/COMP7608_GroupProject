@@ -731,6 +731,8 @@ export function MainlineProvider({
     paper_comparison: 'Comparison',
     literature_synthesis: 'Literature synthesis',
     citation_audit: 'Citation check',
+    reader_question: 'Ask about selection',
+    visual_index: 'Index figure descriptions',
     citation_suggest: 'Citation suggestions',
     resume: 'Resume',
   }

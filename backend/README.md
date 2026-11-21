@@ -72,3 +72,16 @@ python3 -B backend/evaluate_synthesis.py /path/to/corpus --output synthesis-eval
 在 **Citation check** 导入 PDF 稿件，核对系统找到的参考文献对应关系，选择句子后启动回查。接受有原文依据的结果后可以保存进主题 Wiki 或导出为 Markdown 与 BibTeX。原 PDF 和历史判断按版本保留。可选 GROBID 及具体接口见[PDF 引用契约](../docs/contracts/pdf-citations.md)。
 
 PaperTrace 配置为模型提供四个只读工具，分别查询引用、搜索全文、读取上下文和查阅主题 Wiki。用同一个 DSH 构建和本机模拟模型服务，各冷启动三次。启动到首次模型请求的中位数由 285 毫秒变为 291 毫秒，采样峰值内存的中位数由约 133 MiB 变为 153 MiB。由于这组实测没有显示资源收益，本轮保留 SDK 和构建依赖。这组对照测的是运行配置，模型核查质量需要用标注样例另行评估。
+
+## PDF 批注与按描述找图
+
+阅读器用 PDF.js 显示文字层。图表索引、区域裁剪和批注副本使用 PyMuPDF 1.26 或更高版本。将 PyMuPDF 安装到桌面 worker 使用的 Python 环境，或设置 `PAPERTRACE_PYTHON` 指向已有安装的解释器。当前按页从 PDF 提取图注、图内标签、矢量形状和颜色，并尝试对齐表格行列。复杂表格和公式需要对照原文。
+
+划词问答由现有 DeepSeek Harness 处理，确认界面仅列选区文字与问题。框选提问及图像描述索引可以使用 Ollama 的视觉模型。本地 Ollama 运行后，在启动桌面 worker 前设置：
+
+```sh
+export PAPERTRACE_VISION_MODEL=qwen3-vl:2b
+export PAPERTRACE_VISION_PORT=11434
+```
+
+图像请求连接 `127.0.0.1`。使用本地模型并在启动 Ollama 前设置 `OLLAMA_NO_CLOUD=1` 可以关闭 Ollama 云端服务。在阅读器选择「用视觉模型补充图像描述」可为当前 PDF 每批处理至多 24 张图，已生成的描述按模型与图块缓存。描述参与图块检索，图注、关键词和可识别的图形特征也能离线搜索。批注单独写入 SQLite，导出时生成包含 PDF 注解的副本。

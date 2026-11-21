@@ -6,6 +6,7 @@
 |---|---|
 | [services-workspace.md](services-workspace.md) | 服务配置、只读授权、持续检索、检查点与备份 |
 | [citation-export.md](citation-export.md) | 稿件、建议、回查、审阅、写回与导出 |
+| [pdf-reader.md](pdf-reader.md) | PDF 批注、选区问答及按描述找图表 |
 | [pdf-citations.md](pdf-citations.md) | 本地引用索引、PDF 稿件回查和选定证据导出 |
 | [literature-synthesis.md](literature-synthesis.md) | 主题 PDF 全文、跨论文证据提纲、Wiki 审阅与换版 |
 | [comparison-wiki.md](comparison-wiki.md) | 论文比较、概念与关系、草稿及逐项审阅 |

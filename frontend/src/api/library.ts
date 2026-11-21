@@ -1,3 +1,4 @@
+import type { Rect } from './reader'
 import type { Evidence, LibraryItem } from './contract'
 
 export type Write = { operation_id: string }
@@ -26,6 +27,7 @@ export type Located = {
   topic_id?: string
   source: DocumentView
   passage_id: string
+  region?: { page: number; rect: Rect }
   quote: string
   read_scope: 'abstract' | 'full_text'
   rect?: { page: number; x: number; y: number; width: number; height: number }

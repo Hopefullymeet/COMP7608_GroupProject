@@ -1,16 +1,19 @@
 import { downloadText, pdfInput } from '../api/pdf'
 import { useLanguage } from '../i18n'
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { isTauri } from '../api/desktop'
 import type { Located } from '../api/library'
+import type { PdfObject, Rect, Selection } from '../api/reader'
 import type { Assessment, OutlinePoint, PaperRelation } from '../api/synthesis'
 import { Dialog } from '../components/PageHead'
 import { Icon } from '../components/Icon'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { useStore } from '../data/store'
 import { PageHead } from '../components/PageHead'
+
+const PdfReader = lazy(() => import('./PdfReader'))
 
 const assessmentLabel: Record<Assessment, string> = {
   supported: 'Supported', partial: 'Partially supported', conflicting: 'Conflicting evidence', missing: 'Evidence missing',
@@ -53,7 +56,16 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
   const wiki = useRead('synthesis.wiki', scope)
   const [referenceVersion, referencesFor] = useState('')
   const [direction, setDirection] = useState<'outgoing' | 'incoming'>('outgoing')
-  const [referencePage, setReferencePage] = useState<{ version: string; page: number; quote?: string }>()
+  const [referencePage, setReferencePage] = useState<{ version: string; page: number; quote?: string; rect?: Rect }>()
+  const [figureDialog, findFigure] = useState(false)
+  const [figureQuery, setFigureQuery] = useState('')
+  const [figures, setFigures] = useState<PdfObject[]>()
+  const [skippedFigures, setSkippedFigures] = useState(0)
+  const [finding, setFinding] = useState(false)
+  const [selection, setSelection] = useState<Selection & { version: string }>()
+  const [selectionQuestion, setSelectionQuestion] = useState('')
+  const answers = useRead('reader.answers', scope, !workspace.demo)?.items ?? []
+  const visual = useRead('visual.capabilities', {}, !workspace.demo)
   const [exported, setExported] = useState<{ name: string; text: string }[]>([])
   const refs = useRead('literature.refs', { ...scope, source_version_id: referenceVersion, direction }, !!referenceVersion)
   const [question, setQuestion] = useState('')
@@ -77,11 +89,11 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
     return selected ? [selected] : []
   })
   const names = Object.fromEntries(papers.flatMap((p) => p.source_versions.map((v) => [v.source_version_id, p.title])))
-  const fullTextVersions = new Set(papers.flatMap((p) => p.source_versions
-    .filter((version) => version.available_scope === 'full_text').map((version) => version.source_version_id)))
+  const pdfVersions = new Set(papers.flatMap((p) => p.source_versions
+    .filter((version) => version.pdf_available ?? version.available_scope === 'full_text').map((version) => version.source_version_id)))
   const outline = results?.items.find((item) => item.record_id === resultId) ?? results?.items[0]
   const page = referencePage?.page ?? reader?.source.passages[0]?.page ?? 0
-  const pdf = useRead('source.page', { ...scope, source_version_id: referencePage?.version ?? reader?.source.source_version_id ?? '', page }, page > 0)
+  const readerVersion = referencePage?.version ?? reader?.source.source_version_id ?? ''
   const current = useRef({ workspace, topicId })
   current.current = { workspace, topicId }
 
@@ -147,12 +159,36 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
     setReaderPending(true)
     try {
       const evidence = await workspace.api.call('evidence.open', { ...scope, anchor_id: anchor })
-      if (sequence === request.current) setReader(evidence)
+      if (sequence === request.current) {
+        if (evidence.region) {
+          setReader(undefined)
+          setReferencePage({ version: evidence.source.source_version_id, ...evidence.region })
+        } else setReader(evidence)
+      }
     } catch (error) {
       if (sequence === request.current) workspace.report(error)
     } finally {
       if (sequence === request.current) setReaderPending(false)
     }
+  }
+
+  async function searchFigures() {
+    if (!figureQuery.trim() || !versions.length) return
+    setFinding(true)
+    try {
+      const result = await workspace.api.call('visual.search', { ...scope, source_versions: versions,
+        query: figureQuery.trim() })
+      setFigures(result.items)
+      setSkippedFigures(result.skipped)
+    } catch (error) { workspace.report(error) }
+    finally { setFinding(false) }
+  }
+
+  function openPage(version: string, next: number, rect?: Rect) {
+    request.current++
+    setReaderPending(false)
+    setReader(undefined)
+    setReferencePage({ version, page: next, rect })
   }
 
   function anchors(ids: string[], label = 'Source') {
@@ -202,6 +238,39 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
     <section className="synthesis-workbench" aria-label="Literature synthesis">
       <div className="synthesis-main">
         {initialView === 'outline' && <h2>Literature synthesis</h2>}
+        {!workspace.demo && <div className="lib-tools">
+          <button className="ghost-btn" disabled={!versions.length} onClick={() => findFigure(true)}>{tr('Find a figure')}</button>
+        </div>}
+        {selection && <form className="synthesis-question pt-selection-question" onSubmit={(event) => {
+          event.preventDefault()
+          void workspace.prepare({ ...scope, kind: 'reader_question', input: { question: selectionQuestion.trim(),
+            page: selection.page, source_version_id: selection.version, rect: selection.rect,
+            rects: selection.rects, medium: selection.medium } })
+        }}>
+          <button className="link-btn" type="button" onClick={() => openPage(selection.version, selection.page, selection.rect)}>
+            {names[selection.version]} · {tr('PDF page {0}', selection.page)}
+          </button>
+          {selection.quote && <blockquote className="evidence-excerpt">{selection.quote}</blockquote>}
+          <label htmlFor="pt-selection-question">{tr('Ask about this selection')}</label>
+          <textarea id="pt-selection-question" value={selectionQuestion} maxLength={2000}
+            onChange={(e) => setSelectionQuestion(e.target.value)} required />
+          <div className="lib-tools">
+            <button className="primary" disabled={workspace.busy || !selectionQuestion.trim() || (selection.medium === 'image' && !visual?.vision)}>{tr('Ask AI')}</button>
+            <button type="button" className="link-btn" onClick={() => setSelection(undefined)}>{tr('Cancel')}</button>
+          </div>
+          {selection.medium === 'image' && !visual?.vision && <p className="fine">{tr('Configure a local vision model to ask about images.')}</p>}
+        </form>}
+        {answers.slice(0, 8).map((answer) => <article className="synthesis-item pt-reader-answer" key={answer.id}>
+          <h4>{answer.question}</h4>
+          <p>{answer.answer}</p>
+          <button className="link-btn" onClick={() => openPage(answer.source_version_id, answer.page, answer.rect)}>
+            {names[answer.source_version_id]} · {tr('PDF page {0}', answer.page)}
+          </button>
+          <button className="link-btn" disabled={workspace.busy}
+            onClick={() => void workspace.write('reader.answer_save', { ...scope, answer_id: answer.id }).then(() => setView('wiki')).catch(workspace.report)}>
+            {tr('Save answer to Topic Wiki')}
+          </button>
+        </article>)}
         {view === 'outline' && <form className="synthesis-question" onSubmit={(event) => {
           event.preventDefault()
           setResultId('')
@@ -337,6 +406,8 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
               <button className="link-btn" onClick={() => referencesFor(checkedVersion ?? paper.source_versions[0].source_version_id)}>
                 {tr('Paper references')}
               </button>
+              {!workspace.demo && pdfVersions.has(checkedVersion ?? paper.source_versions[0].source_version_id) && <button className="link-btn"
+                onClick={() => openPage(checkedVersion ?? paper.source_versions[0].source_version_id, 1)}>{tr('Open PDF')}</button>}
               {paper.source_versions[0].available_scope === 'metadata' && <small>Text unavailable</small>}
             </div>
           })}
@@ -348,20 +419,60 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
         {referencePage && <section className="synthesis-evidence">
           <h3>{names[referencePage.version]}</h3><p>{tr('PDF page {0}', page)}</p>
           {referencePage.quote && <blockquote className="evidence-excerpt">{referencePage.quote}</blockquote>}
-          {pdf && <img src={'data:image/png;base64,' + pdf.png} alt={tr('Original PDF page {0}', page)} />}
         </section>}
         {reader && <section ref={shownEvidence} className="synthesis-evidence">
           <h3>{names[reader.source.source_version_id] ?? 'Source'}</h3>
           {page > 0 && <p className="fine">PDF page {page}</p>}
           <blockquote className="evidence-excerpt">{reader.quote}</blockquote>
-          {pdf && <img src={'data:image/png;base64,' + pdf.png} alt={'Original PDF page ' + page} />}
           {reader.source.passages[0] && <details>
             <summary>Passage text</summary>
             <p>{reader.source.passages[0].text}</p>
           </details>}
         </section>}
+        {page > 0 && readerVersion && !workspace.demo && <Suspense fallback={<p role="status">{tr('Opening PDF…')}</p>}>
+          <PdfReader key={readerVersion} topic={topicId} version={readerVersion} page={page} target={referencePage?.rect}
+            onPage={(next, rect) => openPage(readerVersion, next, rect)}
+            onAsk={(picked) => { setSelection({ ...picked, version: readerVersion }); setSelectionQuestion(''); setTimeout(() =>
+              document.getElementById('pt-selection-question')?.focus(), 0) }}
+            onFind={() => findFigure(true)} onWiki={() => setView('wiki')} />
+          {visual?.vision && <button className="link-btn" disabled={workspace.busy} onClick={() => void workspace.prepare({
+            ...scope, kind: 'visual_index', input: { source_version_id: readerVersion },
+          })}>{tr('Index figure descriptions')}</button>}
+        </Suspense>}
       </aside>
 
+      {figureDialog && <Dialog title={tr('Find a figure')} onClose={() => findFigure(false)}>
+        <form className="synthesis-question" onSubmit={(e) => { e.preventDefault(); void searchFigures() }}>
+          <label htmlFor="pt-figure-query">{tr('Describe the figure, table or equation')}</label>
+          <input id="pt-figure-query" value={figureQuery} maxLength={400} onChange={(e) => setFigureQuery(e.target.value)} />
+          <button className="primary" disabled={finding || !figureQuery.trim()}>{tr('Search figures')}</button>
+        </form>
+        {figures?.length === 0 && <p>{tr('No matching regions. Try another description.')}</p>}
+        {skippedFigures > 0 && <p className="fine">{tr('{0} selected papers could not be indexed.', skippedFigures)}</p>}
+        {figures?.map((figure) => <article className="synthesis-item" key={figure.object_id}>
+          <strong>{names[figure.source_version_id]} · {figure.label}</strong>
+          {figure.caption && <p className="fine">{figure.caption}</p>}
+          <button className="link-btn" onClick={() => {
+            openPage(figure.source_version_id, figure.page, figure.rect)
+            findFigure(false)
+          }}>{tr('PDF page {0}', figure.page)}</button>
+          <button className="link-btn" onClick={() => {
+            openPage(figure.source_version_id, figure.page, figure.rect)
+            setSelection({ page: figure.page, rect: figure.rect, rects: [figure.rect], version: figure.source_version_id,
+              quote: figure.caption, medium: 'image' })
+            setSelectionQuestion('')
+            findFigure(false)
+          }}>{tr('Ask AI')}</button>
+          {Boolean(figure.rows?.length) && <details className="pt-parsed-table">
+            <summary>{tr('Extracted table')}</summary>
+            <table><thead><tr>{figure.rows?.[0].map((cell, col) => <th key={col} scope="col">{cell}</th>)}</tr></thead>
+              <tbody>{figure.rows?.slice(1).map((row, i) => <tr key={i}>
+                {row.map((cell, col) => <td key={col}>{cell}</td>)}
+              </tr>)}</tbody>
+            </table>
+          </details>}
+        </article>)}
+      </Dialog>}
       {referenceVersion && <Dialog title={tr('Paper references')} onClose={() => referencesFor('')}>
         <div className="lib-tools">
           <button className="ghost-btn" aria-pressed={direction === 'outgoing'} onClick={() => setDirection('outgoing')}>{tr('References')}</button>
@@ -373,7 +484,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
         {refs?.items.map((ref) => <article key={ref.citing_version_id + ':' + ref.key} className="synthesis-item">
           <strong>{direction === 'incoming' ? ref.citing_title : ref.target_title ?? ref.title}</strong>
           <p className="fine">{ref.text}</p>
-          {ref.target_version_id && fullTextVersions.has(ref.target_version_id) && <button className="link-btn"
+          {ref.target_version_id && pdfVersions.has(ref.target_version_id) && <button className="link-btn"
             onClick={() => {
               if (!ref.target_version_id) return
               setReader(undefined)

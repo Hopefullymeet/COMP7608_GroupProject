@@ -17,6 +17,7 @@ const LITERATURE: &[u8] = include_bytes!("../../../backend/literature.py");
 const WORKBENCH: &[u8] = include_bytes!("../../../backend/workbench.py");
 const RESEARCH_TOOLS: &[u8] = include_bytes!("../../../backend/research-tools.mjs");
 const CITATIONS: &[u8] = include_bytes!("../../../backend/citations.py");
+const READER: &[u8] = include_bytes!("../../../backend/reader.py");
 const DSH: &[u8] = include_bytes!("../../../backend/dsh.py");
 type Reply = Result<Value, String>;
 
@@ -45,6 +46,7 @@ impl Worker {
         WORKER.hash(&mut hash);
         DSH.hash(&mut hash);
         CITATIONS.hash(&mut hash);
+        READER.hash(&mut hash);
         LITERATURE.hash(&mut hash);
         WORKBENCH.hash(&mut hash);
         RESEARCH_TOOLS.hash(&mut hash);
@@ -56,6 +58,7 @@ impl Worker {
             (&runtime.join("literature.py"), LITERATURE), (&runtime.join("workbench.py"), WORKBENCH),
             (&runtime.join("research-tools.mjs"), RESEARCH_TOOLS),
             (&runtime.join("citations.py"), CITATIONS),
+            (&runtime.join("reader.py"), READER),
         ] {
             match fs::OpenOptions::new().write(true).create_new(true).open(path) {
                 Ok(mut file) => file.write_all(contents).map_err(|error| error.to_string())?,

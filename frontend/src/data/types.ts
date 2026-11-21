@@ -97,7 +97,7 @@ export type RunStatus = 'running' | 'done' | 'partial' | 'failed' | 'cancelled'
 export interface AgentRun {
   id: string
   manuscriptId?: string
-  task: 'Discovery' | 'Question' | 'Comparison' | 'Citation check' | 'Wiki draft' | 'Citation suggestions' | 'Import' | 'Resume' | 'Literature synthesis'
+  task: 'Discovery' | 'Question' | 'Comparison' | 'Citation check' | 'Wiki draft' | 'Citation suggestions' | 'Import' | 'Resume' | 'Literature synthesis' | 'Ask about selection' | 'Index figure descriptions'
   label: string
   status: RunStatus
   steps: AgentStep[]

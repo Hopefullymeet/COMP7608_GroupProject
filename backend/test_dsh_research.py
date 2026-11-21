@@ -22,6 +22,19 @@ class ScriptedProvider(BaseHTTPRequestHandler):
         messages = request["messages"]
         prompt = next(block["text"] for m in messages if m["role"] == "user"
                       for block in m["content"] if isinstance(block, dict) and block["type"] == "text")
+        if "\nApproved passage IDs: " in prompt:
+            results = [b for m in messages for b in m["content"]
+                       if isinstance(b, dict) and b["type"] == "tool_result"]
+            if not results:
+                pid = json.loads(prompt.split("\nApproved passage IDs: ", 1)[1].splitlines()[0])[0]
+                self.respond({"type": "tool_use", "id": "selection", "name": "paper_read", "input": {"id": pid}})
+            else:
+                blocks = results[-1]["content"]
+                passage = json.loads(blocks if isinstance(blocks, str) else blocks[0]["text"])
+                item = {"text": "The selected excerpt is: " + passage["text"],
+                        "evidence": [{"id": passage["passage_id"], "quote": passage["text"]}]}
+                self.respond({"type": "text", "text": json.dumps({"sentences": [item]})})
+            return
         metadata, _, rest = prompt.split("\nPapers: ", 1)[1].partition("\nChecks: ")
         checks = json.loads(rest) if rest else []
         sources = json.loads(metadata.split("\nQuestion:", 1)[0])
@@ -64,6 +77,9 @@ class ScriptedProvider(BaseHTTPRequestHandler):
                                      "evidence": citations} for check in checks]} if checks else
                         {"points": [point], "relations": [], "gaps": []})
             block = {"type": "text", "text": json.dumps(response)}
+        self.respond(block)
+
+    def respond(self, block):
         stop = "tool_use" if block["type"] == "tool_use" else "end_turn"
         events = [("message_start", {"message": {"id": "msg_loopback", "type": "message",
                                                "role": "assistant", "model": "loopback", "content": [],
@@ -127,6 +143,13 @@ class DshResearchTest(unittest.TestCase):
                     self.assertIsNone(issue)
                     self.assertEqual(raw["checks"][0]["id"], "0")
                     self.assertIn(raw["checks"][0]["evidence"][0]["id"], seen)
+                    phrase = "Only these words are in the reader selection."
+                    selection = {"paper_id": "selected-paper", "source_version_id": version,
+                                 "passages": [{"passage_id": "reader-selection", "page": 1, "text": phrase}]}
+                    answers, observed = dsh.answer("Read my selection.", [selection], threading.Event(),
+                                                   context="selected PDF text")
+                    self.assertEqual(list(observed), ["reader-selection"])
+                    self.assertEqual(answers[0]["references"][0]["quote"], phrase)
                 finally:
                     provider.shutdown()
                     server.join()

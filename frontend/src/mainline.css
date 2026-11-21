@@ -189,3 +189,25 @@
 .synthesis-alignment div { display: grid; grid-template-columns: 90px 1fr; gap: 8px; }
 .synthesis-alignment dt { font-weight: 600; text-transform: capitalize; }
 .synthesis-alignment dd { margin: 0; }
+
+.pt-reader-frame { overflow: auto; background: var(--panel, #f2efea); max-height: 68vh; }
+.pt-reader-page { position: relative; background: white; overflow: hidden; }
+.pt-reader-page > canvas { display: block; width: 100%; height: 100%; }
+.pt-reader-page > .textLayer { z-index: 2; color-scheme: light; }
+.pt-reader-drawing { touch-action: none; cursor: crosshair; }
+.pt-reader-drawing > .textLayer { pointer-events: none; }
+.pt-reader-marks { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+.pt-reader-marks > span { position: absolute; box-sizing: border-box; }
+.pt-mark-highlight, .pt-mark-note { background: currentColor; opacity: .32; }
+.pt-mark-underline { border-bottom: 2px solid currentColor; }
+.pt-mark-region { border: 2px solid currentColor; }
+.pt-target { border: 2px solid #a83d28; background: rgb(195 82 55 / .09); }
+.pt-reader-marks svg { position: absolute; inset: 0; height: 100%; width: 100%; }
+.pt-reader-marks polyline { fill: none; stroke-width: 2px; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.pt-reader-note textarea, .pt-selection-question textarea { width: 100%; min-height: 3rem; }
+.pt-reader-note { margin: .6rem 0; }
+.pt-annotation-list { margin: .75rem 0; }
+.pt-selection-actions, .pt-reader .lib-tools { flex-wrap: wrap; }
+.pt-selection-question blockquote, .pt-reader-answer > p { white-space: pre-wrap; }
+.pt-parsed-table { max-width: 100%; overflow-x: auto; }
+.pt-parsed-table th, .pt-parsed-table td { padding: .35rem; text-align: left; vertical-align: top; }
