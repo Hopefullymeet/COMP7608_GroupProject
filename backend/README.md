@@ -17,6 +17,17 @@ pnpm --dir frontend desktop
 
 Tauri 从首次 RPC 开始启动 Python。默认将联调数据放在应用本地数据目录的 `local-contract` 子目录。可通过 `PAPERTRACE_WORKSPACE` 为联调指定独立目录，或通过 `PAPERTRACE_PYTHON` 指定解释器。浏览器契约样例继续使用原来的前端模拟实现。
 
+## 启用 BibTeX 导入
+
+使用桌面 worker 的 Python 安装解析器。如果使用自定义解释器，用同一个解释器执行安装并设置 `PAPERTRACE_PYTHON`。
+
+```sh
+python3 -m pip install -r backend/requirements-bibliography.txt
+```
+
+RIS 和 CSL JSON 由标准库读取。书目预览和提交均可离线进行。
+
+
 ## 配置文本模型
 
 当前文本模型提供方为 DeepSeek。先构建仓库首页链接的运行时版本，将 `PAPERTRACE_AGENT_CLI` 指向构建生成的 `apps/cli/lib/bin.js`，`PAPERTRACE_AGENT_NODE` 指向 Node.js 24.9 或更新版本。通过启动环境提供 `DEEPSEEK_API_KEY`。

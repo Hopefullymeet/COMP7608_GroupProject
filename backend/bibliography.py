@@ -261,10 +261,76 @@ def bibliography_records(format_, content):
             records = [records]
     elif format_ == "ris":
         records = ris_records(content)
+    elif format_ == "bibtex":
+        records = bibtex_records(content)
     else:
-        raise LiteratureError("INVALID_PARAMS", "Choose an RIS or CSL JSON bibliography.")
+        raise LiteratureError("INVALID_PARAMS", "Choose a BibTeX, RIS or CSL JSON bibliography.")
     if not isinstance(records, list) or not 1 <= len(records) <= 500:
         raise LiteratureError("INVALID_PARAMS", "Choose a bibliography containing one to 500 entries.")
+    return records
+
+
+def bibtex_records(content):
+    try:
+        from pybtex.backends.plaintext import Backend
+        from pybtex.database.input.bibtex import LowLevelParser, Parser
+        from pybtex.exceptions import PybtexError
+        from pybtex.richtext import Text
+    except ImportError:
+        raise LiteratureError("BIBTEX_PARSER_UNAVAILABLE", "Install the BibTeX parser in the worker environment.",
+                              "configure_service", -32017) from None
+
+    class BoundedParser(LowLevelParser):
+        # A small file can contain macros that expand into large strings.
+        expanded = 0
+
+        def parse_value(self):
+            super().parse_value()
+            length = sum(map(len, self.current_value))
+            self.expanded += length
+            if length > 100_000 or self.expanded > 8_000_000:
+                raise LiteratureError("INVALID_PARAMS", "The BibTeX file expands beyond the import limit.")
+
+    parser = Parser()
+    try:
+        for entry_type, fields in BoundedParser(content, macros=parser.macros):
+            if entry_type.lower() in ("string", "preamble"):
+                continue
+            if len(parser.data.entries) >= 500:
+                raise LiteratureError("INVALID_PARAMS", "Choose a bibliography containing at most 500 entries.")
+            parser.process_entry(entry_type, *fields)
+    except (PybtexError, ValueError, RecursionError):
+        raise LiteratureError("INVALID_PARAMS", "The BibTeX file is invalid. Check its syntax and entry keys.") from None
+
+    output = Backend()
+
+    def display(value):
+        return Text.from_latex(value).render(output)
+
+    records = []
+    for entry in parser.data.entries.values():
+        fields = entry.fields
+        kind = entry.type.lower()
+        parent = parser.data.entries.get(fields.get("crossref", ""))
+        venue = fields.get("journal") or fields.get("journaltitle") or fields.get("booktitle")
+        if not venue and parent and kind in ("inproceedings", "conference"):
+            venue = parent.fields.get("title")
+        year = re.match(r"\d{4}", fields.get("year") or fields.get("date", ""))
+        if not year and parent:
+            year = re.match(r"\d{4}", parent.fields.get("year") or parent.fields.get("date", ""))
+        url = fields.get("url", "")
+        if not url and fields.get("archiveprefix", fields.get("eprinttype", "")).lower() == "arxiv":
+            identifier = arxiv_id(fields.get("eprint", ""))
+            if identifier:
+                url = "https://arxiv.org/abs/" + identifier
+        records.append({
+            "title": display(fields.get("title", "")), "container-title": display(venue or ""),
+            "author": [{"literal": display(str(author))} for author in entry.persons.get("author", [])],
+            "abstract": display(fields.get("abstract", "")), "DOI": fields.get("doi"), "URL": url,
+            "type": {"article": "article-journal", "inproceedings": "paper-conference",
+                     "conference": "paper-conference"}.get(kind),
+            "issued": {"date-parts": [[int(year[0])]]} if year else {},
+        })
     return records
 
 
@@ -325,7 +391,7 @@ def imported_metadata(row, format_):
             name = author.get("literal") or " ".join(part.strip() for part in names if isinstance(part, str))
             if isinstance(name, str) and name.strip():
                 authors.append(name.strip()[:300])
-    meta = {"title": title.strip(), "authors": authors, "provider": {"csl-json": "CSL JSON", "ris": "RIS"}[format_]}
+    meta = {"title": title.strip(), "authors": authors, "provider": {"csl-json": "CSL JSON", "ris": "RIS", "bibtex": "BibTeX"}[format_]}
     venue = row.get("container-title")
     if isinstance(venue, str) and venue.strip():
         meta["venue"] = venue.strip()[:300]

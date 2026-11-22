@@ -154,3 +154,16 @@ class ReaderTest(unittest.TestCase):
         matches = call(self.worker, "visual.search", topic_id=self.topic, source_versions=[version], query="tangerine")
         self.assertEqual(matches["items"][0]["label"], "Figure 1")
         self.assertEqual(len(attempts), first["result"]["indexed"] + 2)
+
+        # A large document takes more than one task; the next task reuses completed descriptions.
+        reader.objects = lambda *_: [{"object_id": f"batch-{i}", "kind": "figure", "page": 1, "rect": []}
+                                     for i in range(25)]
+        reader.crop = lambda *_: (None, b"image")
+        batch = index()
+        self.assertEqual(batch["status"], "partial")
+        self.assertEqual(batch["issue"]["reason"], "VISUAL_BATCH_REMAINING")
+        self.assertEqual((batch["result"]["indexed"], batch["result"]["remaining"]), (24, 1))
+        final = index()
+        self.assertEqual(final["status"], "completed")
+        self.assertEqual((final["result"]["indexed"], final["result"]["remaining"]), (1, 0))
+        self.assertEqual(index()["result"]["indexed"], 0)

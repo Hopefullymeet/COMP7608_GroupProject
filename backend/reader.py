@@ -569,8 +569,8 @@ class Reader:
             for obj in pending[:24]:
                 if cancelled.is_set():
                     return
-                _, crop = self.crop(content, obj["page"], obj["rect"])
                 try:
+                    _, crop = self.crop(content, obj["page"], obj["rect"])
                     prompt = ("图中能看到什么？请用一句简短的中文回答。" if self.vision_model.startswith("qwen3-vl")
                               else "What does this diagram show?")
                     description = self.vision(crop, prompt)
@@ -592,9 +592,12 @@ class Reader:
                 if current["status"] == "running":
                     progress = {"record_id": key, "kind": "visual_index", "indexed": indexed,
                                 "remaining": len(pending) - indexed}
-                    result = (self.host.finish(current, "partial", result=progress, issue={
-                        "reason": "VISUAL_DESCRIPTIONS_INCOMPLETE", "retryable": True, "next_action": "retry"})
-                              if failed else self.host.finish(current, "completed", result=progress))
+                    if progress["remaining"]:
+                        reason = "VISUAL_DESCRIPTIONS_INCOMPLETE" if failed else "VISUAL_BATCH_REMAINING"
+                        result = self.host.finish(current, "partial", result=progress, issue={
+                            "reason": reason, "retryable": True, "next_action": "retry"})
+                    else:
+                        result = self.host.finish(current, "completed", result=progress)
                     self.host.send_events([result])
         except LiteratureError as error:
             self.host.fail_dsh(key, {"reason": error.reason, "retryable": True, "next_action": error.action})

@@ -7,7 +7,7 @@
 | file.pick | purpose: 'papers' 或 'draft' 或 'backup' | {files: {file_id:Id,name:string}[]}，用户取消返回空数组，文件限制由 purpose 决定。桌面文件选择器多选论文，稿件和备份单选 |
 | library.catalog | {} | {papers: Paper[], reviews: Review[], trash: Paper[]}，按标题排序，客户端搜索、分段显示 |
 | task.prepare → task.start (paper_import) | kind, input:{files:Id[],topic_id?:Id,paper_id?:Id}；start 带确认单 | 依次报告 inspect、match、commit 和终态；结果 {paper_ids:Id[],review_ids:Id[]}。指定论文时补材料版本，指定主题时加入主题 |
-| library.preview_bibliography | W, topic_id, format: 'ris' 或 'csl-json', content:string | 离线读取 UTF-8 书目，返回 preview_id 与 items。每行有 item_id、status: ready / invalid / conflict，可附 metadata、已有论文 ID 或 reason。预览不添加论文。输入最多 500 条及两百万字符 |
+| library.preview_bibliography | W, topic_id, format: 'bibtex'、'ris' 或 'csl-json', content:string | 离线读取 UTF-8 书目，返回 preview_id 与 items。每行有 item_id、status: ready / invalid / conflict，可附 metadata、已有论文 ID 或 reason。预览不添加论文。输入最多 500 条及两百万字符 |
 | library.commit_bibliography | W, topic_id, preview_id, item_ids:Id[] | 提交同主题预览中的选中行。逐项返回 imported / already_linked / conflict。成功项返回论文 ID、来源版本和可用范围。提交时再次核对身份，一条冲突可保留其他成功项 |
 | library.set_alias | W, topic_id, paper_id, alias:string | {paper_id:Id,alias:string}；论文须属于指定主题。去除首尾空白后最多 80 字符，空字符串清除别名 |
 | library.resolve_import | W, review_id, decision:'link' 或 'separate' | {paper_id:Id}；链接新增版本，保留原版本和锚点。身份冲突或模糊匹配必须复核 |
@@ -81,3 +81,5 @@ PDF 位置使用从 1 开始的 page、倍率 zoom（0.1 至 10）和归一化�
 完全相同的 PDF 重复入库时复用原条目和版本。若请求明确指定另一条论文作为附件目标，返回 `IDENTITY_CONFLICT`，保留两个条目的原版本。
 
 跨文件按 DOI 或 arXiv 去重。无标识符的条目在同一份文件中反复导入时复用原论文。预览和确认不访问书目中的 URL，也不导入附件。导入后可以使用 PDF 导入给同一条目补全文。格式损坏时预览整体失败，可解析但缺标题的行标为 `TITLE_REQUIRED`。
+
+BibTeX 使用桌面 worker 中的 Pybtex。缺解析依赖时，接口返回 `BIBTEX_PARSER_UNAVAILABLE`；RIS 与 CSL JSON 仍可导入。

@@ -1,4 +1,5 @@
 import base64
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -339,6 +340,45 @@ class BibliographyContractTest(unittest.TestCase):
             return reply["error"]["data"]
         self.assertIn("result", reply, reply)
         return reply["result"]
+
+    @unittest.skipUnless(importlib.util.find_spec("pybtex"), "Install requirements-bibliography.txt for BibTeX")
+    def test_bibtex_macros_names_crossrefs_and_offline_deduplication(self):
+        bib = r"""
+@string{series = "Evidence " # {Benchmarks}}
+@proceedings{conf, title=series, year=2025}
+@inproceedings{study,
+  title = {Reading {AI} \& Evidence},
+  author = {Garc{\'i}a, Ada and {Research and Development}},
+  crossref = {conf},
+  doi = {10.1234/evidence}}
+@misc{preprint, title={Unpublished work}, eprint={2501.01234v2}, eprinttype={arXiv}}
+@misc{no-title, author={Someone}}
+"""
+        with patch("bibliography.fetch", side_effect=AssertionError("Import must be offline.")):
+            existing = self.call("library.preview_bibliography", **self.topic, format="csl-json",
+                                 content=json.dumps({"title": "Existing", "DOI": "10.1234/evidence"}))
+            original = self.call("library.commit_bibliography", **self.topic, preview_id=existing["preview_id"],
+                                 item_ids=["1"])["items"][0]["paper_id"]
+            preview = self.call("library.preview_bibliography", **self.topic, format="bibtex", content=bib)
+            _, study, preprint, invalid = preview["items"]
+            self.assertEqual(study["existing_paper_id"], original)
+            self.assertEqual(study["metadata"], {
+                "title": "Reading AI & Evidence", "authors": ["García, Ada", "Research and Development"],
+                "venue": "Evidence Benchmarks", "venue_type": "conference", "year": 2025,
+                "doi": "10.1234/evidence", "provider": "BibTeX",
+            })
+            self.assertEqual(preprint["metadata"]["arxiv_id"], "2501.01234v2")
+            self.assertEqual(invalid["status"], "invalid")
+            result = self.call("library.commit_bibliography", **self.topic, preview_id=preview["preview_id"],
+                               item_ids=[study["item_id"], preprint["item_id"]])
+            self.assertEqual([item["status"] for item in result["items"]], ["already_linked", "imported"])
+            self.call("library.preview_bibliography", **self.topic, format="bibtex", content="@misc{broken,title={bad}",
+                      error="INVALID_PARAMS")
+            expansion = ['@string{m0 = "xxxxxxxx"}']
+            for idx in range(1, 18):
+                expansion.append(f"@string{{m{idx} = m{idx - 1} # m{idx - 1}}}")
+            self.call("library.preview_bibliography", **self.topic, format="bibtex", content="\n".join(expansion),
+                      error="INVALID_PARAMS")
 
     def test_offline_bibliography_preview_selective_commit_and_replay(self):
         ris = """TY  - JOUR
