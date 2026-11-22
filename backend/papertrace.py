@@ -83,7 +83,7 @@ class Worker:
         "candidate.decide", "reader.bookmark", "note.save", "library.import_pdf", "library.set_alias", "synthesis.review",
         "reader.mark_save", "reader.mark_delete", "reader.answer_save", "reader.mark_to_wiki",
         "services.save",
-        "library.commit_identifier", "library.update_metadata",
+        "library.commit_identifier", "library.update_metadata", "workspace.archive", "workspace.unarchive",
     }
 
     def __init__(self, directory, send):
@@ -319,7 +319,11 @@ class Worker:
             self.put("topic", topic["topic_id"], topic)
             return {"topic_id": topic["topic_id"]}
         if method == "topic.list":
-            return {"items": self.rows("topic")}
+            return {"items": [t for t in self.rows("topic") if not t.get("archived")]}
+        if method in ("workspace.archive", "workspace.unarchive"):
+            return self.set_archived(params, method == "workspace.archive")
+        if method == "workspace.archived":
+            return self.archived()
         if method == "session.create":
             topic, sid = self.topic(params), identifier()
             self.put("session", sid, {"session_id": sid, "topic_id": topic, "updated_at": now(), "turns": []})
@@ -336,11 +340,13 @@ class Worker:
             return {key: record[key], "title": title, **({"topic_id": record["topic_id"]} if kind == "session" else {})}
         if method == "session.list":
             topic = self.topic(params)
+            if self.get("topic", topic).get("archived"):
+                return {"items": []}
             return {"items": [
                 {"session_id": s["session_id"], "updated_at": s["updated_at"], "has_turns": bool(s["turns"]),
                  **({"title": s["title"]} if "title" in s else
                     {"title": s["turns"][0]["question"]} if s["turns"] else {})}
-                for s in self.rows("session") if s["topic_id"] == topic
+                for s in self.rows("session") if s["topic_id"] == topic and not s.get("archived")
             ]}
         if method == "session.get":
             session = self.session(params)
@@ -599,6 +605,27 @@ class Worker:
         if method == "note.save":
             return self.save_note(params)
         raise RpcError(-32601, "METHOD_NOT_FOUND", "refresh_data", f"Method {method} is not available in the local integration worker.")
+
+    def set_archived(self, params, archived):
+        kind, record_id = required(params, "kind"), required(params, "id")
+        if kind not in ("topic", "session"):
+            raise invalid("Choose a topic or session to archive or restore.")
+        record = self.get(kind, record_id)
+        if archived:
+            record["archived"] = True
+        else:
+            record.pop("archived", None)
+        self.put(kind, record_id, record)
+        return {"id": record_id}
+
+    def archived(self):
+        topics = {t["topic_id"]: t["title"] for t in self.rows("topic") if t.get("archived")}
+        items = [{"id": tid, "kind": "topic", "title": title} for tid, title in topics.items()]
+        for session in self.rows("session"):
+            if session.get("archived") and session["topic_id"] not in topics:
+                title = session.get("title") or (session["turns"][0]["question"] if session["turns"] else "New session")
+                items.append({"id": session["session_id"], "kind": "session", "title": title})
+        return {"items": items}
 
     def save_note(self, params):
         topic = self.topic(params)

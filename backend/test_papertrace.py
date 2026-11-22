@@ -146,6 +146,37 @@ class ContractTest(unittest.TestCase):
         self.restart()
         self.assertEqual(self.client.result("services.get"), saved)
 
+    def test_archive_restores_topic_and_only_its_active_sessions_after_restart(self):
+        topic, session = self.context()
+        hidden = self.client.result("session.create", operation_id="another", **topic)
+        self.client.result("session.rename", operation_id="rename-hidden", title="Kept for later", **hidden)
+        self.client.result("note.save", operation_id="preserve-note", **session, origin="user",
+                           text="Research note", anchor_ids=[])
+        session_record = {"kind": "session", "id": hidden["session_id"]}
+        topic_record = {"kind": "topic", "id": topic["topic_id"]}
+        self.client.result("workspace.archive", operation_id="hide-session", **session_record)
+        args = {**topic_record, "operation_id": "hide-topic"}
+        self.client.result("workspace.archive", **args)
+        self.assertEqual(self.client.result("workspace.archive", **args), {"id": topic["topic_id"]})
+        self.assertEqual(self.client.result("topic.list")["items"], [])
+        self.assertEqual(self.client.result("session.list", **topic)["items"], [])
+        self.assertEqual(self.client.result("workspace.archived")["items"], [
+            {**topic_record, "title": "Research evidence"},
+        ])
+
+        self.restart()
+        self.client.result("workspace.unarchive", operation_id="restore-topic", **topic_record)
+        self.assertEqual([s["session_id"] for s in self.client.result("session.list", **topic)["items"]],
+                         [session["session_id"]])
+        self.assertEqual(self.client.result("workspace.archived")["items"], [
+            {**session_record, "title": "Kept for later"},
+        ])
+        self.assertEqual(self.client.result("note.list", **topic)["items"][0]["text"], "Research note")
+        self.client.result("workspace.unarchive", operation_id="restore-session", **session_record)
+        self.assertEqual({s["session_id"] for s in self.client.result("session.list", **topic)["items"]},
+                         {session["session_id"], hidden["session_id"]})
+        self.assertEqual(self.client.result("workspace.archived")["items"], [])
+
     def test_topic_and_session_names_survive_restart(self):
         topic, session = self.context()
         topic_rename = {"operation_id": "topic-name", **topic, "title": "  文献研究  "}
