@@ -6,6 +6,7 @@ import tempfile
 import time
 import unittest
 
+from dsh import failure
 from evaluate_synthesis import call
 from literature import LiteratureError
 from papertrace import RpcError, Worker
@@ -40,6 +41,78 @@ class ReaderTest(unittest.TestCase):
         content = doc.tobytes()
         doc.close()
         return base64.b64encode(content).decode("ascii")
+
+    def test_translation_consent_selection_partial_page_retry_and_cache(self):
+        with self.engine.open() as doc:
+            page = doc.new_page()
+            page.insert_text((72, 80), "Evidence retrieval")
+            page.insert_text((72, 140), "Private paragraph outside selection")
+            second = doc.new_page()
+            second.insert_text((72, 80), "Second page contribution")
+            content = base64.b64encode(doc.tobytes()).decode("ascii")
+        paper = call(self.worker, "library.import_pdf", topic_id=self.topic, name="Translation.pdf", content=content)
+        version = paper["source_version_id"]
+        inputs = []
+        failures = {"Second page contribution"}
+
+        class Model:
+            key = "local-test"
+
+            def translate(self, units, language, glossary, cancelled):
+                excerpt = [unit["source"] for unit in units]
+                inputs.append((excerpt, language, glossary))
+                if failures.intersection(excerpt):
+                    raise failure()
+                return {unit["id"]: "译文 " + unit["source"] for unit in units}
+
+        self.worker.dsh = Model()
+        common = {"topic_id": self.topic, "kind": "reader_translation"}
+        target = {"source_version_id": version, "target_language": "zh-CN", "glossary": {"Evidence": "证据"}}
+        selection = {**common, "input": {**target, "page": 1, "rects": [[.10, .07, .40, .11]]}}
+
+        def prepare(request):
+            return call(self.worker, "task.prepare", **request)
+
+        def run(request, prepared):
+            task_id = call(self.worker, "task.start", confirmation_id=prepared["confirmation_id"], **request)["task_id"]
+            for _ in range(150):
+                task = call(self.worker, "task.get", task_id=task_id)
+                if task["status"] not in ("queued", "running"):
+                    return task
+                time.sleep(.02)
+            self.fail("Translation did not finish.")
+
+        consent = prepare(selection)
+        self.assertEqual(len(consent["transfers"]), 1)
+        self.assertEqual(consent["source_versions"], [version])
+        tampered = {**selection, "input": {**selection["input"], "target_language": "ja"}}
+        with self.assertRaises(RpcError) as denied:
+            run(tampered, consent)
+        self.assertEqual(denied.exception.issue["reason"], "CONFIRMATION_REQUIRED")
+        self.assertEqual(inputs, [])
+        self.assertEqual(run(selection, consent)["status"], "completed")
+        self.assertEqual(inputs, [(["Evidence retrieval"], "zh-CN", {"Evidence": "证据"})])
+        scope = {"topic_id": self.topic, "source_version_id": version, "page": 1}
+        record, = call(self.worker, "reader.translations", **scope)["items"]
+        self.assertEqual(record["scope"], "selection")
+        self.assertEqual(record["segments"][0]["rects"], selection["input"]["rects"])
+        cached = prepare(selection)
+        self.assertEqual(cached["transfers"], [])
+        self.assertTrue(run(selection, cached)["result"]["pages"][0]["cached"])
+
+        pages = {**common, "input": {**target, "pages": [1, 2]}}
+        first = run(pages, prepare(pages))
+        self.assertEqual(first["status"], "partial")
+        self.assertEqual(first["issue"]["details"]["pages"][0]["page"], 2)
+        failures.clear()
+        results = run(pages, prepare(pages))["result"]["pages"]
+        self.assertEqual([(row["page"], row["cached"]) for row in results], [(1, True), (2, False)])
+        self.assertEqual(sum("Private paragraph outside selection" in text for text, _, _ in inputs), 1)
+        self.assertEqual(len(call(self.worker, "reader.translations", **scope)["items"]), 2)
+        other = call(self.worker, "topic.create", title="Other")["topic_id"]
+        with self.assertRaises(RpcError) as denied:
+            call(self.worker, "reader.translations", **{**scope, "topic_id": other})
+        self.assertEqual(denied.exception.issue["reason"], "NOT_FOUND")
 
     def test_embedded_notes_retain_rotated_page_location_and_original_bytes(self):
         with self.engine.open() as doc:

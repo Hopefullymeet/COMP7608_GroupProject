@@ -9,8 +9,9 @@ from math import log
 import os
 import re
 import sys
+from textwrap import wrap
 
-from literature import LiteratureError
+from literature import LiteratureError, digest
 
 CAPTION = re.compile(r"^(figure|fig\.?|table)\s*([A-Z]?\d+[a-z]?)\s*[:.]", re.I)
 EQUATION = re.compile(r"\(([A-Z]?\d+)\)\s*$")
@@ -289,6 +290,11 @@ class Reader:
         host.db.execute("""CREATE TABLE IF NOT EXISTS reader_marks
             (id TEXT PRIMARY KEY, topic_id TEXT NOT NULL, version_id TEXT NOT NULL, data TEXT NOT NULL)""")
         host.db.execute("CREATE INDEX IF NOT EXISTS reader_marks_source ON reader_marks(topic_id, version_id)")
+        host.db.execute("""CREATE TABLE IF NOT EXISTS reader_translations (
+            cache_key TEXT PRIMARY KEY, topic_id TEXT NOT NULL, version_id TEXT NOT NULL,
+            page INT NOT NULL, data TEXT NOT NULL)""")
+        host.db.execute("CREATE INDEX IF NOT EXISTS reader_translation_source "
+                        "ON reader_translations(topic_id, version_id, page)")
 
     def content(self, topic, version):
         source = self.host.source(version, topic)
@@ -540,6 +546,145 @@ class Reader:
         if medium == "text" and (not self.host.dsh or not self.host.dsh.key):
             raise LiteratureError("MODEL_UNAVAILABLE", "Configure DeepSeek Harness for text questions.", "configure_service")
         return version, page, question
+
+    def translation_plan(self, topic, params, model):
+        version = params.get("source_version_id")
+        language = params.get("target_language")
+        if not isinstance(version, str) or not isinstance(language, str) or not re.fullmatch(
+                r"[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8}){0,3}", language):
+            raise LiteratureError("INVALID_PARAMS", "Choose a paper version and a target language tag.")
+        glossary = params.get("glossary", {})
+        if not isinstance(glossary, dict) or len(glossary) > 30 or any(
+                not isinstance(term, str) or not isinstance(value, str) or not term.strip() or not value.strip() or len(term) > 100 or len(value) > 100
+                for term, value in glossary.items()):
+            raise LiteratureError("INVALID_PARAMS", "Provide up to 30 term pairs of at most 100 characters each.")
+        selection = "rects" in params
+        pages = [params.get("page")] if selection else params.get("pages")
+        source, content = self.content(topic, version)
+        if (not isinstance(pages, list) or not 1 <= len(pages) <= 8
+                or any(type(page) is not int or not 1 <= page <= source["page_count"] for page in pages)
+                or len(pages) != len(set(pages)) or (selection and "pages" in params)):
+            raise LiteratureError("INVALID_PARAMS", "Select a region or one to eight distinct PDF pages.")
+        rectangles = params.get("rects", [])
+        if selection:
+            if not isinstance(rectangles, list) or not 1 <= len(rectangles) <= 50:
+                raise LiteratureError("INVALID_PARAMS", "Select one to fifty text rectangles.")
+            for rect in rectangles:
+                region(rect)
+        engine = pdf_engine()
+        plans = []
+        with engine.open(stream=content, filetype="pdf") as document:
+            for number in pages:
+                page = document[number - 1]
+                if selection:
+                    blocks = [(" ".join(" ".join(page.get_textbox(
+                        page_rect(page, box, engine)) for box in rectangles).split()), rectangles)]
+                else:
+                    blocks = [(body, [normalized(page, engine.Rect(raw[:4]))]) for raw, body in lines(page)]
+                units = [{"id": f"{number}:{index}:{part}", "source": text, "rects": boxes}
+                         for index, (body, boxes) in enumerate(blocks, 1)
+                         for part, text in enumerate(wrap(body, width=1750), 1)]
+                key = digest(json.dumps([topic, version, number, selection, language.lower(), glossary, model, units],
+                                        sort_keys=True, ensure_ascii=False).encode("utf-8"))
+                plans.append({"page": number, "units": units, "key": key})
+        if sum(len(u["source"]) for plan in plans for u in plan["units"]) > 48_000:
+            raise LiteratureError("INVALID_PARAMS", "Select less text for one translation task.")
+        return plans
+
+    def translation_available(self, key):
+        return self.host.db.execute("SELECT 1 FROM reader_translations WHERE cache_key=?", (key,)).fetchone() is not None
+
+    def translations(self, topic, params):
+        version = params.get("source_version_id")
+        source, _ = self.content(topic, version)
+        page = params.get("page")
+        if type(page) is not int or not 1 <= page <= source["page_count"]:
+            raise LiteratureError("INVALID_PARAMS", "Select a page to read its saved translations.")
+        rows = self.host.db.execute(
+            "SELECT data FROM reader_translations WHERE topic_id=? AND version_id=? AND page=? ORDER BY rowid DESC",
+            (topic, version, page))
+        return {"items": [json.loads(row[0]) for row in rows]}
+
+    def run_translation(self, task, cancelled):
+        from dsh import DshFailure
+        topic, params, key = task["topic_id"], task["input"], task["task_id"]
+        version, model = params["source_version_id"], task["dsh_model"]
+        try:
+            with self.host.lock:
+                plans = self.translation_plan(topic, params, model)
+                if [plan["key"] for plan in plans] != task["translation_keys"]:
+                    raise LiteratureError("CONFIRMATION_REQUIRED", "The source changed. Confirm the task again.", "confirm_task")
+            runtime = self.host.dsh_for_task(task)
+            saved, failures = [], []
+            service_issue = None
+            for plan in plans:
+                if cancelled.is_set():
+                    return
+                page, cache_key, units = plan["page"], plan["key"], plan["units"]
+                with self.host.lock:
+                    available = self.translation_available(cache_key)
+                if available:
+                    saved.append({"page": page, "translation_id": cache_key, "cached": True})
+                    continue
+                if not units:
+                    failures.append({"page": page, "reason": "NO_TEXT_IN_SELECTION", "retryable": False,
+                                     "next_action": "correct_request"})
+                    continue
+                if service_issue:
+                    failures.append({"page": page, **service_issue})
+                    continue
+                try:
+                    translated, segment_batch = {}, []
+                    size = 0
+                    for unit in units:
+                        if size + len(unit["source"]) > 3500 and segment_batch:
+                            translated.update(runtime.translate(segment_batch, params["target_language"],
+                                                                params.get("glossary", {}), cancelled))
+                            segment_batch, size = [], 0
+                        segment_batch.append({"id": unit["id"], "source": unit["source"]})
+                        size += len(unit["source"])
+                    translated.update(runtime.translate(segment_batch, params["target_language"],
+                                                        params.get("glossary", {}), cancelled))
+                except DshFailure as error:
+                    failures.append({"page": page, **error.issue})
+                    if error.issue["next_action"] in ("configure_service", "check_quota"):
+                        service_issue = error.issue
+                    continue
+                with self.host.lock, self.host.db:
+                    current = self.host.get("task", key)
+                    if current["status"] != "running":
+                        return
+                    record = {"translation_id": cache_key, "source_version_id": version, "page": page,
+                              "target_language": params["target_language"].lower(), "model": model,
+                              "scope": "selection" if "rects" in params else "page",
+                              "segments": [{**unit, "translation": translated[unit["id"]]} for unit in units]}
+                    self.host.db.execute("INSERT OR IGNORE INTO reader_translations VALUES (?, ?, ?, ?, ?)",
+                                         (cache_key, topic, version, page, json.dumps(record, ensure_ascii=False)))
+                    event = self.host.emit(current, "task.progress", {
+                        "stage": "translating", "message": f"Translated page {page}."})
+                    self.host.send_events([event])
+                    saved.append({"page": page, "translation_id": cache_key, "cached": False})
+            with self.host.lock, self.host.db:
+                current = self.host.get("task", key)
+                if current["status"] != "running":
+                    return
+                result = {"kind": "reader_translation", "pages": saved}
+                if failures:
+                    issue = {k: v for k, v in failures[0].items() if k != "page"}
+                    issue["details"] = {"pages": failures}
+                    event = (self.host.finish(current, "partial", result=result, issue=issue) if saved
+                             else self.host.finish(current, "failed", issue=issue))
+                else:
+                    event = self.host.finish(current, "completed", result=result)
+                self.host.send_events([event])
+        except LiteratureError as error:
+            self.host.fail_dsh(key, {"reason": error.reason, "retryable": False, "next_action": error.action})
+        except Exception as error:
+            print(f"PaperTrace translation: {type(error).__name__}", file=sys.stderr)
+            self.host.fail_dsh(key, {"reason": "TEMPORARILY_UNAVAILABLE", "retryable": True, "next_action": "retry"})
+        finally:
+            with self.host.lock:
+                self.host.inflight.pop(key, None)
 
     def run_question(self, task, cancelled):
         from dsh import DshFailure

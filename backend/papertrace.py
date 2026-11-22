@@ -466,6 +466,8 @@ class Worker:
             return {"content": base64.b64encode(pdf).decode("ascii")}
         if method == "reader.embedded_marks":
             return self.reader.embedded_marks(self.topic(params), params)
+        if method == "reader.translations":
+            return self.reader.translations(self.topic(params), params)
         if method == "reader.marks":
             return self.reader.list(self.topic(params), required(params, "source_version_id"))
         if method == "reader.mark_save":
@@ -1050,6 +1052,16 @@ class Worker:
             target, _, label = self.reader.question(topic, input_)
             if "session_id" in params:
                 task_data["session_id"] = self.session(params)["session_id"]
+        elif kind == "reader_translation":
+            target = required(input_, "source_version_id")
+            translation_model = self.services_config()["models"][0]["model"]
+            plans = self.reader.translation_plan(topic, input_, translation_model)
+            task_data["translation_keys"] = [plan["key"] for plan in plans]
+            pending_translation = [plan for plan in plans if plan["units"] and
+                                   not self.reader.translation_available(plan["key"])]
+            if pending_translation and (not self.dsh or not self.dsh.key):
+                raise RpcError(-32015, "MODEL_UNAVAILABLE", "configure_service", "Configure a text model to translate.")
+            label = "Translate selected PDF text"
         elif kind == "visual_index":
             target = required(input_, "source_version_id")
             source, _ = self.reader.content(topic, target)
@@ -1084,14 +1096,19 @@ class Worker:
         audit = kind == "citation_audit"
         suggest = kind == "citation_suggest"
         reader_question = kind == "reader_question"
+        translation = kind == "reader_translation"
         live = synthesis or (kind == "reading_qa" and self.dsh is not None) or (
             audit and bool(audit_pending) and self.dsh is not None and bool(self.dsh.key))
-        live = live or (reader_question and input_["medium"] == "text")
+        live = live or (reader_question and input_["medium"] == "text") or (translation and bool(pending_translation))
         live = live or (suggest and bool(task_data["suggestion_sources"]) and self.dsh is not None and bool(self.dsh.key))
         if audit:
             task_data["audit_sources"] = {j["job_id"]: j["source"]["source_version_id"] for j in audit_pending} if live else {}
 
-        model = self.services_config()["models"][0]["model"] if live else ""
+        model = ""
+        if translation:
+            model = translation_model
+        elif live:
+            model = self.services_config()["models"][0]["model"]
         search_live = "search_request" in task_data
         endpoint = ENDPOINT if live else OPENALEX if search_live else "local-fixture"
         fingerprint = encode([task_data, endpoint, model])
@@ -1122,6 +1139,12 @@ class Worker:
             if reader_question:
                 transfers = [{"endpoint": ENDPOINT, "purpose": "Answer from the selected PDF text",
                               "data_categories": ["Only the selected text and the question"]}] if live else []
+            if translation:
+                transfers = [{"endpoint": ENDPOINT, "purpose": "Translate the selected PDF text",
+                              "data_categories": ["PDF text on page(s) " + ", ".join(
+                                  str(plan["page"]) for plan in pending_translation),
+                                  "Target language and any glossary terms supplied"]}] if live else []
+                return {"confirmation_id": cid, "transfers": transfers, "source_versions": [target]}
             if synthesis:
                 transfers = [{"endpoint": ENDPOINT,
                               "purpose": ("Compare selected papers" if kind == "paper_comparison"
@@ -1145,7 +1168,7 @@ class Worker:
         tid = identifier()
         task = {**task_data, "target": target, "task_id": tid, "run_id": identifier(), "status": "queued",
                 "label": label, "steps": [], "last_event_seq": 0, "started_at": now()}
-        if live:
+        if live or translation:
             task["dsh_model"] = model
         if kind == "reading_qa":
             task["scope_id"] = identifier()
@@ -1198,7 +1221,7 @@ class Worker:
                 remote_search = discovery and "search_request" in task
                 audit = task["kind"] == "citation_audit"
                 suggest = task["kind"] == "citation_suggest"
-                reader_task = task["kind"] in ("reader_question", "visual_index")
+                reader_task = task["kind"] in ("reader_question", "visual_index", "reader_translation")
                 live = audit or suggest or reader_task or (not discovery and self.dsh is not None)
                 if live or remote_search:
                     signal = threading.Event()
@@ -1208,6 +1231,7 @@ class Worker:
                         "stage": "searching" if discovery else "reading",
                         "message": "Checking citations." if audit else "Finding citations." if suggest else (
                             "Searching OpenAlex." if remote_search else
+                            "Translating selected PDF text." if task["kind"] == "reader_translation" else
                             "Reading with DeepSeek Harness." if live else "Running local contract sample.")
                     })
                 self.send_events([event])
@@ -1220,7 +1244,8 @@ class Worker:
                 elif suggest:
                     self.citations.run_suggestions(task, signal)
                 elif reader_task:
-                    run = self.reader.run_question if task["kind"] == "reader_question" else self.reader.run_index
+                    run = {"reader_question": self.reader.run_question, "visual_index": self.reader.run_index,
+                           "reader_translation": self.reader.run_translation}[task["kind"]]
                     run(task, signal)
                 elif task["kind"] in ("literature_synthesis", "paper_comparison"):
                     self.research.run(task, signal)

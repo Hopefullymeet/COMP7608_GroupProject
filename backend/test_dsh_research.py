@@ -7,7 +7,7 @@ from pathlib import Path
 import threading
 import unittest
 
-from dsh import Dsh
+from dsh import Dsh, DshFailure
 import test_literature
 
 
@@ -22,6 +22,14 @@ class ScriptedProvider(BaseHTTPRequestHandler):
         messages = request["messages"]
         prompt = next(block["text"] for m in messages if m["role"] == "user"
                       for block in m["content"] if isinstance(block, dict) and block["type"] == "text")
+        if "\nTranslation request: " in prompt:
+            payload = json.loads(prompt.split("\nTranslation request: ", 1)[1])
+            self.server.translation_requests.append((payload, request.get("tools", [])))
+            rows = [{"id": item["id"], "text": "译文 " + item["source"]} for item in payload["segments"]]
+            if payload["target_language"] == "en":
+                rows[0]["id"] = "unrequested"
+            self.respond({"type": "text", "text": json.dumps({"translations": rows})})
+            return
         if prompt == "Reply with OK.":
             self.server.probes.append((request["model"], request["max_tokens"], request.get("tools", [])))
             self.respond({"type": "text", "text": "OK"})
@@ -129,6 +137,7 @@ class DshResearchTest(unittest.TestCase):
                 provider.observed_tools = []
                 provider.probes = []
                 provider.research_models = []
+                provider.translation_requests = []
                 server = threading.Thread(target=provider.serve_forever, daemon=True)
                 server.start()
                 try:
@@ -137,6 +146,15 @@ class DshResearchTest(unittest.TestCase):
                               "loopback-fixture", Path(fixture.workspace.name))
                     dsh.endpoint = f"http://127.0.0.1:{provider.server_port}"
                     worker.dsh = dsh
+                    segments = [{"id": "1:1:1", "source": "Citation quality [1]"}]
+                    result = dsh.translate(segments, "zh-CN", {"Citation": "引用"}, threading.Event())
+                    self.assertEqual(result, {"1:1:1": "译文 Citation quality [1]"})
+                    payload, tools = provider.translation_requests[0]
+                    self.assertEqual(payload["segments"], segments)
+                    self.assertEqual(tools, [])
+                    with self.assertRaises(DshFailure) as invalid:
+                        dsh.translate(segments, "en", {}, threading.Event())
+                    self.assertEqual(invalid.exception.issue["reason"], "MODEL_OUTPUT_INVALID")
                     task = {"kind": "literature_synthesis", "topic_id": fixture.topic,
                             "input": {"source_versions": fixture.versions, "question": "How can answers be supported?"}}
                     prepared = fixture.call("task.prepare", **task)
