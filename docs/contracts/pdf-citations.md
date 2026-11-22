@@ -10,7 +10,7 @@
 | 回查与取消 | `task.prepare → task.start` 的 `citation_audit` 接收 `draft_id`、`version_id`、选定句子和来源版本。检查逐句逐引用进行。远程确认单列明所选稿件句和原文摘录。任务终态含 `record_id`，报告从稿件读回。无法查证和预算耗尽可以保留部分结果。 |
 | 查找引用建议 | `citation_suggest` 沿用 `draft_id`、`version_id`、`sentence_ids` 和 `source_versions`。可选已有引用的句子或稿件的 `uncited_sentences`。每次至多选择 12 句和 12 篇论文，每篇一个版本。模型只查确认范围内的全文，响应含逐项支持程度、短引文、限制和待补点。 |
 | 审阅与积累 | `audit.review` 接受、拒绝或留待处理。已接受且附原文的判断按句子、引用范围和来源版本复用。使用 `audit.save_to_wiki` 显式加入主题 Wiki。更换来源版本或手工修改书目映射后，相关判断及已保存的 Wiki 条目标记为待复核。过期判断的再次接受、保存和证据导出返回 `STALE_REVISION`。 |
-| 导出 | `export.create` 支持 `format: evidence`、`audit_report` 和 `bibliography`。输入稿件版本与报告 ID，或提纲 `record_id`，再传选定 `item_ids`。返回供用户下载的 Markdown 和 BibTeX 内容，引用键一致。生成内容和实际下载是两个操作。 |
+| 导出 | `export.create` 支持 `format: evidence`、`audit_report` 和 `bibliography`。输入稿件版本与报告 ID，或提纲 `record_id`，再传选定 `item_ids`。返回供用户下载的 Markdown 和 BibTeX 内容，引用键一致。生成内容和实际下载是两个操作。选中的提纲观点依赖已换版的原文时，返回 `STALE_REVISION`。用户可重新选择只包含当前证据的观点。 |
 
 ## 跑通示例
 

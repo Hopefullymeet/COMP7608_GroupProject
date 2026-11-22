@@ -1,6 +1,6 @@
 # PaperTrace 竞品功能对齐与技术路线
 
-2026-11-21。对照基线为 Agentero v0.17.0 发行说明及官网公开文档，PaperTrace 以本地集成提交 `58b6db4`（PR #8）为准。Agentero 功能按公开资料核对，实验能力和仅见文档的能力另标。本稿用公开功能和操作流程确定需求，PaperTrace 团队自行实现代码、数据模型和界面。 [Agentero 官网](https://agentero.app/) · [官方文档索引](https://docs.agentero.app/) · [v0.17.0 发行说明](https://github.com/poco-ai/agentero/releases/tag/v0.17.0) · [PaperTrace PR #8](https://github.com/Hopefullymeet/COMP7608_GroupProject/pull/8)
+2026-11-21。对照基线为 Agentero v0.17.0 和 DeepTutor v1.7.4 的发行说明及公开文档。PaperTrace 从 `bb38489` 起按下表逐项迭代。Agentero 功能按公开资料核对，实验能力和仅见文档的能力另标。本稿用公开功能和操作流程确定需求，PaperTrace 团队自行实现代码、数据模型和界面。 [Agentero 官网](https://agentero.app/) · [官方文档索引](https://docs.agentero.app/) · [v0.17.0 发行说明](https://github.com/poco-ai/agentero/releases/tag/v0.17.0) · [PaperTrace PR #8](https://github.com/Hopefullymeet/COMP7608_GroupProject/pull/8)
 
 ## 1. 功能差距与完整路线
 
@@ -10,8 +10,8 @@ P0 解决第一次使用和每天阅读的流程。P1 工作为一篇论文从�
 | --- | --- | --- |
 | 首次打开与本地库 | 创建或打开 Vault，文件树、论文库、导览、系统文件入口 | **P0 · 部分接通。** 主题、会话、论文别名、本地 SQLite 已有。补首启引导、库的位置与恢复入口、目录和文件管理、按标题或别名快速找论文。 |
 | 找论文 | Plaza、RSS、Cool Papers、学术搜索及推荐 | **P0 · 部分接通。** 桌面已接公开文献检索、年份过滤、候选去重和用户选入。**P2** 补订阅、每日推荐和持续追踪。 |
-| 导入及元数据 | 拖 PDF、批量标识符或链接、Zotero 迁移、浏览器 Connector、BibTeX/RIS、开放附件下载 | **P0 · 部分接通。** 已有 PDF 入库和版本。补统一导入入口、DOI/arXiv 解析、失败重试、元数据编辑和来源标注。**P1** 补 Zotero 收藏夹迁移、书目格式导入、缺附件记录。**P2** 补浏览器一键保存、其他标识符和机构代理设置。 |
-| PDF 基础阅读 | PDF 大纲、页内查找、页跳转、多种缩放和版式、全屏、阅读位置恢复 | **P0 · 部分接通。** 已有原版 PDF、连续滚动、跳页、缩放、浮动工具。优先补页内查找、PDF 章节大纲、按版本记住页码与缩放。**P1** 补全屏还原和适应整页，**P2** 补翻页方向与对开。 |
+| 导入及元数据 | 拖 PDF、批量标识符或链接、Zotero 迁移、浏览器 Connector、BibTeX/RIS、开放附件下载 | **P0 · 部分接通。** 已有 PDF 入库和版本。统一导入已支持批量 DOI/arXiv 预览、逐项重试及元数据编辑。**P1** 补 Zotero 收藏夹迁移、书目格式导入、缺附件记录。**P2** 补浏览器一键保存、其他标识符和机构代理设置。 |
+| PDF 基础阅读 | PDF 大纲、页内查找、页跳转、多种缩放和版式、全屏、阅读位置恢复 | **P0 · 部分接通。** 已有原版 PDF、连续滚动、跳页、缩放、浮动工具。已补页内查找、PDF 章节大纲和版本级续读。**P1** 补全屏还原和适应整页，**P2** 补翻页方向与对开。 |
 | 批注和版面 | 划词、颜色、复制、便签、图片裁剪、PDF 导出。可选中识别出的图、表、公式、算法 | **P0 · 部分接通。** 已有划词、框选、手绘、批注导出和模糊找图。补选区复制、跨页批注导航和颜色编辑。**P1** 补按对象列出图表公式与算法、点选对象和展示解析失败项。Agentero 的版面分析文档标为实验，单独验收复杂双栏、子图和跨页表。 |
 | 翻译与网页阅读 | 划词、逐页、全文翻译，原文与译文对照、术语一致、网页划词 | **P1 · 待做。** 从选区翻译和逐页对照开始，支持重试和跳回原文。**P2** 补全文译文排版、自定义服务、缓存和网页论文阅读。 |
 | 参考文献 | 从 PDF 引用标记跳到书目卡，显示作者、年份、venue 和 DOI，可打开已入库论文或导入缺失项，支持近邻图 | **P1 · 部分接通。** 已有本地双向引用、原文页码与引用语境、可选 GROBID。补双向跳转、搜索、未入库条目、书目补全和近邻图。报告分区等数据按来源、时间和学科展示。 |
@@ -24,6 +24,20 @@ P0 解决第一次使用和每天阅读的流程。P1 工作为一篇论文从�
 功能出处按用户流程查阅。 [导入](https://docs.agentero.app/usage/import-papers/) · [阅读和批注](https://docs.agentero.app/usage/read-and-organize/) · [版面分析](https://docs.agentero.app/frontend/pdf-layout-analysis/) · [双链](https://docs.agentero.app/frontend/wiki/) · [连接 Agent](https://docs.agentero.app/usage/agents/) · [MCP](https://docs.agentero.app/usage/mcp/) · [设置与主题](https://docs.agentero.app/frontend/settings/) · [远程 Vault](https://docs.agentero.app/usage/remote-vault/) · [同步](https://docs.agentero.app/backend/sync/)
 
 前端联调任务、接口状态和验收步骤统一见[前端联调交接](Backend_Settings_Handoff_ZH.md)。
+
+## DeepTutor 能力与后端验收
+
+这部分保留 DeepTutor 的学习与协作范围。论文研究沿用 PaperTrace 的主题、稿件版本和证据引用。其他能力也以能在独立工作区运行、恢复和导出为验收要求。 [DeepTutor v1.7.4 发行记录](https://github.com/HKUDS/DeepTutor/releases/tag/v1.7.4) · [功能与架构索引](https://github.com/HKUDS/DeepTutor)
+
+| 场景 | 当前基础 | 下一步验收 |
+| --- | --- | --- |
+| 工作区与持续对话 | 主题、会话、阅读位置、任务历史已有 | 恢复对话范围、附件和工具状态，归档可恢复。收藏、学习日志、任务板和日历有独立的保存和读取路径。 |
+| 知识库与阅读 | SQLite 全文索引、原 PDF 与批注、图表索引已有 | 分文件记录索引状态、失败后可重试。按格式验收 Office、EPUB、网页、视频和代码资料。图表、公式、译文和原文可相互定位。 |
+| 科研与长任务 | 多论文提纲、比较、Wiki、引用核查已有 | 支持按版本读公开预印本、继续追查冲突和优先核对来源。证据矩阵区分原文与推断。论文与代码对照以固定提交的静态文件为依据。 |
+| 写作与笔记 | 逐句建议、证据回查、Markdown 和 BibTeX 导出已有 | 笔记可以搜、可跳原文。文本稿可审批后生成新版本，LaTeX 和长文分段修改可预览、撤回并保留引用。 |
+| 学习、练习与书籍 | 论文问答和会话留存可复用 | 书籍可从带来源的提纲生成、分节修订与导出。题库保留答案、原文及题目版本。答题、错题、练习进度和学习路径可续接。 |
+| 模型、工具与协作 | 文本提供方已接入 DeepSeek，研究工具按本轮授权限制 | 第二个实际提供方跑通统一测试。为模型、搜索、视觉和语音分别记录能力和错误。外接 Agent、工具、技能、记忆、伙伴及消息渠道按资源范围隔离。 |
+| 安装、数据与评估 | Mac 发布模式主程序已能编译，已有三组研究评估入口 | 干净环境可运行及恢复工作区。索引和任务分别记录耗时、失败、用量与人工评分。使用同一批公开资料验证竞品共通流程。 |
 
 ## 2. 模型适配与运行时精简
 

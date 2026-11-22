@@ -819,6 +819,10 @@ class CitationWorkspace:
             if record["topic_id"] != topic:
                 raise LiteratureError("NOT_FOUND", "Outline is outside the selected topic.", "refresh_data", -32001)
             selected = {p["id"]: p["claims"] for p in record["points"]}
+            latest = self.host.research.current_versions(topic)
+            if set(ids).intersection(selected, self.host.research.stale_items(record, latest)):
+                raise LiteratureError("STALE_REVISION", "Recheck this outline against the current source before exporting.",
+                                      "refresh_data", -32020)
         else:
             _, report = self.report(topic, params)
             findings = {f["finding_id"]: f for f in report["findings"] if f.get("decision") == "accept"}

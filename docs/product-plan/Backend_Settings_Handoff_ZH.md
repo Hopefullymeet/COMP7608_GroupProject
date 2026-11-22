@@ -82,3 +82,9 @@ python3 backend/venue_ranks.py ranking-workspace ranking-demo.csv --scheme jcr -
 | ALCE | diagram of the route from three questions into a generator with numbered snippets | Figure 1 | 1 |
 | RARR | a graph with two metrics along its axes comparing how much an editor retains | Figure 5 | 2 |
 | RARR | the score breakdown when the evidence filter and question stage are taken away | Table 2 | 11 |
+
+## 问答中断与换版导出
+
+- 全文问答如因模型中断或输出无效而没有形成正式回答，任务以 `failed` 结束。根据 `issue.reason` 展示原因，根据 `issue.retryable` 提供重试。可用 `issue.details.read_sources` 展示各篇已读至全文、摘要或尚未读取。会话正文不会新增一条失败答复。
+- 提纲导出时，后端会核对选中观点的来源版本。遇到 `STALE_REVISION` 时，刷新提纲的 `stale_item_ids`，选中项保留在界面，允许用户复核或改选。历史观点与证据仍可以打开。
+- 验收用例。让模型读完一段后中断或返回无效内容，核对任务状态和已读范围。再导出一个提纲，更换其中一个有依据的版本，确认选中的旧观点被拦截，且历史原文仍可定位。

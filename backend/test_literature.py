@@ -7,8 +7,10 @@ import sqlite3
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
+from dsh import Dsh
 from literature import poppler
 from papertrace import Worker
 
@@ -138,6 +140,43 @@ class LiteratureTest(unittest.TestCase):
             page = self.call("source.page", topic_id=self.topic, source_version_id=self.versions[0], page=1)
             self.assertTrue(base64.b64decode(page["png"]).startswith(b"\x89PNG"))
 
+    def test_interrupted_full_text_answer_reports_read_coverage_without_saving_a_turn(self):
+        session = self.call("session.create", topic_id=self.topic)["session_id"]
+        version = self.versions[0]
+        passage = self.call("source.read", topic_id=self.topic, source_version_id=version)["passages"][0]
+        seen = {passage["passage_id"]: {**passage, "source_version_id": version}}
+        runtime = Dsh("node", __file__, "fixture", self.workspace.name)
+        self.worker.dsh = runtime
+        args = {"kind": "reading_qa", "topic_id": self.topic, "session_id": session, "input": {
+            "question": "How was the benchmark built?",
+            "sources": [{"paper_id": self.a["paper_id"], "source_version_id": version,
+                         "requested_scope": "full_text"}],
+        }}
+        interruption = {"reason": "MODEL_UNAVAILABLE", "retryable": True, "next_action": "retry"}
+        for raw, provider_issue, reason in (
+            ({}, interruption, "MODEL_UNAVAILABLE"),
+            ({"unexpected": True}, None, "MODEL_OUTPUT_INVALID"),
+        ):
+            with self.subTest(reason=reason), patch.object(
+                Dsh, "run_research", return_value=(raw, seen, [], {}, provider_issue),
+            ):
+                prepared = self.call("task.prepare", **args)
+                task = self.call("task.start", confirmation_id=prepared["confirmation_id"], **args)["task_id"]
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    snapshot = self.call("task.get", task_id=task)
+                    if snapshot["status"] not in ("queued", "running"):
+                        break
+                    time.sleep(.03)
+                self.assertEqual(snapshot["status"], "failed")
+                self.assertNotIn("result", snapshot)
+                self.assertEqual(snapshot["issue"]["reason"], reason)
+                self.assertTrue(snapshot["issue"]["retryable"])
+                self.assertEqual(snapshot["issue"]["details"]["read_sources"], [
+                    {"source_version_id": version, "read_scope": "full_text"},
+                ])
+        self.assertEqual(self.call("session.get", topic_id=self.topic, session_id=session)["turns"], [])
+
     def test_source_gaps_exact_anchors_and_wiki_recheck(self):
         snapshot = self.run_task(self.versions)
         self.assertEqual(snapshot["status"], "partial")
@@ -154,6 +193,8 @@ class LiteratureTest(unittest.TestCase):
 
         params = {"topic_id": self.topic, "record_id": outline["record_id"], "item_ids": [point["id"]],
                   "base_revision": ""}
+        export = {k: v for k, v in params.items() if k != "base_revision"}
+        self.assertTrue(self.call("export.create", format="evidence", **export)["saved"])
         wiki = self.call("synthesis.review", **params)
         self.assertEqual(len(wiki["items"]), 1)
         self.call("synthesis.review", **params, error="STALE_REVISION")
@@ -166,6 +207,8 @@ class LiteratureTest(unittest.TestCase):
         archived = next(r for r in self.call("synthesis.list", topic_id=self.topic)["items"]
                         if r["record_id"] == outline["record_id"])
         self.assertIn(point["id"], archived["stale_item_ids"])
+        self.call("export.create", format="evidence", **export, error="STALE_REVISION")
+        self.assertEqual(self.call("evidence.open", topic_id=self.topic, anchor_id=anchor)["quote"], located["quote"])
         self.call("synthesis.review", **{**params, "base_revision": wiki["revision"]}, error="STALE_REVISION")
         self.run_task([version, self.versions[1]])
         self.assertTrue(self.worker.dsh.leads[0]["needs_review"])

@@ -85,11 +85,15 @@ class Workbench:
                                      (source["source_version_id"],)).fetchone()
         return {"page": page, "png": render_pdf_page(row[0], page)}
 
+    def current_versions(self, topic):
+        return {p["source_versions"][0]["source_version_id"]
+                for p in self.worker.rows("paper") if topic in p["topic_ids"]}
+
     def results(self, topic):
         host = self.worker
         active = next((t["task_id"] for t in host.rows("task") if t["topic_id"] == topic
                        and t["kind"] == "literature_synthesis" and t["status"] in ("queued", "running")), None)
-        latest = {p["source_versions"][0]["source_version_id"] for p in host.rows("paper") if topic in p["topic_ids"]}
+        latest = self.current_versions(topic)
         items = [{**record, "stale_item_ids": self.stale_items(record, latest)}
                  for record in host.rows("synthesis") if record["topic_id"] == topic]
         return {"items": items, "active_task_id": active}
@@ -137,7 +141,7 @@ class Workbench:
         if (not isinstance(chosen, list) or not chosen or not all(isinstance(v, str) and v in eligible for v in chosen)
                 or len(set(chosen)) != len(chosen)):
             raise LiteratureError("INVALID_PARAMS", "Select distinct items from this outline.")
-        latest = {p["source_versions"][0]["source_version_id"] for p in host.rows("paper") if topic in p["topic_ids"]}
+        latest = self.current_versions(topic)
         if set(chosen).intersection(self.stale_items(result, latest)):
             raise LiteratureError("STALE_REVISION", "Recheck the current paper versions before saving to Wiki.",
                                   "refresh_data", -32020)

@@ -87,6 +87,10 @@ class ScriptedProvider(BaseHTTPRequestHandler):
                 response = {"suggestions": [{"id": row["id"], "claims": [
                     {"text": row["text"], "status": "supported", "limit": "Fixture", "evidence": citations}]}
                     for row in sentences]}
+            if prompt.startswith("Answer using paper_search"):
+                response = {"sentences": [{"text": "The source defines the benchmark.", "evidence": citations}]}
+                if prompt.endswith("Return an invalid response."):
+                    response = {"invalid": True}
             block = {"type": "text", "text": json.dumps(response)}
         self.respond(block)
 
@@ -165,6 +169,14 @@ class DshResearchTest(unittest.TestCase):
                     expected_tools = {"paper_search", "paper_read", "wiki_search", "paper_refs"}
                     self.assertTrue(all(tools == expected_tools for tools in provider.observed_tools), provider.observed_tools)
                     version = fixture.versions[0]
+                    sources = [{"source_version_id": version, "title": "Alpha", "available_scope": "full_text"}]
+                    full, seen, issue = dsh.answer_full_text("What benchmark does Alpha define?", sources, threading.Event())
+                    self.assertIsNone(issue)
+                    self.assertIn(full[0]["references"][0]["passage"]["passage_id"], seen)
+                    full, seen, issue = dsh.answer_full_text("Return an invalid response.", sources, threading.Event())
+                    self.assertEqual(full, [])
+                    self.assertTrue(seen)
+                    self.assertEqual(issue["reason"], "MODEL_OUTPUT_INVALID")
                     raw, seen, trace, usage, issue = dsh.audit(
                         [{"id": "0", "source_version_id": version, "claim": "The paper defines the benchmark."}],
                         [{"source_version_id": version, "title": "Alpha", "available_scope": "full_text"}],

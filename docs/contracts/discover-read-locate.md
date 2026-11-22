@@ -129,6 +129,7 @@ type MainlineTaskEvent = TaskEvent<TaskResult,
 - Read & Ask 进度为 `reading`。输入版本不得重复，须属于指定论文及当前主题，拒绝对仅有书目的版本请求摘要。服务在启动时固定阅读范围。近期已保存问答可帮助理解追问，引用只能来自本轮实际读过的版本。
 - `answer.delta` 发送非空增量，前端按序原样拼接，仅用于预览。正式回答逐句标注证据，引句须在对应段落中核实。定位失败的出处不得生成锚点。没有有效支持的句子标为 `evidence_not_established`。
 - 问答的 `completed` 和 `partial` 都保存正式回答，并逐一报告实际阅读范围。请求摘要而证据不足时可完成。请求全文但材料不足时，有可用摘要回答才返回 `partial`，否则 `failed`，两者都报 `FULL_TEXT_REQUIRED`。失败时用 `issue.details.read_sources` 报告已读范围。取消不保存预览为正式产物。
+- 全文问答在模型中断或返回无效输出、且尚无正式回答时，以 `failed` 结束。`issue` 保留失败原因和重试建议，`issue.details.read_sources` 列出本轮实际阅读范围，失败任务仍可按任务 ID 查阅。
 - `source.read_abstract` 校验当前主题关联，返回该版本全部摘要段落。`evidence.locate` 校验锚点属于指定主题中的该条回答，返回当时的完整摘要和目标段落。论文移出主题后，仍可通过历史回答打开原版本。
 
 ### 1.4 本主线错误

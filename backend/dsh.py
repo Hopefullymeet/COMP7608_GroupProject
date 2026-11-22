@@ -195,10 +195,15 @@ class Dsh:
             "Papers: " + json.dumps([{k: v for k, v in source.items() if k != "passages"} for source in sources],
                                      ensure_ascii=False) + "\nQuestion: " + question
         )
-        raw, seen, trace, usage, _ = self.run_research(prompt, sources, [], cancelled, "agent", None, question)
-        if not raw:
-            return [{"text": "The task could not complete verification of the selected sources.", "references": []}], seen
-        return read_json_answer(json.dumps(raw), seen), seen
+        raw, seen, _, _, issue = self.run_research(prompt, sources, [], cancelled, "agent", None, question)
+        if issue:
+            return [], seen, issue
+        try:
+            return read_json_answer(json.dumps(raw), seen), seen, None
+        except DshFailure as error:
+            if not seen:
+                raise
+            return [], seen, error.issue
 
     def audit(self, checks, sources, cancelled, progress=None):
         self.check()

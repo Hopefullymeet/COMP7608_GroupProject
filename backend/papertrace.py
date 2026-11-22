@@ -1072,11 +1072,25 @@ class Worker:
                                                  and selected["requested_scope"] == "full_text" else "abstract")
             has_pdf = any(source["available_scope"] == "full_text" for source in sources)
             runtime = self.dsh_for_task(task)
-            answer = runtime.answer_full_text if has_pdf else runtime.answer
-            claims, seen = answer(task["input"]["question"], sources, signal)
+            question = task["input"]["question"]
+            issue = None
+            if has_pdf:
+                claims, seen, issue = runtime.answer_full_text(question, sources, signal)
+            else:
+                claims, seen = runtime.answer(question, sources, signal)
             with self.lock:
                 task = self.get("task", task_id)
                 if task["status"] != "running":
+                    return
+                read_versions = {p["source_version_id"]: "full_text" for p in seen.values() if p.get("page")}
+                for passage in seen.values():
+                    read_versions.setdefault(passage["source_version_id"], "abstract")
+                reads = [{"source_version_id": source["source_version_id"],
+                          "read_scope": read_versions.get(source["source_version_id"], "none")}
+                         for source in sources]
+                if issue:
+                    details = {**issue.get("details", {}), "read_sources": reads}
+                    self.fail_dsh(task_id, {**issue, "details": details})
                     return
                 with self.db:
                     message_id = identifier()
@@ -1089,10 +1103,6 @@ class Worker:
                                    for ref in claim["references"]]
                         sentences.append({"text": claim["text"], "anchor_ids": anchors,
                                           "assessment": "supported" if anchors else "evidence_not_established"})
-                    read_versions = {p["source_version_id"]: "full_text" if p.get("page") else "abstract" for p in seen.values()}
-                    reads = [{"source_version_id": source["source_version_id"],
-                              "read_scope": read_versions.get(source["source_version_id"], "none")}
-                             for source in sources]
                     events = self.persist_reading(task, message_id, sentences, reads, {
                         "kind": "tool", "title": "Read with DeepSeek Harness",
                         "detail": f"Read {len(seen)} approved passage(s) using paper_read.",
