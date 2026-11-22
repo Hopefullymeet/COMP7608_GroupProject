@@ -600,9 +600,16 @@ class Reader:
         page = params.get("page")
         if type(page) is not int or not 1 <= page <= source["page_count"]:
             raise LiteratureError("INVALID_PARAMS", "Select a page to read its saved translations.")
-        rows = self.host.db.execute(
-            "SELECT data FROM reader_translations WHERE topic_id=? AND version_id=? AND page=? ORDER BY rowid DESC",
-            (topic, version, page))
+        translation_id = params.get("translation_id")
+        if "translation_id" in params and (not isinstance(translation_id, str)
+                                            or not re.fullmatch(r"[a-f0-9]{64}", translation_id)):
+            raise LiteratureError("INVALID_PARAMS", "Choose a valid translation ID.")
+        query = "SELECT data FROM reader_translations WHERE topic_id=? AND version_id=? AND page=?"
+        args = (topic, version, page)
+        if translation_id is not None:
+            query += " AND cache_key=?"
+            args += (translation_id,)
+        rows = self.host.db.execute(query + " ORDER BY rowid DESC", args)
         return {"items": [json.loads(row[0]) for row in rows]}
 
     def run_translation(self, task, cancelled):
@@ -656,6 +663,7 @@ class Reader:
                         return
                     record = {"translation_id": cache_key, "source_version_id": version, "page": page,
                               "target_language": params["target_language"].lower(), "model": model,
+                              "glossary": params.get("glossary", {}),
                               "scope": "selection" if "rects" in params else "page",
                               "segments": [{**unit, "translation": translated[unit["id"]]} for unit in units]}
                     self.host.db.execute("INSERT OR IGNORE INTO reader_translations VALUES (?, ?, ?, ?, ?)",

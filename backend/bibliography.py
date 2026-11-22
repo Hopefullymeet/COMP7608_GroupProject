@@ -76,7 +76,7 @@ def doi(value):
 
 
 def arxiv_id(value):
-    value = re.sub(r"^(?:arxiv:\s*|https?://(?:www\.)?arxiv\.org/(?:abs|pdf)/)", "", value.strip(), flags=re.I)
+    value = re.sub(r"^(?:arxiv:\s*|https?://(?:(?:www|export)\.)?arxiv\.org/(?:abs|pdf)/)", "", value.strip(), flags=re.I)
     value = re.sub(r"\.pdf$", "", value, flags=re.I)
     return value.lower() if re.fullmatch(ARXIV_ID, value, re.I) else ""
 
@@ -332,7 +332,7 @@ def bibtex_records(content):
         records.append({
             "title": display(fields.get("title", "")), "container-title": display(venue or ""),
             "author": [{"literal": display(str(author))} for author in entry.persons.get("author", [])],
-            "abstract": display(fields.get("abstract", "")), "DOI": fields.get("doi"),
+            "abstract": display(fields.get("abstract", "")), "DOI": display(fields.get("doi", "")),
             "arxiv_id": identifier, "URL": fields.get("url", ""),
             "type": {"article": "article-journal", "inproceedings": "paper-conference",
                      "conference": "paper-conference"}.get(kind),
@@ -418,8 +418,8 @@ def imported_metadata(row, format_):
     raw_identifier = row.get("arxiv_id")
     identifier = arxiv_id(raw_identifier) if isinstance(raw_identifier, str) else ""
     url = row.get("URL")
-    if not identifier and isinstance(url, str) and url.lower().startswith(
-        ("https://arxiv.org/", "http://arxiv.org/", "https://www.arxiv.org/", "http://www.arxiv.org/")
+    if not identifier and isinstance(url, str) and re.match(
+        r"https?://(?:(?:www|export)\.)?arxiv\.org/(?:abs|pdf)/", url, re.I
     ):
         identifier = arxiv_id(url)
     if identifier:
@@ -535,8 +535,18 @@ def zotero_rdf_records(content):
         if venue is not None and kind(venue, "bib", "Part"):
             venue = next(iter(related(venue, "dcterms:isPartOf")), None)
         conference = next(iter(related(node, "bib:presentedAt")), None)
-        identifiers = [e.text or "" for source in (node, venue) if source is not None
-                       for e in source.findall("dc:identifier", ZOTERO_NS)]
+        identifiers = []
+        for source in (node, venue):
+            if source is None:
+                continue
+            for entry in source.findall("dc:identifier", ZOTERO_NS):
+                value = text(edge_target(entry), "rdf:value") or entry.get(RDF + "resource") or entry.text or ""
+                identifiers.append(value.strip())
+        if key.lower().startswith(("https://", "http://")):
+            identifiers.append(key)
+        normalized_doi = next((candidate for value in identifiers
+                               if (candidate := doi(re.sub(r"^DOI\s+", "", value, flags=re.I)))), "")
+        preprint = next((candidate for value in identifiers if (candidate := arxiv_id(value))), "")
         author_seq = next(iter(related(node, "bib:authors")), None)
         authors = [] if author_seq is None else [
             {"given": text(author, "foaf:givenName"), "family": text(author, "foaf:surname")}
@@ -556,7 +566,7 @@ def zotero_rdf_records(content):
             filename = path.split("/")[-1] or text(attachment, "dc:title")
             parts = path.split("/")
             available = (path and len(path) <= 1000 and all(part not in ("", ".", "..") for part in parts)
-                         and not re.search(r"[\\:\x00-\x1f\x7f]", path))
+                         and parts[0] != "~" and not re.search(r"[\\:\x00-\x1f\x7f]|%[0-9A-Fa-f]{2}", path))
             if text(attachment, "link:type").lower() != "application/pdf" and not filename.lower().endswith(".pdf"):
                 continue
             item = {"attachment_id": str(index), "name": filename[:200] or "attachment.pdf",
@@ -569,9 +579,7 @@ def zotero_rdf_records(content):
             "type": {"journalArticle": "article-journal", "conferencePaper": "paper-conference"}.get(item_type),
             "container-title": text(venue, "dc:title") or text(conference, "dc:title"),
             "abstract": text(node, "dcterms:abstract"),
-            "DOI": next((value[4:].strip() for value in identifiers if value.upper().startswith("DOI ")), ""),
-            "URL": next((text(value, "rdf:value") for value in related(node, "dc:identifier")
-                         if text(value, "rdf:value").startswith(("https://arxiv.org/", "http://arxiv.org/"))), key),
+            "DOI": normalized_doi, "arxiv_id": preprint,
             "issued": {"date-parts": [[int(year[0])]]} if year else {},
             "zotero": {"collections": [{"id": cid, "title": paths[cid]} for cid in sorted(memberships.get(key, []))],
                        "notes": notes, "attachments": attachments,
@@ -579,3 +587,67 @@ def zotero_rdf_records(content):
                                 if e.text and 0 < len(e.text.strip()) <= 80]},
         })
     return records
+
+
+def export_bibliography(papers, format_):
+    from literature import digest
+
+    parts = []
+    keys = []
+    for paper_id, metadata in papers:
+        key = "pt" + digest(paper_id.encode("utf-8"))[:24]
+        keys.append({"paper_id": paper_id, "citation_key": key})
+        title = metadata["title"]
+        authors = [name for name in metadata["authors"] if name.strip()]
+        year, venue = metadata.get("year"), metadata.get("venue")
+        doi_value, arxiv = metadata.get("doi"), metadata.get("arxiv_id")
+        venue_type = metadata.get("venue_type")
+        if format_ == "csl-json":
+            entry = {"id": key, "title": title,
+                     "type": {"journal": "article-journal", "conference": "paper-conference",
+                              "preprint": "article"}.get(venue_type, "document")}
+            if authors:
+                entry["author"] = [{"literal": name} for name in authors]
+            if year:
+                entry["issued"] = {"date-parts": [[year]]}
+            if venue:
+                entry["container-title"] = venue
+            if doi_value:
+                entry["DOI"] = doi_value
+            if arxiv:
+                entry["URL"] = f"https://arxiv.org/abs/{arxiv}"
+            if metadata.get("issns"):
+                entry["ISSN"] = ", ".join(metadata["issns"])
+            parts.append(entry)
+            continue
+
+        kind = {"journal": "article", "conference": "inproceedings"}.get(venue_type, "misc")
+        fields = [("title", bibtex_escape(title))]
+        if authors:
+            encoded = [bibtex_escape(name) for name in authors]
+            fields.append(("author", " and ".join(
+                "{" + value + "}" if re.search(r"\band\b", name, re.I) else value
+                for name, value in zip(authors, encoded))))
+        if year:
+            fields.append(("year", str(year)))
+        if venue:
+            name = {"article": "journal", "inproceedings": "booktitle"}.get(kind, "howpublished")
+            fields.append((name, bibtex_escape(venue)))
+        if doi_value:
+            fields.append(("doi", bibtex_escape(doi_value)))
+        if arxiv:
+            fields.extend((("eprint", bibtex_escape(arxiv)), ("archivePrefix", "arXiv")))
+        if metadata.get("issns"):
+            fields.append(("issn", bibtex_escape(", ".join(metadata["issns"]))))
+        body = ",\n".join("  " + name + " = {" + value + "}" for name, value in fields)
+        parts.append(f"@{kind}{{{key},\n{body}\n}}")
+
+    content = json.dumps(parts, ensure_ascii=False, indent=2) if format_ == "csl-json" else "\n\n".join(parts)
+    extension = "json" if format_ == "csl-json" else "bib"
+    return {"name": "papertrace-bibliography." + extension, "content": content + "\n", "entries": keys}
+
+
+def bibtex_escape(value):
+    special = {"\\": r"\textbackslash{}", "~": r"\textasciitilde{}", "^": r"\textasciicircum{}"}
+    special.update({char: "\\" + char for char in "{}%#&_$"})
+    return "".join(special.get(char, char) for char in " ".join(value.split()))

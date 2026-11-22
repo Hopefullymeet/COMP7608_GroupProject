@@ -342,6 +342,44 @@ class BibliographyContractTest(unittest.TestCase):
         self.assertIn("result", reply, reply)
         return reply["result"]
 
+    def test_library_bibliography_export_is_scoped_and_reuses_stable_citation_keys(self):
+        record = {"title": "Evidence & Methods", "author": [{"family": "García", "given": "Ada"},
+                  {"literal": "Research and Development"}], "DOI": "10.1234/evidence_main",
+                  "issued": {"date-parts": [[2025]]}, "type": "paper-conference",
+                  "container-title": "Evaluation Conference"}
+        preview = self.call("library.preview_bibliography", **self.topic, format="csl-json", content=json.dumps(record))
+        imported = self.call("library.commit_bibliography", **self.topic, preview_id=preview["preview_id"],
+                             item_ids=["1"])["items"][0]
+        pid = imported["paper_id"]
+        selection = {**self.topic, "paper_ids": [pid]}
+        exported = self.call("library.export_bibliography", format="bibtex", **selection)
+        linked, = exported["entries"]
+        key = linked["citation_key"]
+        self.assertEqual(linked["paper_id"], pid)
+        self.assertIn("@inproceedings{" + key, exported["content"])
+        self.assertIn(r"Evidence \& Methods", exported["content"])
+        self.assertIn("{Research and Development}", exported["content"])
+        if importlib.util.find_spec("pybtex"):
+            roundtrip = self.call("library.preview_bibliography", **self.topic, format="bibtex",
+                                  content=exported["content"])
+            self.assertEqual(roundtrip["items"][0]["existing_paper_id"], pid)
+        csl = self.call("library.export_bibliography", format="csl-json", **self.topic)
+        item, = json.loads(csl["content"])
+        self.assertEqual((item["id"], item["title"], item["DOI"]), (key, record["title"], record["DOI"]))
+        self.assertEqual(item["issued"], record["issued"])
+        self.call("library.set_alias", **self.topic, paper_id=pid, alias="Alias")
+        current = self.call("library.metadata", **self.topic, paper_id=pid)
+        self.call("library.update_metadata", **self.topic, paper_id=pid, base_revision=current["revision"],
+                  changes={"title": "Revised title"})
+        revised = self.call("library.export_bibliography", format="bibtex", **selection)
+        self.assertEqual(revised["entries"], exported["entries"])
+        self.assertIn("Revised title", revised["content"])
+        self.assertNotIn("Alias", revised["content"])
+        other = self.call("topic.create", title="Outside scope")
+        self.call("library.export_bibliography", format="bibtex", **other, paper_ids=[pid], error="NOT_FOUND")
+        empty = self.call("library.export_bibliography", format="csl-json", **other)
+        self.assertEqual(json.loads(empty["content"]), [])
+
     def test_zotero_rdf_import_preserves_collection_note_and_pdf_attachment(self):
         rdf = """<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
           xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/"
@@ -353,16 +391,17 @@ class BibliographyContractTest(unittest.TestCase):
             <dcterms:hasPart rdf:resource="#paper"/></z:Collection>
           <bib:Article rdf:about="#paper"><z:itemType>journalArticle</z:itemType>
             <dc:title>Evidence study</dc:title><dc:date>2025-04-02</dc:date><dc:subject>Method</dc:subject>
+            <dc:identifier>https://export.arxiv.org/abs/2501.01234v2</dc:identifier>
             <bib:authors><rdf:Seq><rdf:li><foaf:Person><foaf:givenName>Ada</foaf:givenName>
             <foaf:surname>Ye</foaf:surname></foaf:Person></rdf:li></rdf:Seq></bib:authors>
             <dcterms:isPartOf><bib:Journal><dc:title>Evidence Journal</dc:title>
-            <dc:identifier>DOI 10.1234/zotero-evidence</dc:identifier></bib:Journal></dcterms:isPartOf>
+            <dc:identifier rdf:resource="https://doi.org/10.1234/zotero-evidence"/></bib:Journal></dcterms:isPartOf>
             <dcterms:isReferencedBy rdf:resource="#note"/>
             <link:link rdf:resource="#pdf"/><link:link rdf:resource="#outside"/></bib:Article>
           <bib:Memo rdf:about="#note"><rdf:value>&lt;p&gt;Check &amp;amp; cite.&lt;/p&gt;&lt;script&gt;hidden&lt;/script&gt;</rdf:value></bib:Memo>
           <z:Attachment rdf:about="#pdf"><z:itemType>attachment</z:itemType>
             <z:path rdf:resource="files/3/Study%20Evidence.pdf"/><link:type>application/pdf</link:type></z:Attachment>
-          <z:Attachment rdf:about="#outside"><z:path>files/%2e%2e/Outside.pdf</z:path>
+          <z:Attachment rdf:about="#outside"><z:path>files/%252e%252e/Outside.pdf</z:path>
             <link:type>application/pdf</link:type></z:Attachment>
         </rdf:RDF>"""
         with patch("bibliography.fetch", side_effect=AssertionError("Migration must be offline.")):
@@ -372,6 +411,7 @@ class BibliographyContractTest(unittest.TestCase):
             self.assertEqual(item["collections"], ["Literature / Evidence"])
             self.assertEqual(item["metadata"]["authors"], ["Ada Ye"])
             self.assertEqual(item["metadata"]["doi"], "10.1234/zotero-evidence")
+            self.assertEqual(item["metadata"]["arxiv_id"], "2501.01234v2")
             self.assertEqual(item["note_count"], 1)
             pdf, unsafe = item["attachments"]
             self.assertEqual(pdf["relative_path"], "files/3/Study Evidence.pdf")
@@ -404,7 +444,10 @@ class BibliographyContractTest(unittest.TestCase):
                                  item_ids=["1"])["items"][0]
             self.assertEqual((repeated["paper_id"], repeated["collection_topic_ids"]), (paper, [collection]))
             self.assertEqual(self.call("note.list", topic_id=collection)["items"], [edited])
-            self.call("library.commit_zotero_attachment", **{**upload, "topic_id": collection}, error="NOT_FOUND")
+            from_collection = self.call("library.commit_zotero_attachment", **{**upload, "topic_id": collection})
+            self.assertEqual(from_collection["source_version_id"], version)
+            other = self.call("topic.create", title="Unrelated")
+            self.call("library.commit_zotero_attachment", **{**upload, **other}, error="NOT_FOUND")
             self.call("library.preview_bibliography", **{**request, "content": "<!DOCTYPE rdf>" + rdf},
                       error="INVALID_PARAMS")
 
