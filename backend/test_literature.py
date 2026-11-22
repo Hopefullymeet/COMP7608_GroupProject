@@ -83,7 +83,7 @@ class LiteratureTest(unittest.TestCase):
         self.worker = Worker(Path(self.workspace.name), self.receive)
         self.replies = {}
         self.addCleanup(self.workspace.cleanup)
-        self.addCleanup(self.worker.close)
+        self.addCleanup(lambda: self.worker.close())
         self.worker.dsh = ScriptedSynthesis(self.workspace.name)
         self.topic = self.call("topic.create", title="Evidence")["topic_id"]
         self.other = self.call("topic.create", title="Other")["topic_id"]
@@ -295,6 +295,81 @@ class LiteratureTest(unittest.TestCase):
         for anchor in record["read_anchor_ids"]:
             item = self.call("evidence.open", topic_id=self.topic, anchor_id=anchor)
             self.assertEqual(item["source"]["passages"][0]["page"], 1)
+
+    def test_practice_hides_keys_grades_offline_and_pins_attempt_to_source_version(self):
+        version = self.versions[0]
+        original = self.call("source.read", topic_id=self.topic, source_version_id=version)["passages"][0]
+        observed = {original["passage_id"]: {**original, "source_version_id": version}}
+
+        class Model:
+            key = "fixture"
+            def practice_questions(self, sources, goal, count, cancelled):
+                assert [s["source_version_id"] for s in sources] == [version]
+                good = {"prompt": "What does Alpha introduce?", "choices": ["A benchmark", "A training set"],
+                        "correct": 0, "explanation": "Alpha defines the benchmark.",
+                        "evidence": {"id": original["passage_id"], "quote": original["text"]}}
+                fabricated = {**good, "prompt": "Invented claim", "evidence": {**good["evidence"], "quote": "Not in source"}}
+                return {"questions": [good, fabricated]}, observed, [], {}, None
+
+        self.worker.dsh = Model()
+        scope = {"topic_id": self.topic}
+        args = {**scope, "kind": "practice_generate", "input": {
+            "question": "Assess understanding of evidence attribution", "count": 2, "source_versions": [version],
+        }}
+        prepared = self.call("task.prepare", **args)
+        self.assertEqual(prepared["source_versions"], [version])
+        self.assertEqual(len(prepared["transfers"]), 1)
+        task = self.call("task.start", confirmation_id=prepared["confirmation_id"], **args)["task_id"]
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            snapshot = self.call("task.get", task_id=task)
+            if snapshot["status"] not in ("queued", "running"):
+                break
+            time.sleep(.03)
+        self.assertEqual(snapshot["status"], "partial")
+        self.assertEqual(snapshot["issue"]["reason"], "EVIDENCE_INCOMPLETE")
+        qid, = snapshot["result"]["question_ids"]
+        questions = self.call("practice.questions", **scope)["items"]
+        self.assertEqual(questions, [{"question_id": qid, "prompt": "What does Alpha introduce?",
+                                      "source_version_id": version, "needs_review": False}])
+        self.call("practice.start", topic_id=self.other, question_ids=[qid], error="NOT_FOUND")
+
+        request = {**scope, "question_ids": [qid]}
+        attempt = self.call("practice.start", **request)
+        row, = attempt["questions"]
+        self.assertNotIn("correct", row)
+        self.assertNotIn("anchor_id", row)
+        self.assertEqual(set(row["choices"]), {"A benchmark", "A training set"})
+        target = {**scope, "attempt_id": attempt["attempt_id"]}
+        self.assertEqual(self.call("practice.attempt", **target), attempt)
+        self.call("practice.submit", **target, answers={qid: True}, error="INVALID_PARAMS")
+        self.assertEqual(self.call("practice.attempt", **target)["status"], "in_progress")
+
+        self.worker.dsh = None
+        issued = {**target, "answers": {qid: row["choices"].index("A training set")}, "operation_id": "wrong-attempt"}
+        grade = self.call("practice.submit", **issued)
+        self.assertEqual(grade, self.call("practice.submit", **issued))
+        self.assertEqual(grade["score"], 0)
+        self.assertEqual(grade["grading"][0]["status"], "incorrect")
+        anchor_id = grade["grading"][0]["anchor_id"]
+        self.assertEqual(self.call("evidence.open", **scope, anchor_id=anchor_id)["quote"], original["text"])
+        due, = self.call("practice.questions", **scope, missed_only=True, due_only=True)["items"]
+        self.assertEqual(due["question_id"], qid)
+        self.assertEqual(due["next_review_at"], grade["submitted_at"])
+        second = self.call("practice.start", **request)
+        self.save_pdf("Alpha recent", "Alpha now proposes a different benchmark.", paper_id=self.a["paper_id"])
+        self.assertTrue(self.call("practice.questions", **scope)["items"][0]["needs_review"])
+        self.call("practice.start", **request, error="STALE_REVISION")
+        self.worker.close()
+        self.worker = Worker(Path(self.workspace.name), self.receive)
+        self.worker.dsh = None
+        self.assertEqual(self.call("practice.attempt", **scope, attempt_id=second["attempt_id"]), second)
+        correct = second["questions"][0]["choices"].index("A benchmark")
+        replay = self.call("practice.submit", **scope, attempt_id=second["attempt_id"], answers={qid: correct})
+        self.assertEqual(replay["score"], 1)
+        self.assertGreater(replay["grading"][0]["next_review_at"], replay["submitted_at"])
+        self.assertEqual(self.call("practice.questions", **scope, missed_only=True)["items"], [])
+        self.assertEqual([record["score"] for record in self.call("practice.history", **scope)["items"]], [1, 0])
 
     def test_conflict_is_preserved_in_an_aligned_comparison(self):
         from literature import synthesis_result

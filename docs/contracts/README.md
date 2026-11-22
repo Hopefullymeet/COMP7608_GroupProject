@@ -30,6 +30,7 @@
 | | 加入、暂存、排除或恢复候选 | `candidate.decide` | [已细化](discover-read-locate.md#12-检索与候选) | [导入复核](library-reading.md) |
 | | 查看 Agent 步骤 | `discovery.steps` | [已细化](discover-read-locate.md#13-任务结果与事件) | |
 | | 定期检索与文献变化 | `discovery.watch`、`workspace.activity` | [已细化](services-workspace.md) | |
+| 论文练习 | 生成、发题、评分、复习 | `practice_generate`、`practice.questions/start/attempt/submit/history` | [练习契约](literature-synthesis.md#论文练习) | 后端已接，待桌面交互 |
 | Read & Ask | 提问和读回历史 | `task.prepare`、`task.start`（`reading_qa`）、`session.get` | [已细化](discover-read-locate.md#23-阅读问答) | [选中文本提问](library-reading.md) |
 | | 定位原文、查看证据卡 | `evidence.locate`、`evidence.open` | [摘要](discover-read-locate.md)、[全文](library-reading.md) | |
 | | 打开原件、读取摘要或全文，保存会话阅读位置 | `source.original`、`source.read_abstract`、`source.read`、`reader.position/bookmark` | [已细化](discover-read-locate.md#24-点击出处定位原文) | [全文与阅读位置](library-reading.md) |
