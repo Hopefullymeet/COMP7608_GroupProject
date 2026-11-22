@@ -1,11 +1,12 @@
 """Public bibliographic lookup. Calls are independent of the workspace database."""
 
 import json
+from html.parser import HTMLParser
 import re
 import socket
 import xml.etree.ElementTree as ET
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, unquote, urlencode
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from literature import LiteratureError
@@ -263,8 +264,10 @@ def bibliography_records(format_, content):
         records = ris_records(content)
     elif format_ == "bibtex":
         records = bibtex_records(content)
+    elif format_ == "zotero-rdf":
+        records = zotero_rdf_records(content)
     else:
-        raise LiteratureError("INVALID_PARAMS", "Choose a BibTeX, RIS or CSL JSON bibliography.")
+        raise LiteratureError("INVALID_PARAMS", "Choose a BibTeX, RIS, CSL JSON or Zotero RDF bibliography.")
     if not isinstance(records, list) or not 1 <= len(records) <= 500:
         raise LiteratureError("INVALID_PARAMS", "Choose a bibliography containing one to 500 entries.")
     return records
@@ -292,12 +295,17 @@ def bibtex_records(content):
                 raise LiteratureError("INVALID_PARAMS", "The BibTeX file expands beyond the import limit.")
 
     parser = Parser()
+    seen = set()
     try:
         for entry_type, fields in BoundedParser(content, macros=parser.macros):
             if entry_type.lower() in ("string", "preamble"):
                 continue
-            if len(parser.data.entries) >= 500:
+            key = fields[0].casefold()
+            if key in seen:
+                raise LiteratureError("INVALID_PARAMS", "The BibTeX file repeats an entry key.")
+            if len(seen) >= 500:
                 raise LiteratureError("INVALID_PARAMS", "Choose a bibliography containing at most 500 entries.")
+            seen.add(key)
             parser.process_entry(entry_type, *fields)
     except (PybtexError, ValueError, RecursionError):
         raise LiteratureError("INVALID_PARAMS", "The BibTeX file is invalid. Check its syntax and entry keys.") from None
@@ -318,15 +326,14 @@ def bibtex_records(content):
         year = re.match(r"\d{4}", fields.get("year") or fields.get("date", ""))
         if not year and parent:
             year = re.match(r"\d{4}", parent.fields.get("year") or parent.fields.get("date", ""))
-        url = fields.get("url", "")
-        if not url and fields.get("archiveprefix", fields.get("eprinttype", "")).lower() == "arxiv":
+        identifier = ""
+        if fields.get("archiveprefix", fields.get("eprinttype", "")).lower() == "arxiv":
             identifier = arxiv_id(fields.get("eprint", ""))
-            if identifier:
-                url = "https://arxiv.org/abs/" + identifier
         records.append({
             "title": display(fields.get("title", "")), "container-title": display(venue or ""),
             "author": [{"literal": display(str(author))} for author in entry.persons.get("author", [])],
-            "abstract": display(fields.get("abstract", "")), "DOI": fields.get("doi"), "URL": url,
+            "abstract": display(fields.get("abstract", "")), "DOI": fields.get("doi"),
+            "arxiv_id": identifier, "URL": fields.get("url", ""),
             "type": {"article": "article-journal", "inproceedings": "paper-conference",
                      "conference": "paper-conference"}.get(kind),
             "issued": {"date-parts": [[int(year[0])]]} if year else {},
@@ -391,7 +398,7 @@ def imported_metadata(row, format_):
             name = author.get("literal") or " ".join(part.strip() for part in names if isinstance(part, str))
             if isinstance(name, str) and name.strip():
                 authors.append(name.strip()[:300])
-    meta = {"title": title.strip(), "authors": authors, "provider": {"csl-json": "CSL JSON", "ris": "RIS", "bibtex": "BibTeX"}[format_]}
+    meta = {"title": title.strip(), "authors": authors, "provider": {"csl-json": "CSL JSON", "ris": "RIS", "bibtex": "BibTeX", "zotero-rdf": "Zotero RDF"}[format_]}
     venue = row.get("container-title")
     if isinstance(venue, str) and venue.strip():
         meta["venue"] = venue.strip()[:300]
@@ -408,13 +415,167 @@ def imported_metadata(row, format_):
     normalized = doi(row.get("DOI"))
     if normalized:
         meta["doi"] = normalized
+    raw_identifier = row.get("arxiv_id")
+    identifier = arxiv_id(raw_identifier) if isinstance(raw_identifier, str) else ""
     url = row.get("URL")
-    if isinstance(url, str) and url.lower().startswith(("https://arxiv.org/", "http://arxiv.org/",
-                                                        "https://www.arxiv.org/", "http://www.arxiv.org/")):
+    if not identifier and isinstance(url, str) and url.lower().startswith(
+        ("https://arxiv.org/", "http://arxiv.org/", "https://www.arxiv.org/", "http://www.arxiv.org/")
+    ):
         identifier = arxiv_id(url)
-        if identifier:
-            meta["arxiv_id"] = identifier
+    if identifier:
+        meta["arxiv_id"] = identifier
     abstract = row.get("abstract")
     if isinstance(abstract, str) and abstract.strip():
         meta["abstract"] = abstract.strip()[:24000]
     return meta
+
+
+ZOTERO_NS = {
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "dc": "http://purl.org/dc/elements/1.1/",
+    "dcterms": "http://purl.org/dc/terms/",
+    "bib": "http://purl.org/net/biblio#",
+    "foaf": "http://xmlns.com/foaf/0.1/",
+    "link": "http://purl.org/rss/1.0/modules/link/",
+    "z": "http://www.zotero.org/namespaces/export#",
+}
+RDF = "{" + ZOTERO_NS["rdf"] + "}"
+
+
+class ZoteroNote(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self.hidden = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script", "style"):
+            self.hidden += 1
+        if tag == "br" and not self.hidden:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style") and self.hidden:
+            self.hidden -= 1
+        if tag in ("p", "div", "li", "h1", "h2", "h3", "blockquote") and not self.hidden:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        if not self.hidden:
+            self.parts.append(data)
+
+    def text(self):
+        return re.sub(r"\n{3,}", "\n\n", "".join(self.parts)).strip()[:12000]
+
+
+def zotero_rdf_records(content):
+    if re.search(r"<!\s*(?:DOCTYPE|ENTITY)", content, re.I):
+        raise LiteratureError("INVALID_PARAMS", "Zotero RDF must not declare a document type or entity.")
+    try:
+        root = ET.fromstring(content)
+    except ET.ParseError:
+        raise LiteratureError("INVALID_PARAMS", "The Zotero RDF file is invalid.") from None
+    if root.tag != RDF + "RDF":
+        raise LiteratureError("INVALID_PARAMS", "Choose a Zotero RDF export.")
+
+    def ref(node):
+        return (node.get(RDF + "about") or node.get(RDF + "resource") or
+                ("_:" + node.get(RDF + "nodeID") if node.get(RDF + "nodeID") else ""))
+
+    def text(node, path):
+        return (node.findtext(path, default="", namespaces=ZOTERO_NS) or "").strip() if node is not None else ""
+
+    nodes = {key: node for node in root.iter() if (key := ref(node))
+             and (node.get(RDF + "about") or node.get(RDF + "nodeID")) and len(node)}
+
+    def edge_target(edge):
+        if len(edge):
+            return edge[0]
+        return nodes.get(ref(edge))
+
+    def related(node, path):
+        return [target for edge in node.findall(path, ZOTERO_NS) if (target := edge_target(edge)) is not None]
+
+    def kind(node, namespace, name):
+        target = ZOTERO_NS[namespace] + name
+        return node.tag == "{" + ZOTERO_NS[namespace] + "}" + name or any(
+            edge.get(RDF + "resource") == target for edge in node.findall("rdf:type", ZOTERO_NS))
+
+    collections = {key: node for key, node in nodes.items() if kind(node, "z", "Collection")}
+    if len(collections) > 500:
+        raise LiteratureError("INVALID_PARAMS", "Export at most 500 Zotero collections at a time.")
+    memberships, parents = {}, {}
+    for key, node in collections.items():
+        for edge in node.findall("dcterms:hasPart", ZOTERO_NS):
+            child = ref(edge[0]) if len(edge) else ref(edge)
+            if child in collections:
+                if child in parents and parents[child] != key:
+                    raise LiteratureError("INVALID_PARAMS", "A Zotero collection has multiple parents.")
+                parents[child] = key
+            elif child:
+                memberships.setdefault(child, set()).add(key)
+
+    paths = {}
+    for key in collections:
+        path, visited, current = [], set(), key
+        while current:
+            if current in visited or len(path) == 20:
+                raise LiteratureError("INVALID_PARAMS", "A Zotero collection hierarchy is cyclic or too deep.")
+            visited.add(current)
+            path.append(text(collections[current], "dc:title") or "Zotero collection")
+            current = parents.get(current)
+        paths[key] = " / ".join(reversed(path))[:160]
+
+    records = []
+    for key, node in nodes.items():
+        item_type = text(node, "z:itemType")
+        if not item_type or item_type in ("note", "attachment", "annotation"):
+            continue
+        venue = next(iter(related(node, "dcterms:isPartOf")), None)
+        if venue is not None and kind(venue, "bib", "Part"):
+            venue = next(iter(related(venue, "dcterms:isPartOf")), None)
+        conference = next(iter(related(node, "bib:presentedAt")), None)
+        identifiers = [e.text or "" for source in (node, venue) if source is not None
+                       for e in source.findall("dc:identifier", ZOTERO_NS)]
+        author_seq = next(iter(related(node, "bib:authors")), None)
+        authors = [] if author_seq is None else [
+            {"given": text(author, "foaf:givenName"), "family": text(author, "foaf:surname")}
+            for author in related(author_seq, "rdf:li")]
+        year = re.search(r"\b\d{4}\b", text(node, "dc:date"))
+        notes = []
+        for note in related(node, "dcterms:isReferencedBy"):
+            parser = ZoteroNote()
+            parser.feed(text(note, "rdf:value"))
+            parser.close()
+            if body := parser.text():
+                notes.append(body)
+        attachments = []
+        for index, attachment in enumerate(related(node, "link:link"), 1):
+            link = attachment.find("z:path", ZOTERO_NS)
+            path = unquote((link.get(RDF + "resource") or link.text or "").strip()) if link is not None else ""
+            filename = path.split("/")[-1] or text(attachment, "dc:title")
+            parts = path.split("/")
+            available = (path and len(path) <= 1000 and all(part not in ("", ".", "..") for part in parts)
+                         and not re.search(r"[\\:\x00-\x1f\x7f]", path))
+            if text(attachment, "link:type").lower() != "application/pdf" and not filename.lower().endswith(".pdf"):
+                continue
+            item = {"attachment_id": str(index), "name": filename[:200] or "attachment.pdf",
+                    "status": "awaiting_file" if available else "missing_path"}
+            if available:
+                item["relative_path"] = path
+            attachments.append(item)
+        records.append({
+            "title": text(node, "dc:title"), "author": authors,
+            "type": {"journalArticle": "article-journal", "conferencePaper": "paper-conference"}.get(item_type),
+            "container-title": text(venue, "dc:title") or text(conference, "dc:title"),
+            "abstract": text(node, "dcterms:abstract"),
+            "DOI": next((value[4:].strip() for value in identifiers if value.upper().startswith("DOI ")), ""),
+            "URL": next((text(value, "rdf:value") for value in related(node, "dc:identifier")
+                         if text(value, "rdf:value").startswith(("https://arxiv.org/", "http://arxiv.org/"))), key),
+            "issued": {"date-parts": [[int(year[0])]]} if year else {},
+            "zotero": {"collections": [{"id": cid, "title": paths[cid]} for cid in sorted(memberships.get(key, []))],
+                       "notes": notes, "attachments": attachments,
+                       "tags": [e.text.strip() for e in node.findall("dc:subject", ZOTERO_NS)
+                                if e.text and 0 < len(e.text.strip()) <= 80]},
+        })
+    return records

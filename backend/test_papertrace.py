@@ -16,7 +16,8 @@ from uuid import uuid4
 
 from papertrace import Worker
 from dsh import read_json_answer
-from bibliography import PublicServiceError
+from bibliography import PublicServiceError, bibliography_records
+from literature import LiteratureError
 from test_literature import sample_pdf
 
 
@@ -341,6 +342,77 @@ class BibliographyContractTest(unittest.TestCase):
         self.assertIn("result", reply, reply)
         return reply["result"]
 
+    def test_zotero_rdf_import_preserves_collection_note_and_pdf_attachment(self):
+        rdf = """<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+          xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/"
+          xmlns:bib="http://purl.org/net/biblio#" xmlns:foaf="http://xmlns.com/foaf/0.1/"
+          xmlns:link="http://purl.org/rss/1.0/modules/link/" xmlns:z="http://www.zotero.org/namespaces/export#">
+          <z:Collection rdf:about="#parent"><dc:title>Literature</dc:title>
+            <dcterms:hasPart rdf:resource="#child"/></z:Collection>
+          <z:Collection rdf:about="#child"><dc:title>Evidence</dc:title>
+            <dcterms:hasPart rdf:resource="#paper"/></z:Collection>
+          <bib:Article rdf:about="#paper"><z:itemType>journalArticle</z:itemType>
+            <dc:title>Evidence study</dc:title><dc:date>2025-04-02</dc:date><dc:subject>Method</dc:subject>
+            <bib:authors><rdf:Seq><rdf:li><foaf:Person><foaf:givenName>Ada</foaf:givenName>
+            <foaf:surname>Ye</foaf:surname></foaf:Person></rdf:li></rdf:Seq></bib:authors>
+            <dcterms:isPartOf><bib:Journal><dc:title>Evidence Journal</dc:title>
+            <dc:identifier>DOI 10.1234/zotero-evidence</dc:identifier></bib:Journal></dcterms:isPartOf>
+            <dcterms:isReferencedBy rdf:resource="#note"/>
+            <link:link rdf:resource="#pdf"/><link:link rdf:resource="#outside"/></bib:Article>
+          <bib:Memo rdf:about="#note"><rdf:value>&lt;p&gt;Check &amp;amp; cite.&lt;/p&gt;&lt;script&gt;hidden&lt;/script&gt;</rdf:value></bib:Memo>
+          <z:Attachment rdf:about="#pdf"><z:itemType>attachment</z:itemType>
+            <z:path rdf:resource="files/3/Study%20Evidence.pdf"/><link:type>application/pdf</link:type></z:Attachment>
+          <z:Attachment rdf:about="#outside"><z:path>files/%2e%2e/Outside.pdf</z:path>
+            <link:type>application/pdf</link:type></z:Attachment>
+        </rdf:RDF>"""
+        with patch("bibliography.fetch", side_effect=AssertionError("Migration must be offline.")):
+            request = {**self.topic, "format": "zotero-rdf", "content": rdf}
+            preview = self.call("library.preview_bibliography", **request)
+            item, = preview["items"]
+            self.assertEqual(item["collections"], ["Literature / Evidence"])
+            self.assertEqual(item["metadata"]["authors"], ["Ada Ye"])
+            self.assertEqual(item["metadata"]["doi"], "10.1234/zotero-evidence")
+            self.assertEqual(item["note_count"], 1)
+            pdf, unsafe = item["attachments"]
+            self.assertEqual(pdf["relative_path"], "files/3/Study Evidence.pdf")
+            self.assertNotIn("relative_path", unsafe)
+            self.assertEqual(unsafe["status"], "missing_path")
+            self.assertEqual(len(self.call("topic.list")["items"]), 1)
+            self.assertEqual(self.call("note.list", **self.topic)["items"], [])
+
+            content = base64.b64encode(sample_pdf("Zotero attached evidence text")).decode()
+            selection = {**self.topic, "preview_id": preview["preview_id"]}
+            upload = {**selection, "item_id": item["item_id"], "attachment_id": pdf["attachment_id"], "content": content}
+            self.call("library.commit_zotero_attachment", **upload, error="NOT_FOUND")
+            committed = self.call("library.commit_bibliography", **selection, item_ids=["1"])["items"][0]
+            collection, = committed["collection_topic_ids"]
+            paper = committed["paper_id"]
+            self.assertEqual(self.call("library.catalog")["papers"][0]["tags"], ["Method"])
+            note, = self.call("note.list", topic_id=collection)["items"]
+            self.assertEqual((note["text"], note["paper_id"]), ("Check & cite.", paper))
+            edited = self.call("note.save", topic_id=collection, note_id=note["note_id"], base_revision=note["revision"],
+                               text="Edited note", origin="user", anchor_ids=[])
+            self.assertEqual(edited["paper_id"], paper)
+            attached = self.call("library.commit_zotero_attachment", **upload)
+            self.assertEqual(attached["paper_id"], paper)
+            version = attached["source_version_id"]
+            self.assertEqual(self.call("source.read", topic_id=collection, source_version_id=version)["passages"][0]["text"],
+                             "Zotero attached evidence text")
+            self.assertTrue(self.call("library.commit_zotero_attachment", **upload)["duplicate"])
+            another_preview = self.call("library.preview_bibliography", **request)["preview_id"]
+            repeated = self.call("library.commit_bibliography", **self.topic, preview_id=another_preview,
+                                 item_ids=["1"])["items"][0]
+            self.assertEqual((repeated["paper_id"], repeated["collection_topic_ids"]), (paper, [collection]))
+            self.assertEqual(self.call("note.list", topic_id=collection)["items"], [edited])
+            self.call("library.commit_zotero_attachment", **{**upload, "topic_id": collection}, error="NOT_FOUND")
+            self.call("library.preview_bibliography", **{**request, "content": "<!DOCTYPE rdf>" + rdf},
+                      error="INVALID_PARAMS")
+
+            self.worker.close()
+            self.worker = Worker(self.workspace, self.messages.append)
+            self.assertEqual(self.call("note.list", topic_id=collection)["items"], [edited])
+            self.assertEqual(self.call("reader.pdf", topic_id=collection, source_version_id=version)["content"], content)
+
     @unittest.skipUnless(importlib.util.find_spec("pybtex"), "Install requirements-bibliography.txt for BibTeX")
     def test_bibtex_macros_names_crossrefs_and_offline_deduplication(self):
         bib = r"""
@@ -351,7 +423,8 @@ class BibliographyContractTest(unittest.TestCase):
   author = {Garc{\'i}a, Ada and {Research and Development}},
   crossref = {conf},
   doi = {10.1234/evidence}}
-@misc{preprint, title={Unpublished work}, eprint={2501.01234v2}, eprinttype={arXiv}}
+@misc{preprint, title={Unpublished work}, eprint={2501.01234v2}, eprinttype={arXiv},
+  url={https://example.org/publisher}}
 @misc{no-title, author={Someone}}
 """
         with patch("bibliography.fetch", side_effect=AssertionError("Import must be offline.")):
@@ -372,13 +445,33 @@ class BibliographyContractTest(unittest.TestCase):
             result = self.call("library.commit_bibliography", **self.topic, preview_id=preview["preview_id"],
                                item_ids=[study["item_id"], preprint["item_id"]])
             self.assertEqual([item["status"] for item in result["items"]], ["already_linked", "imported"])
-            self.call("library.preview_bibliography", **self.topic, format="bibtex", content="@misc{broken,title={bad}",
-                      error="INVALID_PARAMS")
+            with self.assertRaisesRegex(LiteratureError, "file is invalid"):
+                bibliography_records("bibtex", "@misc{ok,title={Good}} @misc{broken,title={bad}")
+            with self.assertRaisesRegex(LiteratureError, "repeats an entry key"):
+                bibliography_records("bibtex", "@misc{Same,title={One}} @misc{same,title={Two}}")
             expansion = ['@string{m0 = "xxxxxxxx"}']
             for idx in range(1, 18):
                 expansion.append(f"@string{{m{idx} = m{idx - 1} # m{idx - 1}}}")
-            self.call("library.preview_bibliography", **self.topic, format="bibtex", content="\n".join(expansion),
-                      error="INVALID_PARAMS")
+            valid = "\n".join([*expansion[:2], "@misc{ok,title={Valid}}"])
+            self.assertEqual(bibliography_records("bibtex", valid)[0]["title"], "Valid")
+            too_large = "\n".join([*expansion, "@misc{ok,title={Valid}}"])
+            with self.assertRaisesRegex(LiteratureError, "expands beyond"):
+                bibliography_records("bibtex", too_large)
+
+    def test_bibtex_unavailable_does_not_disable_other_formats(self):
+        with patch.dict(sys.modules, {"pybtex.backends.plaintext": None}):
+            self.call("library.preview_bibliography", **self.topic, format="bibtex", content="@misc{x,title={Example}}",
+                      error="BIBTEX_PARSER_UNAVAILABLE")
+            preview = self.call("library.preview_bibliography", **self.topic, format="csl-json",
+                                content='{"title":"Example"}')
+            self.assertEqual(preview["items"][0]["status"], "ready")
+
+    def test_preview_identifies_duplicate_rows_without_forcing_one_selection(self):
+        rows = [{"title": "First", "DOI": "10.1234/same"}, {"title": "Preferred", "DOI": "10.1234/SAME"}]
+        preview = self.call("library.preview_bibliography", **self.topic, format="csl-json", content=json.dumps(rows))
+        self.assertEqual(preview["items"][1]["duplicate_of"], ["1"])
+        self.call("library.commit_bibliography", **self.topic, preview_id=preview["preview_id"], item_ids=["2"])
+        self.assertEqual(self.call("library.catalog")["papers"][0]["title"], "Preferred")
 
     def test_offline_bibliography_preview_selective_commit_and_replay(self):
         ris = """TY  - JOUR

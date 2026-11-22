@@ -7,7 +7,7 @@
 | file.pick | purpose: 'papers' 或 'draft' 或 'backup' | {files: {file_id:Id,name:string}[]}，用户取消返回空数组，文件限制由 purpose 决定。桌面文件选择器多选论文，稿件和备份单选 |
 | library.catalog | {} | {papers: Paper[], reviews: Review[], trash: Paper[]}，按标题排序，客户端搜索、分段显示 |
 | task.prepare → task.start (paper_import) | kind, input:{files:Id[],topic_id?:Id,paper_id?:Id}；start 带确认单 | 依次报告 inspect、match、commit 和终态；结果 {paper_ids:Id[],review_ids:Id[]}。指定论文时补材料版本，指定主题时加入主题 |
-| library.preview_bibliography | W, topic_id, format: 'bibtex'、'ris' 或 'csl-json', content:string | 离线读取 UTF-8 书目，返回 preview_id 与 items。每行有 item_id、status: ready / invalid / conflict，可附 metadata、已有论文 ID 或 reason。预览不添加论文。输入最多 500 条及两百万字符 |
+| library.preview_bibliography | W, topic_id, format: 'bibtex'、'ris'、'csl-json' 或 'zotero-rdf', content:string | 离线读取 UTF-8 书目，返回 preview_id 与 items。每行有 item_id、status: ready / invalid / conflict，可附 metadata、已有论文 ID、同批的 `duplicate_of` 行 ID 数组或 reason。预览不添加论文。输入最多 500 条及两百万字符 |
 | library.commit_bibliography | W, topic_id, preview_id, item_ids:Id[] | 提交同主题预览中的选中行。逐项返回 imported / already_linked / conflict。成功项返回论文 ID、来源版本和可用范围。提交时再次核对身份，一条冲突可保留其他成功项 |
 | library.set_alias | W, topic_id, paper_id, alias:string | {paper_id:Id,alias:string}；论文须属于指定主题。去除首尾空白后最多 80 字符，空字符串清除别名 |
 | library.resolve_import | W, review_id, decision:'link' 或 'separate' | {paper_id:Id}；链接新增版本，保留原版本和锚点。身份冲突或模糊匹配必须复核 |
@@ -83,3 +83,11 @@ PDF 位置使用从 1 开始的 page、倍率 zoom（0.1 至 10）和归一化�
 跨文件按 DOI 或 arXiv 去重。无标识符的条目在同一份文件中反复导入时复用原论文。预览和确认不访问书目中的 URL，也不导入附件。导入后可以使用 PDF 导入给同一条目补全文。格式损坏时预览整体失败，可解析但缺标题的行标为 `TITLE_REQUIRED`。
 
 BibTeX 使用桌面 worker 中的 Pybtex。缺解析依赖时，接口返回 `BIBTEX_PARSER_UNAVAILABLE`；RIS 与 CSL JSON 仍可导入。
+
+### Zotero RDF 迁移
+
+用 Zotero 的「导出文库」或「导出分类」，格式选 Zotero RDF。导出时勾选笔记、文件，并在需要时选择嵌入批注。用 `library.preview_bibliography` 的 `format: "zotero-rdf"` 预览，确认后沿用 `library.commit_bibliography`。每条选中的论文可返回 `collection_topic_ids`、`note_count` 和附件清单。收藏夹会命名为带层级路径的主题；论文同时加入指定的导入主题。条目附属笔记以纯文本迁移，保存论文 ID；原导出文件保留了笔记的完整格式。
+
+附件清单含 `attachment_id`、`name`、`status`，只有可匹配的相对路径附 `relative_path`。客户端只在用户选中的导出文件夹内查找这些文件；没有匹配时可让用户另选 PDF。对已确认的条目调用 `library.commit_zotero_attachment`，传入 `operation_id`、`topic_id`、`preview_id`、`item_id`、`attachment_id`、Base64 `content`，返回与 PDF 入库相同的字段。该接口从提交的 PDF 字节入库，RDF 中的路径只用于匹配提示。已嵌入 PDF 的批注通过 [reader.embedded_marks](pdf-reader.md) 读取。
+
+同一个导出文件重放会复用原论文、收藏夹主题及条目笔记。收藏夹尚按导出批次记录；修改后再次导出时可按 DOI 或 arXiv 复用论文。当前支持条目附属笔记及 PDF 附件，独立笔记、非 PDF 附件和 Zotero 双向同步另列验收。 [Zotero 格式说明](https://www.zotero.org/support/kb/field_mappings) · [导出时嵌入 PDF 批注](https://www.zotero.org/support/kb/annotations_in_database)

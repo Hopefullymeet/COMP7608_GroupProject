@@ -6,7 +6,8 @@
 
 | 功能 | 现有页面和接口 | 前端待补 |
 | --- | --- | --- |
-| 离线书目导入 | `library.preview_bibliography` 与 `library.commit_bibliography` 已支持 BibTeX、RIS 和 CSL JSON。 | 复用导入对话框。按文件格式传 `bibtex`、`ris` 或 `csl-json`。用户选文件后展示预览、勾选可用行、确认入库，再逐项显示成功、已有或冲突。缺 PDF 的条目继续沿用现有补件入口。BibTeX 解析器随发行环境准备，缺少时展示配置提示。若目标 PDF 已属于另一条论文，显示身份冲突并让用户核对条目。 |
+| 离线书目导入 | `library.preview_bibliography` 与 `library.commit_bibliography` 已支持 BibTeX、RIS 和 CSL JSON。 | 复用导入对话框。按文件格式传 `bibtex`、`ris` 或 `csl-json`。用户选文件后展示预览、勾选可用行、确认入库，再逐项显示成功、已有或冲突；预览用 `duplicate_of` 提示同批书目重复，保留用户选择。缺 PDF 的条目继续沿用现有补件入口。BibTeX 解析器随发行环境准备，缺少时展示配置提示。若目标 PDF 已属于另一条论文，显示身份冲突并让用户核对条目。 |
+| Zotero 迁移 | Zotero RDF 可预览并选择论文，返回收藏夹路径、笔记数和 PDF 附件清单。确认后生成主题并保留笔记关联。 | 让用户选择 Zotero 导出文件与附件目录。根据相对路径匹配用户所选目录里的 PDF，逐项提交已确认的文件字节并报告缺失。内嵌批注沿用阅读器接口。 [迁移契约](../contracts/library-reading.md#zotero-rdf-迁移) |
 | 批量整理论文 | `library.organize` 支持批量加减标签、加入及移出主题。移出后历史引句仍可读。 | 刷新列表和批量操作的实际修改数。历史证据卡调用 `source.page` 时一起传 `anchor_id`，便于定位已移出主题的原页。 |
 | 归档与恢复 | 现有 `workspace.archive/archived/unarchive` 已接工作区。归档会隐藏主题或会话，保留保存过的材料。 | 从主题或会话菜单发起归档，刷新侧栏和归档列表。恢复主题后，仍单独归档的会话留在归档列表。 |
 | 模型设置 | **可直接使用。** `services.get/save/test` 已支持模型 ID、保存与测试。测试读取已保存配置，运行中的任务沿用原模型。 | 端点设为只读，收起预算和钥匙串入口，在测试按钮旁显示结果。用 `credential_configured` 显示凭据状态。提交时仍原样带回预算、服务数组和开关。 |
@@ -65,7 +66,7 @@ python3 backend/venue_ranks.py ranking-workspace ranking-demo.csv --scheme jcr -
 
 浏览器通过桌面请求适配器连接本机后端，已测首页 PDF 导入和去重、页内查找、章节目录、会话续读、窄屏阅读及建议证据在右侧打开。引用建议使用本机测试模型验证操作，另有测试覆盖多论文支持、证据缺口、编造引文被丢弃和换版待复核。DOAJ 与 ICORE 已用公开目录验证。系统文件拖放、资料库发表信息面板及 Windows 安装包留待走查。
 
-后续推进 Zotero 迁移、引用内链和导出预览。运行时精简和竞品功能研究见[技术路线](Agentero_Parity_and_Settings_ZH.md)。
+后续用 Zotero 客户端生成的导出包走查迁移，并补引用内链和导出预览。运行时精简和竞品功能研究见[技术路线](Agentero_Parity_and_Settings_ZH.md)。
 
 ## 写作和找图验收
 

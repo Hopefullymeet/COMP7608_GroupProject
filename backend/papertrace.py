@@ -84,7 +84,7 @@ class Worker:
         "reader.mark_save", "reader.mark_delete", "reader.answer_save", "reader.mark_to_wiki",
         "services.save",
         "library.commit_identifier", "library.update_metadata", "workspace.archive", "workspace.unarchive", "library.organize",
-        "library.preview_bibliography", "library.commit_bibliography",
+        "library.preview_bibliography", "library.commit_bibliography", "library.commit_zotero_attachment",
     }
 
     def __init__(self, directory, send):
@@ -233,7 +233,8 @@ class Worker:
         if method in self.writes:
             operation = required(params, "operation_id")
             fingerprint = encode(params)
-            if method in ("library.import_pdf", "draft.import", "services.save", "library.preview_bibliography"):
+            if method in ("library.import_pdf", "draft.import", "services.save", "library.preview_bibliography",
+                          "library.commit_zotero_attachment"):
                 fingerprint = digest(fingerprint.encode("utf-8"))
             saved = self.saved_operation(method, operation, fingerprint)
             if saved is not None:
@@ -530,6 +531,8 @@ class Worker:
             return self.preview_bibliography(params)
         if method == "library.commit_bibliography":
             return self.commit_bibliography(params)
+        if method == "library.commit_zotero_attachment":
+            return self.commit_zotero_attachment(params)
         if method == "library.commit_identifier":
             topic = self.topic(params)
             preview = self.get("bibliography_preview", required(params, "preview_id"))
@@ -697,6 +700,8 @@ class Worker:
             note_id = identifier()
         note = {"note_id": note_id, "revision": identifier(), "text": required(params, "text"),
                 "anchor_ids": anchors, "origin": origin, "history": history}
+        if "note_id" in params and "paper_id" in previous:
+            note["paper_id"] = previous["paper_id"]
         if session:
             note["session_id"] = session["session_id"]
         self.put("note", note_id, {"topic_id": topic, "value": note})
@@ -730,7 +735,7 @@ class Worker:
         content = params.get("content")
         records = bibliography_records(format_, content)
         fingerprint = digest(content.lstrip("\ufeff").replace("\r\n", "\n").encode("utf-8"))
-        entries, rows = {}, []
+        entries, rows, first_item = {}, [], {}
         for index, record in enumerate(records, 1):
             item_id = str(index)
             row = {"item_id": item_id}
@@ -742,14 +747,23 @@ class Worker:
                 try:
                     paper = self.find_bibliographic_paper(metadata)
                     row.update(status="ready", metadata=self.public_bibliography_metadata(metadata))
+                    duplicates = {first_item.setdefault(key, index) for key in identity_keys(metadata)} - {index}
+                    if duplicates:
+                        row["duplicate_of"] = [str(other) for other in sorted(duplicates)]
                     if paper:
                         row["existing_paper_id"] = paper["paper_id"]
+                    if format_ == "zotero-rdf":
+                        zotero = record["zotero"]
+                        metadata["zotero"] = zotero
+                        row.update(collections=[c["title"] for c in zotero["collections"]],
+                                   note_count=len(zotero["notes"]), attachments=zotero["attachments"])
                     entries[item_id] = metadata
                 except RpcError as error:
                     row.update(status="conflict", reason=error.issue["reason"])
             rows.append(row)
         preview_id = identifier()
-        self.put("bibliography_batch", preview_id, {"topic_id": topic, "entries": entries})
+        self.put("bibliography_batch", preview_id, {"topic_id": topic, "fingerprint": fingerprint,
+                                                    "entries": entries})
         return {"preview_id": preview_id, "items": rows}
 
     @staticmethod
@@ -758,7 +772,8 @@ class Worker:
 
     def commit_bibliography(self, params):
         topic = self.topic(params)
-        batch = self.get("bibliography_batch", required(params, "preview_id"))
+        preview_id = required(params, "preview_id")
+        batch = self.get("bibliography_batch", preview_id)
         if batch["topic_id"] != topic:
             raise missing("The bibliography preview is outside the selected topic.")
         ids = params.get("item_ids")
@@ -774,9 +789,52 @@ class Worker:
             except RpcError as error:
                 items.append({"item_id": item_id, "status": "conflict", "reason": error.issue["reason"]})
                 continue
-            items.append({"item_id": item_id, "status": "already_linked" if linked else "imported",
-                          "paper_id": paper["paper_id"], **paper["source_versions"][0]})
+            item = {"item_id": item_id, "status": "already_linked" if linked else "imported",
+                    "paper_id": paper["paper_id"], **paper["source_versions"][0]}
+            if "zotero" in entries[item_id]:
+                item.update(self.commit_zotero_item(topic, batch["fingerprint"], entries[item_id], paper))
+                self.put("zotero_import", preview_id + ":" + item_id, {"paper_id": paper["paper_id"]})
+            items.append(item)
         return {"items": items}
+
+    def commit_zotero_item(self, topic, fingerprint, metadata, paper):
+        data = metadata["zotero"]
+        paper_id = paper["paper_id"]
+        ids = []
+        for collection in data["collections"]:
+            key = digest(encode([topic, fingerprint, collection["id"]]).encode("utf-8"))
+            saved = self.db.execute("SELECT 1 FROM records WHERE kind = 'topic' AND id = ?", (key,)).fetchone()
+            if not saved:
+                self.put("topic", key, {"topic_id": key, "title": collection["title"]})
+            ids.append(key)
+        paper["topic_ids"] = list(dict.fromkeys([*paper["topic_ids"], *ids]))
+        paper["tags"] = list(dict.fromkeys([*paper.get("tags", []), *data["tags"]]))
+        self.put("paper", paper_id, paper)
+        for collection_topic in dict.fromkeys([topic, *ids]):
+            for index, text in enumerate(data["notes"]):
+                nid = digest(encode([collection_topic, paper_id, metadata["source_id"], index]).encode("utf-8"))
+                if self.db.execute("SELECT 1 FROM records WHERE kind = 'note' AND id = ?", (nid,)).fetchone():
+                    continue
+                note = {"note_id": nid, "revision": identifier(), "text": text, "anchor_ids": [],
+                        "origin": "user", "history": [], "paper_id": paper_id}
+                self.put("note", nid, {"topic_id": collection_topic, "value": note})
+        return {"collection_topic_ids": ids, "note_count": len(data["notes"]), "attachments": data["attachments"]}
+
+    def commit_zotero_attachment(self, params):
+        topic, preview_id = self.topic(params), required(params, "preview_id")
+        item_id, attachment_id = required(params, "item_id"), required(params, "attachment_id")
+        batch = self.get("bibliography_batch", preview_id)
+        if batch["topic_id"] != topic:
+            raise missing("The Zotero export is outside the selected topic.")
+        data = batch["entries"].get(item_id, {}).get("zotero", {})
+        attachment = next((item for item in data.get("attachments", [])
+                           if item["attachment_id"] == attachment_id), None)
+        if attachment is None:
+            raise missing("The export does not contain that PDF attachment.")
+        imported = self.get("zotero_import", preview_id + ":" + item_id)
+        return self.research.import_pdf(topic, {
+            "paper_id": imported["paper_id"], "name": attachment["name"], "content": params.get("content"),
+        })
 
     def preview_identifier(self, params):
         provider, identifier_ = lookup_target(required(params, "identifier"))
