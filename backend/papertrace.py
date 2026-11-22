@@ -83,7 +83,7 @@ class Worker:
         "candidate.decide", "reader.bookmark", "note.save", "library.import_pdf", "library.set_alias", "synthesis.review",
         "reader.mark_save", "reader.mark_delete", "reader.answer_save", "reader.mark_to_wiki",
         "services.save",
-        "library.commit_identifier", "library.update_metadata", "workspace.archive", "workspace.unarchive",
+        "library.commit_identifier", "library.update_metadata", "workspace.archive", "workspace.unarchive", "library.organize",
     }
 
     def __init__(self, directory, send):
@@ -447,7 +447,16 @@ class Worker:
             required(params, "record_id")
             return self.research.review(self.topic(params), params)
         if method in ("source.read", "source.page"):
-            source = self.source(required(params, "source_version_id"), self.topic(params))
+            version, topic = required(params, "source_version_id"), self.topic(params)
+            if method == "source.page" and "anchor_id" in params:
+                anchor = self.get("anchor", required(params, "anchor_id"))
+                value = anchor["value"]
+                if (anchor["topic_id"] != topic or value["source_version_id"] != version
+                        or value["location"].get("page") != params.get("page")):
+                    raise missing("This evidence does not identify the requested page.")
+                source = self.get("source", version)
+            else:
+                source = self.source(version, topic)
             return (self.research.document(source) if method == "source.read"
                     else self.research.page(source, params.get("page")))
         if method == "reader.pdf":
@@ -487,7 +496,7 @@ class Worker:
             topic = self.topic(params) if "topic_id" in params else anchor["topic_id"]
             if topic != anchor["topic_id"]:
                 raise missing("Evidence is outside the selected topic.")
-            source = self.source(value["source_version_id"], topic)
+            source = self.get("source", value["source_version_id"])
             if value["location"].get("precision") == "region":
                 return {"anchor_id": value["anchor_id"], "topic_id": topic, "read_scope": "full_text",
                         "source": {"source_version_id": source["source_version_id"], "paper_id": source["paper_id"],
@@ -496,6 +505,8 @@ class Worker:
             pid = value["location"]["passage_id"]
             return {"anchor_id": value["anchor_id"], "topic_id": topic, "source": self.research.document(source, pid),
                     "passage_id": pid, "quote": value["quote"], "read_scope": value["read_scope"]}
+        if method == "library.organize":
+            return self.organize_papers(params)
         if method == "library.set_alias":
             topic = self.topic(params)
             paper_id = required(params, "paper_id")
@@ -605,6 +616,34 @@ class Worker:
         if method == "note.save":
             return self.save_note(params)
         raise RpcError(-32601, "METHOD_NOT_FOUND", "refresh_data", f"Method {method} is not available in the local integration worker.")
+
+    def organize_papers(self, params):
+        ids = params.get("paper_ids")
+        if (not isinstance(ids, list) or not ids or len(ids) > 500
+                or any(not isinstance(pid, str) or not pid.strip() for pid in ids)
+                or len(ids) != len(set(ids))):
+            raise invalid("Choose up to 500 distinct papers.")
+        action, value = required(params, "action"), required(params, "value").strip()
+        if action not in ("link", "unlink", "tag", "untag"):
+            raise invalid("Choose a supported organization action.")
+        if action in ("link", "unlink"):
+            value = self.topic({"topic_id": value})
+            field = "topic_ids"
+        else:
+            if len(value) > 80:
+                raise invalid("A tag must be at most 80 characters.")
+            field = "tags"
+        papers = [self.get("paper", pid) for pid in ids]
+        changed = 0
+        adding = action in ("link", "tag")
+        for paper in papers:
+            previous = paper.get(field, [])
+            if adding == (value in previous):
+                continue
+            paper[field] = [*previous, value] if adding else [item for item in previous if item != value]
+            self.put("paper", paper["paper_id"], paper)
+            changed += 1
+        return {"changed": changed}
 
     def set_archived(self, params, archived):
         kind, record_id = required(params, "kind"), required(params, "id")

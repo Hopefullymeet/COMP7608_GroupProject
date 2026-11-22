@@ -9,7 +9,7 @@
 | task.prepare → task.start (paper_import) | kind, input:{files:Id[],topic_id?:Id,paper_id?:Id}；start 带确认单 | 依次报告 inspect、match、commit 和终态；结果 {paper_ids:Id[],review_ids:Id[]}。指定论文时补材料版本，指定主题时加入主题 |
 | library.set_alias | W, topic_id, paper_id, alias:string | {paper_id:Id,alias:string}；论文须属于指定主题。去除首尾空白后最多 80 字符，空字符串清除别名 |
 | library.resolve_import | W, review_id, decision:'link' 或 'separate' | {paper_id:Id}；链接新增版本，保留原版本和锚点。身份冲突或模糊匹配必须复核 |
-| library.organize | W, paper_ids:Id[], action:'tag'、'untag'、'link' 或 'unlink', value:string | {changed:number}；value 是标签或主题 ID。移出仅删除所选关联 |
+| library.organize | W, paper_ids:Id[], action:'tag'、'untag'、'link' 或 'unlink', value:string | {changed:number}；value 是标签或主题 ID。批量最多 500 篇，任一论文不存在时整批不写入。changed 为实际修改数。移出仅删除所选关联 |
 | library.impact | paper_ids:Id[] | {references:{kind:string,label:string}[], revision:Id}，按主题、笔记、引用、比较、稿件等列出影响 |
 | library.trash | W, paper_ids, revision | {changed:number}；影响有变化报 STALE_REVISION，须重新预览 |
 | library.restore | W, paper_ids | {changed:number,warnings:string[]}；恢复原版本与仍存在的主题，缺失关联逐条说明 |
@@ -18,6 +18,7 @@
 | workspace.archived | {} | {items:{id:Id,kind:'topic' 或 'session',title:string}[]}；主题已归档时隐藏子会话 |
 | workspace.unarchive | W, kind,id | {id:Id}；恢复原归属与保存的成果 |
 | source.read | topic_id,source_version_id | Document；按指定版本返回结构化正文、章节、页和抽取警告 |
+| source.page | topic_id,source_version_id,page,anchor_id? | 返回指定 PDF 页。普通读取要求论文仍在主题内。历史锚点允许读该主题、版本及页码完全匹配的一页 |
 | source.original | source_version_id,page?:number | {opened:boolean}；宿主打开当前版本本地 PDF；无原件报 SOURCE_UNAVAILABLE |
 | reader.position | topic_id,source_version_id,session_id? | {passage_id?:Id,page?:number,zoom?:number,offset?:number} |
 | reader.bookmark | W,topic_id,source_version_id,session_id?，以及 passage_id 或 {page,zoom,offset} | 保存段落或 PDF 阅读位置，回传保存结果 |

@@ -140,6 +140,38 @@ class LiteratureTest(unittest.TestCase):
             page = self.call("source.page", topic_id=self.topic, source_version_id=self.versions[0], page=1)
             self.assertTrue(base64.b64decode(page["png"]).startswith(b"\x89PNG"))
 
+    def test_organize_batch_preserves_scoped_historic_evidence(self):
+        ids = [self.a["paper_id"], self.b["paper_id"]]
+        args = {"paper_ids": ids, "action": "tag", "value": " Citation research "}
+        self.call("library.organize", **{**args, "paper_ids": [ids[0], "missing"]}, error="NOT_FOUND")
+        self.assertTrue(all(not paper["tags"] for paper in self.call("library.catalog")["papers"]))
+        self.assertEqual(self.call("library.organize", **args), {"changed": 2})
+        self.assertEqual(self.call("library.organize", **args), {"changed": 0})
+        self.assertTrue(all(paper["tags"] == ["Citation research"] for paper in self.call("library.catalog")["papers"]))
+        self.assertEqual(self.call("library.organize", **{**args, "action": "untag"}), {"changed": 2})
+        self.assertEqual(self.call("library.organize", paper_ids=ids, action="link", value=self.other), {"changed": 2})
+
+        self.run_task(self.versions)
+        outline = self.call("synthesis.list", topic_id=self.topic)["items"][0]
+        anchor = outline["points"][0]["claims"][0]["contributions"][0]["anchor_ids"][0]
+        evidence = self.call("evidence.open", topic_id=self.topic, anchor_id=anchor)
+        self.assertEqual(self.call("library.organize", paper_ids=[ids[0]], action="unlink",
+                                   value=self.topic), {"changed": 1})
+        self.assertEqual([p["paper_id"] for p in self.call("library.list", topic_id=self.topic)["items"]], [ids[1]])
+        self.assertEqual({p["paper_id"] for p in self.call("library.list", topic_id=self.other)["items"]}, set(ids))
+        scope = {"topic_id": self.topic, "source_version_id": self.versions[0]}
+        self.call("source.read", **scope, error="NOT_FOUND")
+        self.call("source.page", **scope, page=1, error="NOT_FOUND")
+        self.assertEqual(self.call("evidence.open", topic_id=self.topic, anchor_id=anchor), evidence)
+        self.call("evidence.open", topic_id=self.other, anchor_id=anchor, error="NOT_FOUND")
+        self.call("source.page", **scope, page=2, anchor_id=anchor, error="NOT_FOUND")
+        self.call("source.page", **{**scope, "source_version_id": self.versions[1]},
+                  page=1, anchor_id=anchor, error="NOT_FOUND")
+        self.call("source.page", **{**scope, "topic_id": self.other}, page=1, anchor_id=anchor, error="NOT_FOUND")
+        if shutil.which(poppler("pdftoppm")):
+            page = self.call("source.page", **scope, page=1, anchor_id=anchor)
+            self.assertTrue(base64.b64decode(page["png"]).startswith(b"\x89PNG"))
+
     def test_interrupted_full_text_answer_reports_read_coverage_without_saving_a_turn(self):
         session = self.call("session.create", topic_id=self.topic)["session_id"]
         version = self.versions[0]
