@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 from uuid import uuid4
 
-from dsh import Dsh
+from dsh import Dsh, failure
 from literature import poppler
 from papertrace import Worker
 
@@ -131,6 +131,9 @@ class LiteratureTest(unittest.TestCase):
         duplicate = self.save_pdf("Alpha duplicated", "Alpha proposes the benchmark for evidence attribution.")
         self.assertTrue(duplicate["duplicate"])
         self.assertEqual(self.versions[0], duplicate["source_version_id"])
+        self.save_pdf("Alpha on the wrong record", "Alpha proposes the benchmark for evidence attribution.",
+                      paper_id=self.b["paper_id"], error="IDENTITY_CONFLICT")
+        self.assertEqual(self.worker.db.execute("SELECT COUNT(*) FROM pdf_files").fetchone()[0], 2)
         self.call("source.read", topic_id=self.other, source_version_id=self.versions[0], error="NOT_FOUND")
         self.call("task.prepare", kind="literature_synthesis", topic_id=self.other, error="NOT_FOUND",
                   input={"question": "Question", "source_versions": self.versions})
@@ -184,6 +187,17 @@ class LiteratureTest(unittest.TestCase):
             "sources": [{"paper_id": self.a["paper_id"], "source_version_id": version,
                          "requested_scope": "full_text"}],
         }}
+        def run():
+            prepared = self.call("task.prepare", **args)
+            task = self.call("task.start", confirmation_id=prepared["confirmation_id"], **args)["task_id"]
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                snapshot = self.call("task.get", task_id=task)
+                if snapshot["status"] not in ("queued", "running"):
+                    return snapshot
+                time.sleep(.03)
+            self.fail("Reading task did not finish.")
+
         interruption = {"reason": "MODEL_UNAVAILABLE", "retryable": True, "next_action": "retry"}
         for raw, provider_issue, reason in (
             ({}, interruption, "MODEL_UNAVAILABLE"),
@@ -192,14 +206,7 @@ class LiteratureTest(unittest.TestCase):
             with self.subTest(reason=reason), patch.object(
                 Dsh, "run_research", return_value=(raw, seen, [], {}, provider_issue),
             ):
-                prepared = self.call("task.prepare", **args)
-                task = self.call("task.start", confirmation_id=prepared["confirmation_id"], **args)["task_id"]
-                deadline = time.monotonic() + 5
-                while time.monotonic() < deadline:
-                    snapshot = self.call("task.get", task_id=task)
-                    if snapshot["status"] not in ("queued", "running"):
-                        break
-                    time.sleep(.03)
+                snapshot = run()
                 self.assertEqual(snapshot["status"], "failed")
                 self.assertNotIn("result", snapshot)
                 self.assertEqual(snapshot["issue"]["reason"], reason)
@@ -207,7 +214,25 @@ class LiteratureTest(unittest.TestCase):
                 self.assertEqual(snapshot["issue"]["details"]["read_sources"], [
                     {"source_version_id": version, "read_scope": "full_text"},
                 ])
+        for scope, method in (("full_text", "answer_full_text"), ("abstract", "answer")):
+            with self.subTest(scope=scope), patch.object(Dsh, method, side_effect=failure()):
+                args["input"]["sources"][0]["requested_scope"] = scope
+                snapshot = run()
+                self.assertEqual(snapshot["status"], "failed")
+                self.assertEqual(snapshot["issue"]["details"]["read_sources"], [
+                    {"source_version_id": version, "read_scope": "none"},
+                ])
         self.assertEqual(self.call("session.get", topic_id=self.topic, session_id=session)["turns"], [])
+
+        args["input"]["sources"][0]["requested_scope"] = "full_text"
+        answer = {"sentences": [{"text": "The source defines the benchmark.",
+                                 "evidence": [{"id": passage["passage_id"], "quote": passage["text"]}]}]}
+        budget = {"reason": "TASK_BUDGET_EXHAUSTED", "retryable": False, "next_action": "adjust_budget"}
+        with patch.object(Dsh, "run_research", return_value=(answer, seen, [], {}, budget)):
+            snapshot = run()
+        self.assertEqual(snapshot["status"], "partial")
+        self.assertEqual(snapshot["issue"]["reason"], budget["reason"])
+        self.assertTrue(snapshot["result"]["sentences"][0]["anchor_ids"])
 
     def test_source_gaps_exact_anchors_and_wiki_recheck(self):
         snapshot = self.run_task(self.versions)

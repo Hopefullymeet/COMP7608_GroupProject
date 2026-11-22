@@ -42,6 +42,7 @@ class DshFailure(Exception):
     def __init__(self, reason, retryable, action):
         super().__init__(reason)
         self.issue = {"reason": reason, "retryable": retryable, "next_action": action}
+        self.seen = {}
 
 
 def failure(reason="MODEL_UNAVAILABLE", retryable=True, action="retry"):
@@ -196,10 +197,10 @@ class Dsh:
                                      ensure_ascii=False) + "\nQuestion: " + question
         )
         raw, seen, _, _, issue = self.run_research(prompt, sources, [], cancelled, "agent", None, question)
-        if issue:
+        if issue and not raw:
             return [], seen, issue
         try:
-            return read_json_answer(json.dumps(raw), seen), seen, None
+            return read_json_answer(json.dumps(raw), seen), seen, issue
         except DshFailure as error:
             if not seen:
                 raise
@@ -439,6 +440,8 @@ class Dsh:
             return read_json_answer(text, seen), seen
         except (DshFailure, ValueError) as error:
             if not research:
+                if isinstance(error, DshFailure):
+                    error.seen = seen
                 raise
             issue = (error.issue if isinstance(error, DshFailure)
                      else failure("MODEL_OUTPUT_INVALID", True, "retry").issue)

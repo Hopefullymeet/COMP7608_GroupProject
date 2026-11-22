@@ -76,6 +76,8 @@ PDF 位置使用从 1 开始的 page、倍率 zoom（0.1 至 10）和归一化�
 
 示例：选择 pubmedqa.pdf 得到 f1，paper_import 的 task_id=t1，序号 1、2、3 报 inspect、match、commit，4 为 completed，result={paper_ids:[],review_ids:["r1"]}。r1 指向 p1，确认 link 后读取 p1 的 v2，通过 evidence.open(a2) 回到 v2 第 2 页的 passage p2；note.save 将 a2 存入 n1。若 v2 已删除则返回 SOURCE_UNAVAILABLE，用户可在回收站恢复。缺解析时导入可 partial，并保留成功项。空选择、未知文件句柄或跨主题选择报 INVALID_PARAMS / NOT_FOUND；过期修订统一报 -32020 STALE_REVISION，next_action=refresh_data。
 
-### 离线书目去重
+### PDF 与书目去重
+
+完全相同的 PDF 重复入库时复用原条目和版本。若请求明确指定另一条论文作为附件目标，返回 `IDENTITY_CONFLICT`，保留两个条目的原版本。
 
 跨文件按 DOI 或 arXiv 去重。无标识符的条目在同一份文件中反复导入时复用原论文。预览和确认不访问书目中的 URL，也不导入附件。导入后可以使用 PDF 导入给同一条目补全文。格式损坏时预览整体失败，可解析但缺标题的行标为 `TITLE_REQUIRED`。

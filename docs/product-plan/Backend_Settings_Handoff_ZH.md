@@ -6,7 +6,7 @@
 
 | 功能 | 现有页面和接口 | 前端待补 |
 | --- | --- | --- |
-| 离线书目导入 | `library.preview_bibliography` 与 `library.commit_bibliography` 已支持 RIS 和 CSL JSON。 | 复用导入对话框。用户选文件后展示预览、勾选可用行、确认入库，再逐项显示成功、已有或冲突。缺 PDF 的条目继续沿用现有补件入口。 |
+| 离线书目导入 | `library.preview_bibliography` 与 `library.commit_bibliography` 已支持 RIS 和 CSL JSON。 | 复用导入对话框。用户选文件后展示预览、勾选可用行、确认入库，再逐项显示成功、已有或冲突。缺 PDF 的条目继续沿用现有补件入口。若目标 PDF 已属于另一条论文，显示身份冲突并让用户核对条目。 |
 | 批量整理论文 | `library.organize` 支持批量加减标签、加入及移出主题。移出后历史引句仍可读。 | 刷新列表和批量操作的实际修改数。历史证据卡调用 `source.page` 时一起传 `anchor_id`，便于定位已移出主题的原页。 |
 | 归档与恢复 | 现有 `workspace.archive/archived/unarchive` 已接工作区。归档会隐藏主题或会话，保留保存过的材料。 | 从主题或会话菜单发起归档，刷新侧栏和归档列表。恢复主题后，仍单独归档的会话留在归档列表。 |
 | 模型设置 | **可直接使用。** `services.get/save/test` 已支持模型 ID、保存与测试。测试读取已保存配置，运行中的任务沿用原模型。 | 端点设为只读，收起预算和钥匙串入口，在测试按钮旁显示结果。用 `credential_configured` 显示凭据状态。提交时仍原样带回预算、服务数组和开关。 |
@@ -88,6 +88,6 @@ python3 backend/venue_ranks.py ranking-workspace ranking-demo.csv --scheme jcr -
 
 ## 问答中断与换版导出
 
-- 全文问答如因模型中断或输出无效而没有形成正式回答，任务以 `failed` 结束。根据 `issue.reason` 展示原因，根据 `issue.retryable` 提供重试。可用 `issue.details.read_sources` 展示各篇已读至全文、摘要或尚未读取。会话正文不会新增一条失败答复。
+- 摘要或全文问答如因模型中断或输出无效而没有形成正式回答，任务以 `failed` 结束。根据 `issue.reason` 展示原因，根据 `issue.retryable` 提供重试。可用 `issue.details.read_sources` 展示各篇已读到全文片段、摘要片段或尚未读取。有可用回答但预算终止时，显示部分完成及原因。会话正文不会新增一条失败答复。
 - 提纲导出时，后端会核对选中观点的来源版本。遇到 `STALE_REVISION` 时，刷新提纲的 `stale_item_ids`，选中项保留在界面，允许用户复核或改选。历史观点与证据仍可以打开。
 - 验收用例。让模型读完一段后中断或返回无效内容，核对任务状态和已读范围。再导出一个提纲，更换其中一个有依据的版本，确认选中的旧观点被拦截，且历史原文仍可定位。

@@ -37,6 +37,9 @@ class Workbench:
                     host.put("paper", entry["paper_id"], entry)
                 record = next(v for v in entry["source_versions"] if v["source_version_id"] == version)
                 return {"paper_id": entry["paper_id"], **record, "duplicate": True}
+        if previous:
+            raise LiteratureError("IDENTITY_CONFLICT", "This PDF is already attached to a different paper.",
+                                  "review_import", -32010)
 
         pages = extract_pdf(content)
         version = self.new_id()

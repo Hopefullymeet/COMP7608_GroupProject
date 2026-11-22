@@ -1182,6 +1182,17 @@ class Worker:
                         })]
                 self.send_events(events)
 
+    @staticmethod
+    def read_coverage(selected, seen):
+        versions = {}
+        for passage in seen.values():
+            version = passage["source_version_id"]
+            versions.setdefault(version, "abstract")
+            if passage.get("page"):
+                versions[version] = "full_text"
+        return [{"source_version_id": row["source_version_id"],
+                 "read_scope": versions.get(row["source_version_id"], "none")} for row in selected]
+
     def run_dsh(self, task, signal):
         task_id = task["task_id"]
         try:
@@ -1206,16 +1217,10 @@ class Worker:
                 task = self.get("task", task_id)
                 if task["status"] != "running":
                     return
-                read_versions = {p["source_version_id"]: "full_text" for p in seen.values() if p.get("page")}
-                for passage in seen.values():
-                    read_versions.setdefault(passage["source_version_id"], "abstract")
-                reads = [{"source_version_id": source["source_version_id"],
-                          "read_scope": read_versions.get(source["source_version_id"], "none")}
-                         for source in sources]
-                if issue:
-                    details = {**issue.get("details", {}), "read_sources": reads}
-                    self.fail_dsh(task_id, {**issue, "details": details})
+                if issue and not claims:
+                    self.fail_dsh(task_id, issue, seen)
                     return
+                reads = self.read_coverage(task["input"]["sources"], seen)
                 with self.db:
                     message_id = identifier()
                     sentences = []
@@ -1230,10 +1235,10 @@ class Worker:
                     events = self.persist_reading(task, message_id, sentences, reads, {
                         "kind": "tool", "title": "Read with DeepSeek Harness",
                         "detail": f"Read {len(seen)} approved passage(s) using paper_read.",
-                    })
+                    }, issue=issue)
                 self.send_events(events)
         except DshFailure as error:
-            self.fail_dsh(task_id, error.issue)
+            self.fail_dsh(task_id, error.issue, error.seen)
         except Exception as error:
             print(f"PaperTrace DSH task: {type(error).__name__}", file=sys.stderr)
             self.fail_dsh(task_id, {"reason": "MODEL_UNAVAILABLE", "retryable": True, "next_action": "retry"})
@@ -1241,11 +1246,14 @@ class Worker:
             with self.lock:
                 self.inflight.pop(task_id, None)
 
-    def fail_dsh(self, task_id, issue):
+    def fail_dsh(self, task_id, issue, seen=None):
         with self.lock:
             task = self.get("task", task_id)
             if task["status"] != "running":
                 return
+            if task["kind"] == "reading_qa":
+                reads = self.read_coverage(task["input"]["sources"], seen or {})
+                issue = {**issue, "details": {**issue.get("details", {}), "read_sources": reads}}
             with self.db:
                 event = self.finish(task, "failed", issue=issue)
             self.send_events([event])
@@ -1356,7 +1364,7 @@ class Worker:
             "kind": "tool", "title": "Read saved abstract", "detail": "Checked the local fixture passage.",
         })
 
-    def persist_reading(self, task, message_id, sentences, reads, step):
+    def persist_reading(self, task, message_id, sentences, reads, step, issue=None):
         input_ = task["input"]
         answer = {"scope_id": task["scope_id"], "message_id": message_id, "read_sources": reads, "sentences": sentences}
         session = self.get("session", task["session_id"])
@@ -1366,7 +1374,9 @@ class Worker:
         task["steps"] = [step]
         delta = self.emit(task, "answer.delta", {"text": " ".join(s["text"] for s in sentences)})
         full_reads = {source["source_version_id"] for source in reads if source["read_scope"] == "full_text"}
-        if any(s["requested_scope"] == "full_text" and s["source_version_id"] not in full_reads for s in input_["sources"]):
+        if issue:
+            final = self.finish(task, "partial", result=answer, issue=issue)
+        elif any(s["requested_scope"] == "full_text" and s["source_version_id"] not in full_reads for s in input_["sources"]):
             final = self.finish(task, "partial", result=answer, issue={
                 "reason": "FULL_TEXT_REQUIRED", "retryable": False, "next_action": "attach_full_text"
             })
