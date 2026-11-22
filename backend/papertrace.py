@@ -463,6 +463,8 @@ class Worker:
         if method == "reader.pdf":
             _, pdf = self.reader.content(self.topic(params), required(params, "source_version_id"))
             return {"content": base64.b64encode(pdf).decode("ascii")}
+        if method == "reader.embedded_marks":
+            return self.reader.embedded_marks(self.topic(params), params)
         if method == "reader.marks":
             return self.reader.list(self.topic(params), required(params, "source_version_id"))
         if method == "reader.mark_save":

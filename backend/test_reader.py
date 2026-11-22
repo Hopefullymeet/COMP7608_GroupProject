@@ -8,7 +8,7 @@ import unittest
 
 from evaluate_synthesis import call
 from literature import LiteratureError
-from papertrace import Worker
+from papertrace import RpcError, Worker
 from reader import pdf_engine
 
 
@@ -40,6 +40,39 @@ class ReaderTest(unittest.TestCase):
         content = doc.tobytes()
         doc.close()
         return base64.b64encode(content).decode("ascii")
+
+    def test_embedded_notes_retain_rotated_page_location_and_original_bytes(self):
+        with self.engine.open() as doc:
+            page = doc.new_page()
+            page.insert_text((72, 90), "Research evidence")
+            mark = page.add_highlight_annot(page.search_for("Research evidence", quads=True))
+            mark.set_info(title="Reader", content="Check the source")
+            mark.update()
+            page.set_rotation(90)
+            doc.new_page()
+            content = base64.b64encode(doc.tobytes()).decode("ascii")
+
+        paper = call(self.worker, "library.import_pdf", topic_id=self.topic, name="Annotated.pdf", content=content)
+        args = {"topic_id": self.topic, "source_version_id": paper["source_version_id"]}
+        result = call(self.worker, "reader.embedded_marks", **args, page=1)
+        self.assertFalse(result["truncated"])
+        self.assertEqual(len(result["items"]), 1)
+        annotation = result["items"][0]
+        self.assertEqual(annotation["kind"], "Highlight")
+        self.assertEqual(annotation["quote"], "Research evidence")
+        self.assertEqual(annotation["note"], "Check the source")
+        self.assertEqual(annotation["author"], "Reader")
+        self.assertEqual(len(annotation["rects"]), 1)
+        left, top, right, bottom = annotation["rects"][0]
+        self.assertTrue(0.8 < left < right <= 1)
+        self.assertTrue(0 <= top < bottom < 0.5)
+        self.assertEqual(call(self.worker, "reader.embedded_marks", **args, page=2)["items"], [])
+        other = call(self.worker, "topic.create", title="Outside")["topic_id"]
+        with self.assertRaises(RpcError) as failure:
+            call(self.worker, "reader.embedded_marks", **{**args, "topic_id": other}, page=1)
+        self.assertEqual(failure.exception.issue["reason"], "NOT_FOUND")
+        self.assertEqual(call(self.worker, "reader.marks", **args)["items"], [])
+        self.assertEqual(call(self.worker, "reader.pdf", **args)["content"], content)
 
     def test_local_search_annotation_export_and_topic_boundary(self):
         original = self.pdf("Figure 1: Overview of the experiment.", True)

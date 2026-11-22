@@ -382,6 +382,39 @@ class Reader:
         return {"items": [json.loads(row[0]) for row in self.host.db.execute(
             "SELECT data FROM reader_marks WHERE topic_id=? AND version_id=? ORDER BY rowid", (topic, version))]}
 
+    def embedded_marks(self, topic, params):
+        version, page_number, content = self.location(topic, params)
+        engine = pdf_engine()
+        annotations = []
+        truncated = False
+        text_markup = {"Highlight", "Underline", "StrikeOut", "Squiggly"}
+        try:
+            with engine.open(stream=content, filetype="pdf") as document:
+                page = document[page_number - 1]
+                for annotation in page.annots():
+                    if len(annotations) >= 500:
+                        truncated = True
+                        break
+                    kind = annotation.type[1]
+                    vertices = (annotation.vertices or []) if kind in text_markup else []
+                    if 0 < len(vertices) <= 600 and len(vertices) % 4 == 0:
+                        boxes = [engine.Quad(vertices[i:i + 4]).rect for i in range(0, len(vertices), 4)]
+                    else:
+                        boxes = [annotation.rect]
+                    rects = [normalized(page, box) for box in boxes]
+                    rects = [r for r in rects if r[0] < r[2] and r[1] < r[3]]
+                    info = annotation.info
+                    quote = (" ".join(" ".join(page.get_textbox(box) for box in boxes).split())[:3500]
+                             if kind in text_markup else "")
+                    annotations.append({
+                        "embedded_id": str(annotation.xref), "kind": kind, "rects": rects,
+                        "quote": quote, "note": (info.get("content") or "")[:5000],
+                        "author": (info.get("title") or "")[:300],
+                    })
+        except (ValueError, RuntimeError, TypeError):
+            raise LiteratureError("LAYOUT_FAILED", "The embedded PDF annotations could not be read.") from None
+        return {"source_version_id": version, "page": page_number, "items": annotations, "truncated": truncated}
+
     def mark(self, topic, version, mark_id):
         self.host.source(version, topic)
         row = self.host.db.execute("SELECT data FROM reader_marks WHERE id=? AND topic_id=? AND version_id=?",

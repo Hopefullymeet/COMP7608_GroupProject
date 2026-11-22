@@ -5,6 +5,7 @@
 | 操作 | 请求与返回 |
 | --- | --- |
 | 打开 PDF | `reader.pdf` 用主题与论文版本返回原 PDF 字节的 Base64。 |
+| 读取 PDF 自带批注 | `reader.embedded_marks` 按主题、论文版本、页码返回只读条目。每条附嵌入对象 ID、原始类型、归一化矩形、选中文字、备注及作者。单页超过 500 条时返回 `truncated`。条目沿用 PDF 版本，原文件和工作区批注均不改写。 |
 | 保存、编辑、删除批注 | `reader.marks` 按主题和版本返回列表。`reader.mark_save` 保存页码、位置、类型、颜色、文字选区或备注。编辑及 `reader.mark_delete` 提交当前 `base_revision`。过期编辑返回 `STALE_REVISION`。 |
 | 导出批注副本 | `reader.export` 按主题和版本返回副本文件名和 Base64。原件保留在库内。 |
 | 按描述找区域 | `visual.search` 接收主题、所选版本和自然语言描述，返回图、表或公式的版本、页码、矩形、编号和图注。算法使用图内文字、视觉特征及正文交叉引用。无法建立索引的论文会计入 `skipped`。`visual.objects` 列出指定版本可识别的区域，`visual.crop` 读取某一页的合法矩形。 |
