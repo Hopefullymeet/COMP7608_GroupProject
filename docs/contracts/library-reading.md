@@ -7,6 +7,8 @@
 | file.pick | purpose: 'papers' 或 'draft' 或 'backup' | {files: {file_id:Id,name:string}[]}，用户取消返回空数组，文件限制由 purpose 决定。桌面文件选择器多选论文，稿件和备份单选 |
 | library.catalog | {} | {papers: Paper[], reviews: Review[], trash: Paper[]}，按标题排序，客户端搜索、分段显示 |
 | task.prepare → task.start (paper_import) | kind, input:{files:Id[],topic_id?:Id,paper_id?:Id}；start 带确认单 | 依次报告 inspect、match、commit 和终态；结果 {paper_ids:Id[],review_ids:Id[]}。指定论文时补材料版本，指定主题时加入主题 |
+| library.preview_bibliography | W, topic_id, format: 'ris' 或 'csl-json', content:string | 离线读取 UTF-8 书目，返回 preview_id 与 items。每行有 item_id、status: ready / invalid / conflict，可附 metadata、已有论文 ID 或 reason。预览不添加论文。输入最多 500 条及两百万字符 |
+| library.commit_bibliography | W, topic_id, preview_id, item_ids:Id[] | 提交同主题预览中的选中行。逐项返回 imported / already_linked / conflict。成功项返回论文 ID、来源版本和可用范围。提交时再次核对身份，一条冲突可保留其他成功项 |
 | library.set_alias | W, topic_id, paper_id, alias:string | {paper_id:Id,alias:string}；论文须属于指定主题。去除首尾空白后最多 80 字符，空字符串清除别名 |
 | library.resolve_import | W, review_id, decision:'link' 或 'separate' | {paper_id:Id}；链接新增版本，保留原版本和锚点。身份冲突或模糊匹配必须复核 |
 | library.organize | W, paper_ids:Id[], action:'tag'、'untag'、'link' 或 'unlink', value:string | {changed:number}；value 是标签或主题 ID。批量最多 500 篇，任一论文不存在时整批不写入。changed 为实际修改数。移出仅删除所选关联 |
@@ -73,3 +75,7 @@ PDF 位置使用从 1 开始的 page、倍率 zoom（0.1 至 10）和归一化�
 全文坐标相对旋转后页面左上角归一化至 [0,1]，页序从 1 开始。摘要 page 为 0。reading_qa 支持 full_text 和可选 input.selection:{source_version_id,passage_id,quote}，服务端校验原句。全文回答沿用原句级 anchor_ids；evidence.locate 对全文返回 Located，摘要保持旧响应。笔记文本变化后支持关系待重查。
 
 示例：选择 pubmedqa.pdf 得到 f1，paper_import 的 task_id=t1，序号 1、2、3 报 inspect、match、commit，4 为 completed，result={paper_ids:[],review_ids:["r1"]}。r1 指向 p1，确认 link 后读取 p1 的 v2，通过 evidence.open(a2) 回到 v2 第 2 页的 passage p2；note.save 将 a2 存入 n1。若 v2 已删除则返回 SOURCE_UNAVAILABLE，用户可在回收站恢复。缺解析时导入可 partial，并保留成功项。空选择、未知文件句柄或跨主题选择报 INVALID_PARAMS / NOT_FOUND；过期修订统一报 -32020 STALE_REVISION，next_action=refresh_data。
+
+### 离线书目去重
+
+跨文件按 DOI 或 arXiv 去重。无标识符的条目在同一份文件中反复导入时复用原论文。预览和确认不访问书目中的 URL，也不导入附件。导入后可以使用 PDF 导入给同一条目补全文。格式损坏时预览整体失败，可解析但缺标题的行标为 `TITLE_REQUIRED`。

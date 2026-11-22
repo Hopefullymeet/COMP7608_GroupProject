@@ -20,7 +20,7 @@ from literature import LiteratureError, MAX_VERSIONS, digest, init_corpus
 from workbench import Workbench
 from citations import CitationWorkspace, init_citations
 from reader import Reader
-from bibliography import (OPENALEX, PROVIDERS, PublicServiceError, arxiv_id, doi, identity_keys,
+from bibliography import (OPENALEX, PROVIDERS, PublicServiceError, arxiv_id, bibliography_records, doi, identity_keys, imported_metadata,
                           lookup_target, metadata_from_provider, normalize_venue, openalex_search, selected_metadata)
 from venue_ranks import init_venue_ranks, issns, lookup_rankings
 
@@ -84,6 +84,7 @@ class Worker:
         "reader.mark_save", "reader.mark_delete", "reader.answer_save", "reader.mark_to_wiki",
         "services.save",
         "library.commit_identifier", "library.update_metadata", "workspace.archive", "workspace.unarchive", "library.organize",
+        "library.preview_bibliography", "library.commit_bibliography",
     }
 
     def __init__(self, directory, send):
@@ -232,7 +233,7 @@ class Worker:
         if method in self.writes:
             operation = required(params, "operation_id")
             fingerprint = encode(params)
-            if method in ("library.import_pdf", "draft.import", "services.save"):
+            if method in ("library.import_pdf", "draft.import", "services.save", "library.preview_bibliography"):
                 fingerprint = digest(fingerprint.encode("utf-8"))
             saved = self.saved_operation(method, operation, fingerprint)
             if saved is not None:
@@ -523,6 +524,10 @@ class Worker:
                 paper.pop("alias", None)
             self.put("paper", paper_id, paper)
             return {"paper_id": paper_id, "alias": alias}
+        if method == "library.preview_bibliography":
+            return self.preview_bibliography(params)
+        if method == "library.commit_bibliography":
+            return self.commit_bibliography(params)
         if method == "library.commit_identifier":
             topic = self.topic(params)
             preview = self.get("bibliography_preview", required(params, "preview_id"))
@@ -717,6 +722,59 @@ class Worker:
                 **({"provider": saved["provider"]} if "provider" in saved else {}),
                 "candidates": [c for c in saved["candidates"] if c["decision"] != "exclude"],
                 "excluded": [c for c in saved["candidates"] if c["decision"] == "exclude"]}
+
+    def preview_bibliography(self, params):
+        topic, format_ = self.topic(params), required(params, "format")
+        content = params.get("content")
+        records = bibliography_records(format_, content)
+        fingerprint = digest(content.lstrip("\ufeff").replace("\r\n", "\n").encode("utf-8"))
+        entries, rows = {}, []
+        for index, record in enumerate(records, 1):
+            item_id = str(index)
+            row = {"item_id": item_id}
+            metadata = imported_metadata(record, format_)
+            if metadata is None:
+                row.update(status="invalid", reason="TITLE_REQUIRED")
+            else:
+                metadata["source_id"] = f"urn:papertrace:bibliography:{fingerprint}:{index}"
+                try:
+                    paper = self.find_bibliographic_paper(metadata)
+                    row.update(status="ready", metadata=self.public_bibliography_metadata(metadata))
+                    if paper:
+                        row["existing_paper_id"] = paper["paper_id"]
+                    entries[item_id] = metadata
+                except RpcError as error:
+                    row.update(status="conflict", reason=error.issue["reason"])
+            rows.append(row)
+        preview_id = identifier()
+        self.put("bibliography_batch", preview_id, {"topic_id": topic, "entries": entries})
+        return {"preview_id": preview_id, "items": rows}
+
+    @staticmethod
+    def public_bibliography_metadata(metadata):
+        return {key: value for key, value in selected_metadata(metadata).items() if key != "source_id"}
+
+    def commit_bibliography(self, params):
+        topic = self.topic(params)
+        batch = self.get("bibliography_batch", required(params, "preview_id"))
+        if batch["topic_id"] != topic:
+            raise missing("The bibliography preview is outside the selected topic.")
+        ids = params.get("item_ids")
+        entries = batch["entries"]
+        if (not isinstance(ids, list) or not ids or len(ids) > 500
+                or any(not isinstance(item, str) or item not in entries for item in ids)
+                or len(set(ids)) != len(ids)):
+            raise invalid("Choose distinct ready entries from the bibliography preview.")
+        items = []
+        for item_id in ids:
+            try:
+                paper, linked = self.add_bibliographic_paper(topic, entries[item_id])
+            except RpcError as error:
+                items.append({"item_id": item_id, "status": "conflict", "reason": error.issue["reason"]})
+                continue
+            items.append({"item_id": item_id, "status": "already_linked" if linked else "imported",
+                          "paper_id": paper["paper_id"], **paper["source_versions"][0]})
+        return {"items": items}
 
     def preview_identifier(self, params):
         provider, identifier_ = lookup_target(required(params, "identifier"))

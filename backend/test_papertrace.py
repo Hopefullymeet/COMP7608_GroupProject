@@ -340,6 +340,77 @@ class BibliographyContractTest(unittest.TestCase):
         self.assertIn("result", reply, reply)
         return reply["result"]
 
+    def test_offline_bibliography_preview_selective_commit_and_replay(self):
+        ris = """TY  - JOUR
+TI  - Study of evidence
+AU  - Ye, Lin
+JO  - Journal of Test Data
+PY  - 2021/01/01
+DO  - 10.1234/EVIDENCE
+AB  - First line.
+      Follow-up line.
+ER  -
+TY  - JOUR
+AU  - Unknown
+ER  -
+TY  - CPAPER
+TI  - An entry without an identifier
+ER  -"""
+        args = {**self.topic, "format": "ris", "content": ris, "operation_id": "preview-ris"}
+        with patch("bibliography.fetch", side_effect=AssertionError("Import must be offline.")):
+            preview = self.call("library.preview_bibliography", **args)
+            self.assertEqual(preview, self.call("library.preview_bibliography", **args))
+            self.assertEqual([row["status"] for row in preview["items"]], ["ready", "invalid", "ready"])
+            self.assertEqual(preview["items"][0]["metadata"]["year"], 2021)
+            self.assertEqual(self.call("library.catalog")["papers"], [])
+            other = self.call("topic.create", title="Other topic")
+            selection = {"preview_id": preview["preview_id"], "item_ids": ["1", "3"]}
+            self.call("library.commit_bibliography", **other, **selection, error="NOT_FOUND")
+            self.call("library.commit_bibliography", **self.topic, **{**selection, "item_ids": ["1", "2"]},
+                      error="INVALID_PARAMS")
+            self.assertEqual(self.call("library.catalog")["papers"], [])
+            commit = {**self.topic, **selection, "operation_id": "import-ris"}
+            report = self.call("library.commit_bibliography", **commit)
+            self.assertEqual(self.call("library.commit_bibliography", **commit), report)
+            first, second = report["items"]
+            self.assertEqual([first["available_scope"], second["available_scope"]], ["abstract", "metadata"])
+            source = self.call("source.read", **self.topic, source_version_id=first["source_version_id"])
+            self.assertEqual(source["passages"][0]["text"], "First line. Follow-up line.")
+            self.assertEqual(len(self.call("library.catalog")["papers"]), 2)
+
+            another = self.call("library.preview_bibliography", **self.topic, format="ris", content=ris)
+            duplicate = self.call("library.commit_bibliography", **self.topic,
+                                  preview_id=another["preview_id"], item_ids=["3"])
+            self.assertEqual(duplicate["items"][0]["status"], "already_linked")
+            self.assertEqual(duplicate["items"][0]["paper_id"], second["paper_id"])
+
+            csl = json.dumps({"title": "Same work via CSL", "DOI": "https://doi.org/10.1234/evidence",
+                              "author": [{"family": "Ye", "given": "Lin"}]})
+            another = self.call("library.preview_bibliography", **other, format="csl-json", content=csl)
+            self.assertEqual(another["items"][0]["existing_paper_id"], first["paper_id"])
+            result = self.call("library.commit_bibliography", **other, preview_id=another["preview_id"], item_ids=["1"])
+            self.assertEqual(result["items"][0]["paper_id"], first["paper_id"])
+            self.assertEqual(result["items"][0]["status"], "imported")
+            self.call("library.preview_bibliography", **self.topic, format="ris", content="TY  - JOUR",
+                      error="INVALID_PARAMS")
+
+    def test_bibliography_commit_reports_new_identity_conflicts_per_entry(self):
+        def preview(rows):
+            return self.call("library.preview_bibliography", **self.topic,
+                             format="csl-json", content=json.dumps(rows))["preview_id"]
+
+        def commit(preview_id, items):
+            return self.call("library.commit_bibliography", **self.topic, preview_id=preview_id, item_ids=items)["items"]
+
+        doi = "10.1234/test"
+        url = "https://arxiv.org/abs/2501.01234"
+        staged = preview([{"title": "Ambiguous", "DOI": doi, "URL": url}, {"title": "Independent paper"}])
+        commit(preview([{"title": "First record", "DOI": doi}, {"title": "Second record", "URL": url}]), ["1", "2"])
+        results = commit(staged, ["1", "2"])
+        self.assertEqual(results[0], {"item_id": "1", "status": "conflict", "reason": "IDENTIFIER_ALREADY_LINKED"})
+        self.assertEqual(results[1]["status"], "imported")
+        self.assertEqual(len(self.call("library.catalog")["papers"]), 3)
+
     def start_search(self, **input_):
         params = {**self.topic, "kind": "discovery", "input": input_}
         prepared = self.call("task.prepare", **params)

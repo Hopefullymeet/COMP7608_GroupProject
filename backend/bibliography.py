@@ -91,6 +91,7 @@ def identity_keys(record):
     return {key for key in (
         normalized_doi, "arxiv:" + re.sub(r"v\d+$", "", arxiv) if arxiv else "",
         work_id if re.fullmatch(r"https://openalex\.org/W\d+", work_id) else "",
+        work_id if re.fullmatch(r"urn:papertrace:bibliography:[0-9a-f]{64}:\d+", work_id) else "",
     ) if key}
 
 
@@ -244,3 +245,110 @@ def openalex_search(query, filters, key):
         gaps.append(f"Conference filter checked the first {len(rows)} OpenAlex results. "
                     f"{unknown_venues} had no verified conference metadata.")
     return candidates, gaps
+
+
+def bibliography_records(format_, content):
+    """Read a UTF-8 bibliographic export without resolving links or attachments."""
+    if not isinstance(content, str) or not content.strip() or len(content) > 2_000_000:
+        raise LiteratureError("INVALID_PARAMS", "Choose a nonempty bibliography of at most two million characters.")
+    content = content.lstrip("\ufeff")
+    if format_ == "csl-json":
+        try:
+            records = json.loads(content)
+        except (ValueError, RecursionError):
+            raise LiteratureError("INVALID_PARAMS", "The CSL JSON file is invalid.") from None
+        if isinstance(records, dict):
+            records = [records]
+    elif format_ == "ris":
+        records = ris_records(content)
+    else:
+        raise LiteratureError("INVALID_PARAMS", "Choose an RIS or CSL JSON bibliography.")
+    if not isinstance(records, list) or not 1 <= len(records) <= 500:
+        raise LiteratureError("INVALID_PARAMS", "Choose a bibliography containing one to 500 entries.")
+    return records
+
+
+def ris_records(content):
+    records = []
+    entry = None
+    previous = None
+    for line in content.splitlines():
+        if not line.strip():
+            continue
+        field = re.fullmatch(r"([A-Z0-9]{2})[ \t]+-[ \t]*(.*)", line)
+        if not field:
+            if entry is None or previous is None or not line[0].isspace():
+                raise LiteratureError("INVALID_PARAMS", "An RIS field or record boundary is invalid.")
+            entry[previous][-1] += " " + line.strip()
+            continue
+        tag, value = field.groups()
+        if tag == "TY" and entry is None:
+            entry = {}
+        if entry is None or (tag == "TY" and entry):
+            raise LiteratureError("INVALID_PARAMS", "Each RIS record needs a TY and ER boundary.")
+        if tag == "ER":
+            def first(*tags):
+                return next((entry[key][0] for key in tags if key in entry), "")
+
+            year = re.match(r"\d{4}", first("PY", "Y1", "DA"))
+            records.append({
+                "title": first("TI", "T1", "CT"), "container-title": first("JF", "JO", "JA", "T2"),
+                "author": [{"literal": a} for a in (entry.get("AU") or entry.get("A1") or [])],
+                "abstract": first("AB", "N2"), "DOI": first("DO"), "URL": first("UR"),
+                "type": {"JOUR": "article-journal", "CPAPER": "paper-conference"}.get(first("TY")),
+                "issued": {"date-parts": [[int(year[0])]]} if year else {},
+            })
+            if len(records) > 500:
+                raise LiteratureError("INVALID_PARAMS", "Choose a bibliography containing at most 500 entries.")
+            entry, previous = None, None
+        else:
+            entry.setdefault(tag, []).append(value.strip())
+            previous = tag
+    if entry is not None:
+        raise LiteratureError("INVALID_PARAMS", "The last RIS record has no ER boundary.")
+    return records
+
+
+def imported_metadata(row, format_):
+    if not isinstance(row, dict):
+        return None
+    title = row.get("title")
+    if not isinstance(title, str) or not title.strip() or len(title.strip()) > 500:
+        return None
+    authors = []
+    creators = row.get("author")
+    if isinstance(creators, list):
+        for author in creators[:500]:
+            if not isinstance(author, dict):
+                continue
+            names = [author.get(k) for k in ("given", "family")]
+            name = author.get("literal") or " ".join(part.strip() for part in names if isinstance(part, str))
+            if isinstance(name, str) and name.strip():
+                authors.append(name.strip()[:300])
+    meta = {"title": title.strip(), "authors": authors, "provider": {"csl-json": "CSL JSON", "ris": "RIS"}[format_]}
+    venue = row.get("container-title")
+    if isinstance(venue, str) and venue.strip():
+        meta["venue"] = venue.strip()[:300]
+    venue_type = {"article-journal": "journal", "paper-conference": "conference"}.get(
+        row["type"] if isinstance(row.get("type"), str) else "")
+    if venue_type:
+        meta["venue_type"] = venue_type
+    issued = row.get("issued")
+    dates = issued.get("date-parts") if isinstance(issued, dict) else None
+    if isinstance(dates, list) and dates and isinstance(dates[0], list) and dates[0]:
+        year = dates[0][0]
+        if type(year) is int and 1 <= year <= 9999:
+            meta["year"] = year
+    normalized = doi(row.get("DOI"))
+    if normalized:
+        meta["doi"] = normalized
+    url = row.get("URL")
+    if isinstance(url, str) and url.lower().startswith(("https://arxiv.org/", "http://arxiv.org/",
+                                                        "https://www.arxiv.org/", "http://www.arxiv.org/")):
+        identifier = arxiv_id(url)
+        if identifier:
+            meta["arxiv_id"] = identifier
+    abstract = row.get("abstract")
+    if isinstance(abstract, str) and abstract.strip():
+        meta["abstract"] = abstract.strip()[:24000]
+    return meta
