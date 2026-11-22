@@ -20,7 +20,7 @@ from literature import LiteratureError, MAX_VERSIONS, digest, init_corpus
 from workbench import Workbench
 from citations import CitationWorkspace, init_citations
 from reader import Reader
-from bibliography import (OPENALEX, PROVIDERS, PublicServiceError, arxiv_id, bibliography_records, doi, identity_keys, imported_metadata,
+from bibliography import (OPENALEX, PROVIDERS, PublicServiceError, arxiv_id, bibliography_records, doi, export_bibliography, identity_keys, imported_metadata,
                           lookup_target, metadata_from_provider, normalize_venue, openalex_search, selected_metadata)
 from venue_ranks import init_venue_ranks, issns, lookup_rankings
 
@@ -511,6 +511,8 @@ class Worker:
             pid = value["location"]["passage_id"]
             return {"anchor_id": value["anchor_id"], "topic_id": topic, "source": self.research.document(source, pid),
                     "passage_id": pid, "quote": value["quote"], "read_scope": value["read_scope"]}
+        if method == "library.export_bibliography":
+            return self.export_library_bibliography(params)
         if method == "library.organize":
             return self.organize_papers(params)
         if method == "library.set_alias":
@@ -732,6 +734,25 @@ class Worker:
                 "candidates": [c for c in saved["candidates"] if c["decision"] != "exclude"],
                 "excluded": [c for c in saved["candidates"] if c["decision"] == "exclude"]}
 
+    def export_library_bibliography(self, params):
+        topic = self.topic(params)
+        format_ = required(params, "format")
+        if format_ not in ("bibtex", "csl-json"):
+            raise invalid("Choose BibTeX or CSL JSON.")
+        ids = params.get("paper_ids")
+        if "paper_ids" in params:
+            if (not isinstance(ids, list) or not 1 <= len(ids) <= 5000
+                    or any(not isinstance(pid, str) or not pid for pid in ids) or len(set(ids)) != len(ids)):
+                raise invalid("Select up to 5000 distinct papers.")
+            papers = [self.paper_in_topic({"topic_id": topic, "paper_id": pid}) for pid in ids]
+        else:
+            papers = sorted((p for p in self.rows("paper") if topic in p["topic_ids"]),
+                            key=lambda p: (p["title"].casefold(), p["paper_id"]))
+            if len(papers) > 5000:
+                raise invalid("Select up to 5000 papers to export.")
+        return export_bibliography(
+            ((paper["paper_id"], self.paper_metadata(paper)["metadata"]) for paper in papers), format_)
+
     def preview_bibliography(self, params):
         topic, format_ = self.topic(params), required(params, "format")
         content = params.get("content")
@@ -826,14 +847,13 @@ class Worker:
         topic, preview_id = self.topic(params), required(params, "preview_id")
         item_id, attachment_id = required(params, "item_id"), required(params, "attachment_id")
         batch = self.get("bibliography_batch", preview_id)
-        if batch["topic_id"] != topic:
-            raise missing("The Zotero export is outside the selected topic.")
         data = batch["entries"].get(item_id, {}).get("zotero", {})
         attachment = next((item for item in data.get("attachments", [])
                            if item["attachment_id"] == attachment_id), None)
         if attachment is None:
             raise missing("The export does not contain that PDF attachment.")
         imported = self.get("zotero_import", preview_id + ":" + item_id)
+        self.paper_in_topic({"topic_id": topic, "paper_id": imported["paper_id"]})
         return self.research.import_pdf(topic, {
             "paper_id": imported["paper_id"], "name": attachment["name"], "content": params.get("content"),
         })
@@ -1144,7 +1164,16 @@ class Worker:
                               "data_categories": ["PDF text on page(s) " + ", ".join(
                                   str(plan["page"]) for plan in pending_translation),
                                   "Target language and any glossary terms supplied"]}] if live else []
-                return {"confirmation_id": cid, "transfers": transfers, "source_versions": [target]}
+                pending_keys = {plan["key"] for plan in pending_translation}
+                return {"confirmation_id": cid, "transfers": transfers, "source_versions": [target],
+                        "translation_scope": {
+                            "target_language": input_["target_language"],
+                            "glossary": input_.get("glossary", {}),
+                            "pages": [{"page": plan["page"], "status":
+                                       "unavailable" if not plan["units"] else
+                                       "pending" if plan["key"] in pending_keys else "cached"}
+                                      for plan in plans],
+                        }}
             if synthesis:
                 transfers = [{"endpoint": ENDPOINT,
                               "purpose": ("Compare selected papers" if kind == "paper_comparison"

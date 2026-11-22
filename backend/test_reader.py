@@ -85,6 +85,8 @@ class ReaderTest(unittest.TestCase):
         consent = prepare(selection)
         self.assertEqual(len(consent["transfers"]), 1)
         self.assertEqual(consent["source_versions"], [version])
+        self.assertEqual(consent["translation_scope"], {"target_language": "zh-CN", "glossary": {"Evidence": "证据"},
+                                                        "pages": [{"page": 1, "status": "pending"}]})
         tampered = {**selection, "input": {**selection["input"], "target_language": "ja"}}
         with self.assertRaises(RpcError) as denied:
             run(tampered, consent)
@@ -95,9 +97,13 @@ class ReaderTest(unittest.TestCase):
         scope = {"topic_id": self.topic, "source_version_id": version, "page": 1}
         record, = call(self.worker, "reader.translations", **scope)["items"]
         self.assertEqual(record["scope"], "selection")
+        self.assertEqual(record["glossary"], target["glossary"])
+        self.assertEqual(call(self.worker, "reader.translations", **scope,
+                              translation_id=record["translation_id"])["items"], [record])
         self.assertEqual(record["segments"][0]["rects"], selection["input"]["rects"])
         cached = prepare(selection)
         self.assertEqual(cached["transfers"], [])
+        self.assertEqual(cached["translation_scope"]["pages"], [{"page": 1, "status": "cached"}])
         self.assertTrue(run(selection, cached)["result"]["pages"][0]["cached"])
 
         pages = {**common, "input": {**target, "pages": [1, 2]}}
