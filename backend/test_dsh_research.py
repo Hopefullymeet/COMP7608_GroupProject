@@ -99,11 +99,6 @@ class ScriptedProvider(BaseHTTPRequestHandler):
                 response = {"sentences": [{"text": "The source defines the benchmark.", "evidence": citations}]}
                 if prompt.endswith("Return an invalid response."):
                     response = {"invalid": True}
-            if prompt.startswith("Create up to"):
-                response = {"questions": [{"prompt": "What does the paper define?",
-                                           "choices": ["A benchmark", "A model"], "correct": 0,
-                                           "explanation": "The source defines the benchmark.",
-                                           "evidence": citations[0]}]}
             block = {"type": "text", "text": json.dumps(response)}
         self.respond(block)
 
@@ -193,12 +188,6 @@ class DshResearchTest(unittest.TestCase):
                     self.assertTrue(all(tools == expected_tools for tools in provider.observed_tools), provider.observed_tools)
                     version = fixture.versions[0]
                     sources = [{"source_version_id": version, "title": "Alpha", "available_scope": "full_text"}]
-                    exercise, seen, trace, _, issue = dsh.practice_questions(
-                        sources, "Understand evidence attribution", 1, threading.Event())
-                    self.assertIsNone(issue)
-                    evidence = exercise["questions"][0]["evidence"]
-                    self.assertIn(evidence["quote"], seen[evidence["id"]]["text"])
-                    self.assertEqual([row["title"] for row in trace], ["paper_search", "paper_read"])
                     full, seen, issue = dsh.answer_full_text("What benchmark does Alpha define?", sources, threading.Event())
                     self.assertIsNone(issue)
                     self.assertIn(full[0]["references"][0]["passage"]["passage_id"], seen)

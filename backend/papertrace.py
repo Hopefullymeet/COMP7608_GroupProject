@@ -17,7 +17,7 @@ from uuid import uuid4
 
 from dsh import Dsh, DshFailure, ENDPOINT, MODEL
 from literature import LiteratureError, MAX_VERSIONS, digest, init_corpus
-from workbench import Practice, Workbench
+from workbench import Workbench
 from citations import CitationWorkspace, init_citations
 from reader import Reader
 from bibliography import (OPENALEX, PROVIDERS, PublicServiceError, arxiv_id, bibliography_records, doi, identity_keys, imported_metadata,
@@ -85,7 +85,6 @@ class Worker:
         "services.save",
         "library.commit_identifier", "library.update_metadata", "workspace.archive", "workspace.unarchive", "library.organize",
         "library.preview_bibliography", "library.commit_bibliography", "library.commit_zotero_attachment",
-        "practice.start", "practice.submit",
     }
 
     def __init__(self, directory, send):
@@ -109,7 +108,6 @@ class Worker:
         init_venue_ranks(self.db)
         self.citations = CitationWorkspace(self, identifier)
         self.research = Workbench(self, identifier)
-        self.practice = Practice(self, identifier, now)
         self.reader = Reader(self, identifier)
         self.send = send
         self.lock = threading.RLock()
@@ -468,20 +466,6 @@ class Worker:
             return {"content": base64.b64encode(pdf).decode("ascii")}
         if method == "reader.embedded_marks":
             return self.reader.embedded_marks(self.topic(params), params)
-        if method == "practice.questions":
-            return self.practice.list_questions(self.topic(params), params.get("missed_only", False),
-                                                params.get("due_only", False))
-        if method == "practice.start":
-            return self.practice.start(self.topic(params), params)
-        if method == "practice.attempt":
-            attempt = self.practice.owned(self.topic(params), "practice_attempt", required(params, "attempt_id"))
-            return self.practice.public_attempt(attempt)
-        if method == "practice.submit":
-            return self.practice.submit(self.topic(params), required(params, "attempt_id"), params.get("answers"))
-        if method == "practice.history":
-            attempts = self.practice.rows(self.topic(params), "practice_attempt")
-            return {"items": [{k: record[k] for k in ("attempt_id", "status", "created_at", "score", "total")
-                               if k in record} for record in attempts]}
         if method == "reader.translations":
             return self.reader.translations(self.topic(params), params)
         if method == "reader.marks":
@@ -1068,21 +1052,6 @@ class Worker:
             target, _, label = self.reader.question(topic, input_)
             if "session_id" in params:
                 task_data["session_id"] = self.session(params)["session_id"]
-        elif kind == "practice_generate":
-            label = required(input_, "question").strip()
-            versions, count = input_.get("source_versions"), input_.get("count")
-            if (len(label) > 1000 or type(count) is not int or not 1 <= count <= 10
-                    or not isinstance(versions, list) or not 1 <= len(versions) <= 8
-                    or any(not isinstance(v, str) or not v for v in versions) or len(set(versions)) != len(versions)):
-                raise invalid("Select one to eight paper versions and one to ten practice questions.")
-            papers = [self.source(version, topic)["paper_id"] for version in versions]
-            if len(set(papers)) != len(papers):
-                raise invalid("Select only one version per paper.")
-            if not set(versions).issubset(self.research.current_versions(topic)):
-                raise RpcError(-32020, "STALE_REVISION", "refresh_data", "Choose the latest version of each paper.")
-            if not self.dsh or not self.dsh.key:
-                raise RpcError(-32015, "MODEL_UNAVAILABLE", "configure_service", "Configure a text model to create questions.")
-            target = topic
         elif kind == "reader_translation":
             target = required(input_, "source_version_id")
             translation_model = self.services_config()["models"][0]["model"]
@@ -1128,7 +1097,7 @@ class Worker:
         suggest = kind == "citation_suggest"
         reader_question = kind == "reader_question"
         translation = kind == "reader_translation"
-        live = synthesis or kind == "practice_generate" or (kind == "reading_qa" and self.dsh is not None) or (
+        live = synthesis or (kind == "reading_qa" and self.dsh is not None) or (
             audit and bool(audit_pending) and self.dsh is not None and bool(self.dsh.key))
         live = live or (reader_question and input_["medium"] == "text") or (translation and bool(pending_translation))
         live = live or (suggest and bool(task_data["suggestion_sources"]) and self.dsh is not None and bool(self.dsh.key))
@@ -1176,10 +1145,6 @@ class Worker:
                                   str(plan["page"]) for plan in pending_translation),
                                   "Target language and any glossary terms supplied"]}] if live else []
                 return {"confirmation_id": cid, "transfers": transfers, "source_versions": [target]}
-            if kind == "practice_generate":
-                transfers = [{"endpoint": ENDPOINT, "purpose": "Generate practice questions from the selected papers",
-                              "data_categories": ["Learning goal, selected paper titles and original excerpts"]}]
-                return {"confirmation_id": cid, "transfers": transfers, "source_versions": input_["source_versions"]}
             if synthesis:
                 transfers = [{"endpoint": ENDPOINT,
                               "purpose": ("Compare selected papers" if kind == "paper_comparison"
@@ -1257,8 +1222,7 @@ class Worker:
                 audit = task["kind"] == "citation_audit"
                 suggest = task["kind"] == "citation_suggest"
                 reader_task = task["kind"] in ("reader_question", "visual_index", "reader_translation")
-                live = (audit or suggest or reader_task or task["kind"] == "practice_generate"
-                        or (not discovery and self.dsh is not None))
+                live = audit or suggest or reader_task or (not discovery and self.dsh is not None)
                 if live or remote_search:
                     signal = threading.Event()
                     self.inflight[task_id] = signal
@@ -1268,7 +1232,6 @@ class Worker:
                         "message": "Checking citations." if audit else "Finding citations." if suggest else (
                             "Searching OpenAlex." if remote_search else
                             "Translating selected PDF text." if task["kind"] == "reader_translation" else
-                            "Preparing practice questions." if task["kind"] == "practice_generate" else
                             "Reading with DeepSeek Harness." if live else "Running local contract sample.")
                     })
                 self.send_events([event])
@@ -1286,8 +1249,6 @@ class Worker:
                     run(task, signal)
                 elif task["kind"] in ("literature_synthesis", "paper_comparison"):
                     self.research.run(task, signal)
-                elif task["kind"] == "practice_generate":
-                    self.practice.run(task, signal)
                 else:
                     self.run_dsh(task, signal)
                 continue

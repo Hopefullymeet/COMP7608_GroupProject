@@ -14,17 +14,3 @@
 **走查样例**　同一主题选择 ALCE 与 ASQA。Agent 在 ALCE 正文找到使用 ASQA 的上下文，再读 ASQA 对任务的定义。提纲中可展开两篇的不同作用并打开相应 PDF 页。用户审阅后采纳一项，下轮综合能用 `wiki_search` 找到它，通过 `paper_read` 核对原文。为 ASQA 加新版后，受影响的条目显示待复核。Agent 在新版中重新检索并可生成对原条目的复核建议。
 
 评估调用允许在任务输入中加入 `mode`。默认 `wiki`，`agent` 使用全文工具，`fixed` 只使用一次固定检索所得材料。三种方式使用同一模型、同一论文范围及最多 36 个全文片段的阅读预算。
-
-## 论文练习
-
-`practice_generate` 通过 `task.prepare → task.start` 发起。输入为学习目标 `question`、1–8 个当前 `source_versions` 和出题数 `count`（1–10）。确认单列出可能发送的学习目标、论文标题及原文片段。题目必须带本轮读过、且能从原版本定位的逐字引句。输出部分题目时以 `partial` 返回，`result.question_ids` 列出可用题。没有可用题时以 `failed` 返回。
-
-| 接口 | 请求与行为 |
-| --- | --- |
-| `practice.questions` | `topic_id`，可选 `missed_only`、`due_only`；返回题目 ID、题干、原文版本、待复核状态及下次复习时间。 |
-| `practice.start` | `operation_id`、`topic_id`、1–20 个 `question_ids`；生成 `attempt_id`，打乱选项并固定题目版本。待复核题返回 `STALE_REVISION`。 |
-| `practice.attempt` | `topic_id`、`attempt_id`；按之前的选项顺序恢复练习。交卷前仅返回题目及选项。 |
-| `practice.submit` | `operation_id`、`topic_id`、`attempt_id` 和 `answers`（题目 ID → 从零开始的选项序号）。省略的题为未答。离线评分，返回总分、逐题正确选项、解释、证据锚点与下次复习时间。 |
-| `practice.history` | `topic_id`；返回练习 ID、状态、开始时间与交卷分数。 |
-
-答错或未答的题立即进入复习队列。连续答对按 1、3、7、14、30 天安排下一次复习。已有练习在论文更新后仍按发题时的内容评分；新练习需重新出题。交卷后可用 `evidence.open` 打开题目依据。
