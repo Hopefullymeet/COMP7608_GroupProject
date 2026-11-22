@@ -53,6 +53,9 @@
 
 ## 下一步
 
+- **主题证据图。** 已完成[解析、RAG 与 Wiki 的设计方案](docs/product-plan/PaperTrace_Evidence_Map_ZH.md)及[交互原型](docs/product-plan/PaperTrace_Evidence_Map.html)。六篇公开论文通过现有后端导入和七处原文页渲染。下一步将证据图接入主题综合结果，再对照难页解析及 Wiki 换版复核。
+
+
 - **执行引擎与产品功能对齐。** 前端接着收拢设置页并复测安装包。安排同题竞品对照，并单独验证 [运行时精简](docs/product-plan/Agentero_Parity_and_Settings_ZH.md)。
 
 
