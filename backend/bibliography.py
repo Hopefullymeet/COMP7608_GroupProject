@@ -39,7 +39,7 @@ def fetch(url, key=None):
     if key:
         headers["Authorization"] = f"Bearer {key}"
     try:
-        with build_opener(NoRedirect()).open(Request(url, headers=headers), timeout=6) as response:
+        with build_opener(NoRedirect()).open(Request(url, headers=headers), timeout=18 if url.startswith(CROSSREF.rstrip("/") + "?") else 6) as response:
             body = response.read(2_000_001)
     except HTTPError as error:
         if error.code in (401, 403):
@@ -144,57 +144,136 @@ def metadata_from_provider(provider, identifier):
         row = json_response(CROSSREF + quote(identifier, safe="/")).get("message", {})
         if not isinstance(row, dict) or doi(row.get("DOI") or "") != identifier:
             raise PublicServiceError("SERVICE_INVALID_RESPONSE", "Crossref returned a different work.")
-        dates = (row.get("published") or row.get("issued") or {}).get("date-parts") or [[]]
-        venue = next(iter(row.get("container-title") or []), "")
-        if row.get("type") == "proceedings-article":
-            venue = (row.get("event") or {}).get("name") or venue
-        result = {"title": next(iter(row.get("title") or []), ""), "doi": identifier,
-                  "authors": [" ".join(filter(None, (a.get("given"), a.get("family"))))
-                              for a in row.get("author") or []],
-                  "year": next(iter(dates[0]), None), "venue": venue,
-                  "metadata_url": f"https://doi.org/{identifier}"}
-        result.update({k: v for k, v in {
-            "item_type": row.get("type"), "publisher": row.get("publisher"), "volume": row.get("volume"),
-            "issue": row.get("issue"), "pages": row.get("page"), "article_number": row.get("article-number"),
-            "date": date_parts(dates), "url": (row.get("resource") or {}).get("primary", {}).get("URL"),
-            "journal_abbreviation": next(iter(row.get("short-container-title") or []), ""),
-        }.items() if isinstance(v, str) and v})
-        if row.get("type") == "journal-article":
-            result.update(venue_type="journal", issns=row.get("ISSN") or [])
-        if row.get("type") == "proceedings-article":
+        return crossref_metadata(row)
+    return arxiv_metadata(identifier, provider)
+
+
+def crossref_metadata(row):
+    identifier = doi(row.get("DOI"))
+    provider = "Crossref"
+    dates = (row.get("published") or row.get("issued") or {}).get("date-parts") or [[]]
+    venue = next(iter(row.get("container-title") or []), "")
+    if row.get("type") == "proceedings-article":
+        venue = (row.get("event") or {}).get("name") or venue
+    result = {"title": next(iter(row.get("title") or []), ""), "doi": identifier,
+              "authors": [" ".join(filter(None, (a.get("given"), a.get("family"))))
+                          for a in row.get("author") or []],
+              "year": next(iter(dates[0]), None), "venue": venue,
+              "metadata_url": f"https://doi.org/{identifier}"}
+    result.update({k: v for k, v in {
+        "item_type": row.get("type"), "publisher": row.get("publisher"), "volume": row.get("volume"),
+        "issue": row.get("issue"), "pages": row.get("page"), "article_number": row.get("article-number"),
+        "date": date_parts(dates), "url": (row.get("resource") or {}).get("primary", {}).get("URL"),
+        "journal_abbreviation": next(iter(row.get("short-container-title") or []), ""),
+    }.items() if isinstance(v, str) and v})
+    if row.get("type") == "journal-article":
+        result.update(venue_type="journal", issns=row.get("ISSN") or [])
+    if row.get("type") == "book-chapter":
+        containers = row.get("container-title") or []
+        result["venue"] = next(iter(reversed(containers)), venue)
+        if any(re.fullmatch(r"Computer Vision\s*[–—-]\s*ECCV\s+\d{4}", c, re.I) for c in containers):
             result["venue_type"] = "conference"
-            container = " ".join(row.get("container-title") or [])
-            track = conference_track(f"{container} {venue}")
-            if track:
-                result["publication_track"] = track
-                if track == "other":
-                    result["venue"] = container if conference_track(container) else venue
-    else:
-        try:
-            feed = ET.fromstring(fetch(ARXIV + "?" + urlencode({"id_list": identifier, "max_results": 1})))
-        except ET.ParseError:
-            raise PublicServiceError("SERVICE_INVALID_RESPONSE", "arXiv returned invalid metadata.") from None
-        entry = feed.find("a:entry", ATOM)
-        if entry is None:
-            raise PublicServiceError("NOT_FOUND", "arXiv did not find this identifier.", "correct_request", False)
-        def field(tag):
-            return " ".join(entry.findtext(tag, "", ATOM).split())
-        returned = arxiv_id(field("a:id"))
-        if (not returned or (returned != identifier and
-                             (re.search(r"v\d+$", identifier) or re.sub(r"v\d+$", "", returned) != identifier))):
-            raise PublicServiceError("NOT_FOUND", "arXiv did not find this identifier.", "correct_request", False)
-        published = field("a:published")[:4]
-        result = {"title": field("a:title"), "arxiv_id": returned,
-                  "authors": [a.findtext("a:name", "", ATOM) for a in entry.findall("a:author", ATOM)],
-                  "year": int(published) if published.isdigit() else None,
-                  "venue": field("x:journal_ref"), "metadata_url": f"https://arxiv.org/abs/{returned}",
-                  "venue_type": "preprint"}
-        if publication_doi := doi(field("x:doi")):
-            result["doi"] = publication_doi
+    if row.get("type") == "proceedings-article":
+        result["venue_type"] = "conference"
+        container = " ".join(row.get("container-title") or [])
+        track = conference_track(f"{container} {venue}")
+        if track:
+            result["publication_track"] = track
+            if track == "other":
+                result["venue"] = container if conference_track(container) else venue
+    return checked_metadata(result, provider)
+
+
+def arxiv_metadata(identifier, provider):
+    try:
+        feed = ET.fromstring(fetch(ARXIV + "?" + urlencode({"id_list": identifier, "max_results": 1})))
+    except ET.ParseError:
+        raise PublicServiceError("SERVICE_INVALID_RESPONSE", "arXiv returned invalid metadata.") from None
+    entry = feed.find("a:entry", ATOM)
+    if entry is None:
+        raise PublicServiceError("NOT_FOUND", "arXiv did not find this identifier.", "correct_request", False)
+    def field(tag):
+        return " ".join(entry.findtext(tag, "", ATOM).split())
+    returned = arxiv_id(field("a:id"))
+    if (not returned or (returned != identifier and
+                         (re.search(r"v\d+$", identifier) or re.sub(r"v\d+$", "", returned) != identifier))):
+        raise PublicServiceError("NOT_FOUND", "arXiv did not find this identifier.", "correct_request", False)
+    published = field("a:published")[:4]
+    result = {"title": field("a:title"), "arxiv_id": returned,
+              "authors": [a.findtext("a:name", "", ATOM) for a in entry.findall("a:author", ATOM)],
+              "year": int(published) if published.isdigit() else None,
+              "venue": field("x:journal_ref"), "metadata_url": f"https://arxiv.org/abs/{returned}",
+              "venue_type": "preprint"}
+    if publication_doi := doi(field("x:doi")):
+        result["doi"] = publication_doi
+    return checked_metadata(result, provider)
+
+
+def checked_metadata(result, provider):
     if not result["title"]:
         raise PublicServiceError("SERVICE_INVALID_RESPONSE", "The bibliographic record has no title.")
     result["authors"] = list(filter(None, result["authors"]))
     return {**result, "provider": provider}
+
+
+def recognize_publication(index, header, saved_title, authors):
+    """Match the paper header against registry records, excluding body and references."""
+    front = re.split(r"\b(?:abstract|references|bibliography|introduction)\b|摘要|参考文献", header,
+                     maxsplit=1, flags=re.I)[0][:3000]
+    text = normalize_venue(front)
+    title = index.get("title", "")
+    if not title or len(title) > 150 or re.search(r"accepted for publication|copyright|proceedings of|arxiv:", title, re.I):
+        title = saved_title.replace("_", " ")
+    def same_title(record):
+        candidate = normalize_venue(record.get("title", ""))
+        return len(candidate) >= 10 and (candidate == normalize_venue(saved_title)
+            or candidate == normalize_venue(title) or " " + candidate + " " in " " + text + " ")
+
+    preprint = None
+    identifier = index.get("doi") or index.get("arxiv")
+    if not identifier:
+        match = re.search(r"\b10\.\d{4,9}/[^\s<>]+", front, re.I)
+        identifier = match[0].rstrip(".,;)]") if match else None
+    if identifier:
+        try:
+            record = metadata_from_provider(*lookup_target(identifier))
+            if same_title(record) and record.get("venue_type") != "preprint":
+                return [record], True
+            if same_title(record) and record.get("venue_type") == "preprint":
+                preprint = record
+                if record.get("doi"):
+                    published = metadata_from_provider(*lookup_target(record["doi"]))
+                    if published.get("venue_type") in ("conference", "journal") and same_title(published):
+                        return [{**published, "arxiv_id": record["arxiv_id"]}], True
+        except PublicServiceError:
+            pass
+    if len(title.strip()) < 6:
+        return ([preprint], True) if preprint else ([], False)
+    query = {"query.title": title[:250], "rows": 5,
+             "select": "DOI,title,type,author,published,container-title,event,publisher,volume,issue,page,ISSN"}
+    if authors:
+        query["query.author"] = authors[0][:100]
+    try:
+        rows = json_response(CROSSREF.rstrip("/") + "?" + urlencode(query))["message"]["items"]
+    except PublicServiceError:
+        if preprint:
+            return [preprint], True
+        raise
+    candidates = {}
+    for row in rows:
+        if not doi(row.get("DOI")) or not row.get("title") or row.get("type") not in ("journal-article", "proceedings-article", "book-chapter", "posted-content"):
+            continue
+        record = crossref_metadata(row)
+        if same_title(record):
+            candidates[record["doi"]] = record
+    records = list(candidates.values())
+    if len(records) == 1:
+        names = [normalize_venue(author.get("family") or "") for row in rows
+                 if doi(row.get("DOI")) == records[0]["doi"] for author in row.get("author", [])]
+        author_text = normalize_venue(re.sub(r"(?<=[^\W\d_])\d+\b", "", front + " " + " ".join(authors)))
+        verified = any(name and " " + name + " " in " " + author_text + " " for name in names)
+        return records, verified
+    return (records, False) if records else (([preprint], True) if preprint else ([], False))
 
 
 def abstract_text(index):

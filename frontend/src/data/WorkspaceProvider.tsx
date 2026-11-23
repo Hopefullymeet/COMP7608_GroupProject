@@ -88,6 +88,12 @@ export function WorkspaceProvider({
     const sent = retryWrite(() => api.call(method, payload))
       .then((result) => {
         refresh()
+        if (!demo && method === 'library.import_pdf') {
+          const { paper_id } = result as Methods['library.import_pdf'][1]
+          void api.call('library.recognize_publication', { paper_id }).then(refresh).catch(() => {
+            // PDF import is complete. The inspector supports retrying an offline lookup.
+          })
+        }
         return result
       })
       .finally(() => {

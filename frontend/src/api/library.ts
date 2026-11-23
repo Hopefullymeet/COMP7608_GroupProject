@@ -66,7 +66,7 @@ export type VenueRankings = {
   }[]
 }
 type PaperDetails = {
-  paper_id: string; revision: string; manual_fields: (keyof PaperMetadata)[]; metadata: MetadataRecord; rankings: VenueRankings
+  paper_id: string; revision: string; manual_fields: (keyof PaperMetadata)[]; metadata: MetadataRecord; choices?: MetadataRecord[]; rankings: VenueRankings
 }
 export type LibraryMethods = {
   'file.pick': [{ purpose: 'papers' | 'draft' | 'backup' }, { files: Picked[] }]
@@ -86,6 +86,8 @@ export type LibraryMethods = {
     Write & { topic_id: string; preview_id: string; paper_id?: string },
     { paper_id: string; source_version_id: string; available_scope: 'metadata' | 'abstract' | 'full_text'; already_linked: boolean },
   ]
+  'library.recognize_publication': [{ paper_id: string }, { status: 'matched' | 'choose' | 'missing' | 'changed' }]
+  'library.choose_publication': [Write & { paper_id: string; doi: string }, { status: string }]
   'library.import_catalog': [Write & { scheme: string; edition: string; year: number; source_url: string; content: string }, {count: number}]
   'library.metadata': [{ paper_id: string; topic_id?: string } & { edition_year?: number }, PaperDetails]
   'library.update_metadata': [Write & PaperKey & { base_revision: string; changes: Partial<PaperMetadata> }, PaperDetails]

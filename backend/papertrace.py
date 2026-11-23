@@ -29,11 +29,11 @@ from citations import CitationWorkspace, init_citations
 from reader import Reader
 from wiki import CAPTURE_TASKS, CAPTURE_WRITES, TopicWiki, words
 from bibliography import (OPENALEX, PROVIDERS, PublicServiceError, arxiv_id, bibliography_records, doi, export_bibliography, identity_keys, imported_metadata,
-                          download_open_pdf, lookup_target, metadata_from_provider, normalize_venue, openalex_search, selected_metadata)
+                          download_open_pdf, lookup_target, metadata_from_provider, normalize_venue, openalex_search, recognize_publication, selected_metadata)
 from venue_ranks import SCHEMES, import_catalog, init_venue_ranks, issns, lookup_rankings
 
 
-BACKGROUND_RPC_METHODS = ("services.test", "library.preview_identifier", "library.preview_pdf", "candidate.decide")
+BACKGROUND_RPC_METHODS = ("library.recognize_publication", "services.test", "library.preview_identifier", "library.preview_pdf", "candidate.decide")
 
 
 def encode(value):
@@ -149,7 +149,7 @@ class Worker:
         "candidate.decide", "reader.bookmark", "note.save", "library.import_pdf", "library.set_alias", "synthesis.review",
         "reader.mark_save", "reader.mark_delete", "reader.answer_save", "reader.mark_to_wiki",
         "services.save", "profile.save", "preset.save",
-        "library.import_catalog", "library.commit_identifier", "library.update_metadata", "workspace.archive", "workspace.unarchive", "library.organize",
+        "library.choose_publication", "library.import_catalog", "library.commit_identifier", "library.update_metadata", "workspace.archive", "workspace.unarchive", "library.organize",
         "library.preview_bibliography", "library.commit_bibliography", "library.commit_zotero_attachment",
         "library.trash", "library.restore", "library.purge",
         "wiki.refresh", "wiki.chat", "wiki.edit", "wiki.clear_chat",
@@ -272,6 +272,8 @@ class Worker:
                     response["result"] = self.decide_operation(params)
                 elif method == "library.preview_identifier":
                     response["result"] = self.preview_identifier(params)
+                elif method == "library.recognize_publication":
+                    response["result"] = self.recognize_paper(params)
                 elif method == "library.preview_pdf":
                     response["result"] = self.research.preview_pdf(params)
                 else:
@@ -717,6 +719,14 @@ class Worker:
             target = self.paper_in_topic(params) if "paper_id" in params else None
             paper, linked = self.add_bibliographic_paper(topic, preview["metadata"], target)
             return {"paper_id": paper["paper_id"], **paper["source_versions"][0], "already_linked": linked}
+        if method == "library.choose_publication":
+            paper = self.get("paper", required(params, "paper_id"))
+            choices = paper.get("publication_choices", [])
+            record = next((r for r in choices if r.get("doi") == required(params, "doi")), None)
+            if not record:
+                raise invalid("Reload the publication matches.")
+            self.apply_publication(paper, record)
+            return {"status": "matched"}
         if method == "library.import_catalog":
             scheme, edition = required(params, "scheme"), required(params, "edition").strip()
             content, year = required(params, "content"), params.get("year")
@@ -1156,6 +1166,33 @@ class Worker:
             "paper_id": imported["paper_id"], "name": attachment["name"], "content": params.get("content"),
         })
 
+    def recognize_paper(self, params):
+        pid = required(params, "paper_id")
+        with self.lock:
+            paper = self.get("paper", pid)
+            version = paper["source_versions"][0]["source_version_id"]
+            revision = paper.get("metadata_revision")
+            row = self.db.execute("SELECT data FROM citation_index WHERE version_id=?", (version,)).fetchone()
+            index = json.loads(row[0]) if row else {}
+            passages = self.db.execute("""SELECT p.text FROM passage_lookup l JOIN paper_passages p
+                ON p.rowid=l.fts_rowid WHERE l.version_id=? AND l.page=1 ORDER BY l.ordinal LIMIT 4""", (version,))
+            header = " ".join(text for text, in passages)
+        records, confident = recognize_publication(index, header, paper["title"], paper["authors"])
+        with self.lock, self.db:
+            paper = self.get("paper", pid)
+            if version != paper["source_versions"][0]["source_version_id"] or revision != paper.get("metadata_revision"):
+                return {"status": "changed"}
+            if confident:
+                self.apply_publication(paper, records[0])
+                return {"status": "matched"}
+            paper["publication_choices"] = records
+            self.put("paper", pid, paper)
+            return {"status": "choose" if records else "missing"}
+
+    def apply_publication(self, paper, record):
+        paper.pop("publication_choices", None)
+        self.add_bibliographic_paper(None, record, paper)
+
     def preview_identifier(self, params):
         provider, identifier_ = lookup_target(required(params, "identifier"))
         with self.lock:
@@ -1204,6 +1241,7 @@ class Worker:
                 if metadata.get("venue_type") != "preprint" and found.get("publication"):
                     metadata.update(found["publication"])
                     source = "PDF"
+        details["choices"] = paper.get("publication_choices", [])
         details["rankings"] = lookup_rankings(self.db, metadata, year)
         if set(details["manual_fields"]) & {"venue", "issns"}:
             source = "Manual"
@@ -1310,7 +1348,7 @@ class Worker:
                     current[key] = value
             self.set_paper_metadata(paper, current)
         linked = topic in paper["topic_ids"]
-        if not linked:
+        if topic and not linked:
             paper["topic_ids"].append(topic)
         self.put("paper", paper["paper_id"], paper)
         return paper, linked

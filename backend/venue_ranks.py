@@ -104,6 +104,8 @@ def name_key(name):
 
 
 def conference_key(name):
+    if re.fullmatch(r"Computer Vision\s*[–—-]\s*ECCV\s+\d{4}", name, re.I):
+        return "eccv"
     name = re.sub(r"^(?:proceedings of (?:the )?)?(?:\d{4}\s+)?(?:\d+(?:st|nd|rd|th)\s+)?", "", name, flags=re.I)
     name = re.sub(r"\s*\([^)]*(?:volume|main conference|long papers)[^)]*\)\s*$", "", name, flags=re.I)
     name = re.sub(r"\s+(?:19|20)\d{2}$", "", name)

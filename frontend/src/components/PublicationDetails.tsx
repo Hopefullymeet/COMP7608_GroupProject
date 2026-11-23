@@ -5,25 +5,6 @@ import { useLanguage } from '../i18n'
 import type { MetadataRecord, PaperMetadata, VenueRankings } from '../api/library'
 
 type Rank = VenueRankings['items'][number]
-const labels = { quartile: 'Quartiles', index: 'Indexes', rank: 'Venue ratings' } as const
-const statuses = {
-  catalog_missing: 'Catalog not installed', venue_unknown: 'Publication venue is missing',
-  not_found: 'No match in the installed catalog', ambiguous: 'Check the venue or ISSN',
-  not_applicable: 'Not applicable to this publication type',
-} as const
-
-function Ranking({ rank }: { rank: Rank }) {
-  const { tr } = useLanguage()
-  return <li>
-    <strong>{rank.label}</strong> {rank.edition && <small>· {rank.edition} · {rank.year}</small>}
-    {rank.applicability === 'verify_track' && <p className="fine">{tr('Conference grade found. Confirm the paper track.')}</p>}
-    <ul>{rank.entries.map((entry) => <li key={JSON.stringify(entry)}>
-      <a href={entry.source_url} target="_blank" rel="noreferrer">{entry.value}</a>
-      {entry.category && <> · {entry.category}</>}
-    </li>)}</ul>
-  </li>
-}
-
 const fields: [keyof MetadataRecord, string][] = [
   ['item_type', 'Item type'],
   ['translated_title', 'Translated title'],
@@ -94,12 +75,13 @@ export function PublicationDetails({ topic, paper }: { topic: string; paper: str
   const { tr } = useLanguage()
   const workspace = useWorkspace()
   const [open, setOpen] = useState(false)
-  const [rankOpen, setRankOpen] = useState(false)
+  const [looking, setLooking] = useState(false)
+  const [notice, setNotice] = useState('')
   const [draft, edit] = useState<(Omit<PaperMetadata, 'issns'> & { issns: string; revision: string })>()
-  const entry = useRead('library.metadata', { ...(topic && {topic_id:topic}), paper_id: paper }, (open || rankOpen) && !workspace.demo)
+  const entry = useRead('library.metadata', { ...(topic && {topic_id:topic}), paper_id: paper }, !workspace.demo)
   const metadata = entry?.metadata
   const rankings = entry?.rankings.items ?? []
-  const unavailable = rankings.filter((item) => item.status !== 'matched' && item.status !== 'not_applicable')
+  const hits = rankings.filter(item => item.status === 'matched')
   return <><Disclosure className="publication-details" icon="book" title={tr('Publication details')} onOpenChange={setOpen}>
     <div className="publication-body">
     {open && !entry && <p role="status">{tr('Loading…')}</p>}
@@ -112,6 +94,22 @@ export function PublicationDetails({ topic, paper }: { topic: string; paper: str
           ? <a href={value} target="_blank" rel="noreferrer">{value}</a> : tr(value)}</dd></Fragment>
       })}</dl>
       {metadata.metadata_url && <a href={metadata.metadata_url} target="_blank" rel="noreferrer">{tr('Bibliographic source')}</a>}
+      <button className="link-btn" disabled={looking} onClick={async () => {
+        setLooking(true)
+        setNotice('')
+        try {
+          const { status } = await workspace.api.call('library.recognize_publication', {paper_id: paper})
+          workspace.refresh()
+          setNotice(status === 'matched' ? 'Publication updated' : status === 'missing' ? 'No reliable match' : '')
+        } catch { setNotice('Lookup failed. Try again.') }
+        finally { setLooking(false) }
+      }}>{tr(looking ? 'Searching…' : 'Find publication info')}</button>
+      {notice && <small role="status">{tr(notice)}</small>}
+      {entry.choices?.map(record => record.doi && <button className="ghost-btn" key={record.doi}
+        disabled={workspace.busy} onClick={() => void workspace.write('library.choose_publication',
+          {paper_id: paper, doi: record.doi!}).then(() => setNotice('Publication updated')).catch(workspace.report)}>
+        {record.title} · {record.venue || record.provider} · {record.year} · {record.doi}
+      </button>)}
       {topic && !draft && <button className="link-btn" onClick={() => edit({
         ...metadata, issns: metadata.issns?.join(', ') ?? '', revision: entry.revision,
       })}>{tr('Edit venue details')}</button>}
@@ -151,29 +149,15 @@ export function PublicationDetails({ topic, paper }: { topic: string; paper: str
         <button className="primary" disabled={workspace.busy}>{tr('Save')}</button>
         <button type="button" className="link-btn" onClick={() => edit(undefined)}>{tr('Cancel')}</button>
       </form>}
-    </>}
-    </div>
-  </Disclosure>
-  <Disclosure className="publication-details" icon="library" title={tr('Rankings and indexes')} onOpenChange={setRankOpen}>
-    <div className="publication-body">
-    {rankOpen && !entry && <p role="status">{tr('Loading…')}</p>}
-    {entry && <>
-      {(Object.keys(labels) as (keyof typeof labels)[]).map((metric) => {
-        const hits = rankings.filter((item) => item.status === 'matched' && item.metric === metric)
-        return hits.length > 0 && <div key={metric}>
-          <h4>{tr(labels[metric])}</h4><ul>{hits.map((rank) => <Ranking key={rank.scheme} rank={rank} />)}</ul>
-        </div>
-      })}
-      {unavailable.some(item => item.status === 'venue_unknown') &&
-        <p>{tr('Add the journal name, conference name or ISSN in Publication details to check rankings.')}</p>}
-      {unavailable.some(item => item.status !== 'venue_unknown') && <Disclosure title={tr('Other catalog results')}>
-        <dl>{(['not_found', 'ambiguous', 'catalog_missing'] as const).map(status => {
-          const names = unavailable.filter(item => item.status === status).map(item => item.label)
-          return names.length > 0 && <Fragment key={status}><dt>{tr(statuses[status])}</dt><dd>{names.join(' · ')}</dd></Fragment>
-        })}</dl>
-      </Disclosure>}
       <CatalogImport rankings={rankings} />
     </>}
     </div>
-  </Disclosure></>
+  </Disclosure>
+  {hits.length > 0 && <Disclosure className="publication-details" icon="library" title={tr('Rankings and indexes')}>
+    <div className="publication-body">{hits.map(rank => rank.entries.map(hit =>
+      <div key={JSON.stringify([rank.scheme, hit])}><strong>{rank.label}</strong> · <a href={hit.source_url}
+        target="_blank" rel="noreferrer">{hit.value}</a> {hit.category} <small>{rank.year}
+        {rank.applicability === 'verify_track' && ' · ' + tr('Verify paper track')}</small></div>
+    ))}</div>
+  </Disclosure>}</>
 }

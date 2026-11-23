@@ -96,3 +96,5 @@ BibTeX 使用桌面 worker 中的 Pybtex。缺解析依赖时，接口返回 `BI
 The library inspector displays populated bibliographic fields from the selected source. The import dialog previews Zotero RDF, CSL JSON, RIS and BibTeX before committing reviewed entries. A catalog paper can be inspected without a topic ID.
 
 `library.import_catalog` accepts an operation ID, scheme, distinct edition, year, HTTPS source URL and UTF-8 CSV content (up to 8 MB). Required columns are venue, venue_type and value. Optional columns include aliases, issns, category and source_url. The bundled CCF and CORE excerpts cover CVPR, ICCV and ECCV only.
+
+On desktop PDF import, publication recognition runs after the PDF is saved. The inspector can retry recognition for existing papers. The worker verifies registry titles against header text, and checks author evidence for a title-search match. Multiple matches require selection. Matched classification entries alone are shown in the inspector.
