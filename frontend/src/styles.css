@@ -357,6 +357,9 @@ mark.on { background: #efcabb; box-shadow: 0 2px 0 var(--accent); }
 .fulltext-note strong { color: var(--ink-2); display: block; margin-bottom: 2px; }
 
 /* ---------- evidence popover ---------- */
+.ev-marker { position: fixed; z-index: 40; }
+.ev-trigger { width: 30px; height: 30px; border-radius: 50%; color: var(--accent); background: var(--surface); border: 1px solid var(--line-2); box-shadow: var(--shadow); }
+.ev-trigger svg { vertical-align: middle; }
 .evidence { position: fixed; z-index: 40; background: var(--surface); border: 1px solid var(--line-2); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 14px 16px 12px; animation: rise 0.16s ease-out; }
 .ev-head { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; font-weight: 600; letter-spacing: 0.03em; color: var(--ink-3); text-transform: uppercase; margin: -4px -6px 6px 0; }
 .evidence blockquote { max-height: 26vh; overflow: auto; margin: 0 0 10px; font: 16px/1.5 var(--serif); color: var(--ink); border-left: 3px solid var(--accent); padding-left: 12px; }

@@ -5,6 +5,7 @@ const PATHS: Record<string, JSX.Element> = {
   trash: <><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></>,
   file: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h4" /></>,
   message: <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />,
+  messageDots: <><path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 21l1.6-5A8.5 8.5 0 1 1 21 11.5Z" /><path d="M8 11.5h.01m4-.01h.01m4-.01h.01" strokeLinecap="round" strokeWidth="2.6" /></>,
   paperList: <path d="M4 6h16M4 12h13M4 18h9" />,
   arrowDown: <path d="M12 5v14m-6-6 6 6 6-6" />,
   zoomIn: <><circle cx="10" cy="10" r="6.5" /><path d="m15 15 5 5M7 10h6m-3-3v6" /></>,

@@ -502,7 +502,7 @@ function Reader({ pdf }: { pdf?: PdfActions }) {
       <div className="pt-reading-content">
       {pdf && withPdf ? <><Suspense fallback={<p className="pt-pdf-loading" role="status">{tr('Opening PDF…')}</p>}>
         <PdfReader key={paper.id} topic={currentTopic(state)} version={paper.id} page={currentLocation?.page}
-          session={state.activeSessionId ?? undefined} resume={!location && !state.activeEvidence}
+          session={state.activeSessionId ?? undefined} resume={!location}
           target={currentLocation?.rect} citation={citation}
           onAsk={(selection) => pdf.ask(paper.id, selection)} onFind={pdf.find} onPaperInfo={setMode}
           onWiki={() => act.navigate({ view: 'wiki', topicId: currentTopic(state) })} />
