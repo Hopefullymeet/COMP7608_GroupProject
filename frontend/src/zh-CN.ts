@@ -1,5 +1,7 @@
 // Simplified Chinese interface messages, keyed by their English source text.
 export const zhCN: Readonly<Record<string, string>> = {
+  'More': '更多操作',
+  'Citation details': '引用详情',
   'Checking citations.': '正在核查引用。',
   'Check cited claims against selected papers': '用所选论文核对稿件中的引用',
   'The selected source could not be checked in this run.': '本次未能核对所选文献。',

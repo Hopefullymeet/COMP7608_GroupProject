@@ -1,13 +1,14 @@
 import { count, useLanguage } from '../i18n'
-import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { NEW_SESSION, allEvidence, currentTopic, evidenceFor, paperFor, papersOfTopic, sourceStatus, useStore } from '../data/store'
+import { lazy, Suspense, useContext, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { allEvidence, currentTopic, evidenceFor, paperFor, papersOfTopic, sourceStatus, useStore } from '../data/store'
 import { QUESTIONS } from '../data/scripts'
 import { quoteOffsets } from '../components/quoteRange'
 import { EvidencePopover } from '../components/EvidencePopover'
 import { Icon, Spinner } from '../components/Icon'
 import { scrollWithin } from '../components/util'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
-import { Dialog } from '../components/PageHead'
+import { createPortal } from 'react-dom'
+import { Dialog, HeaderActions } from '../components/PageHead'
 import { FigureSearch } from '../components/FigureSearch'
 import { PublicationDetails } from '../components/PublicationDetails'
 import { AnswerText } from '../components/AnswerText'
@@ -116,6 +117,7 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
 }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
+  const actions = useContext(HeaderActions)
   const [text, setText] = useState('')
   const endRef = useRef<HTMLDivElement>(null)
   const session = state.sessions.find((s) => s.id === state.activeSessionId)
@@ -151,11 +153,10 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
 
   return (
     <section className="chat" aria-label={tr('Conversation')}>
-      <div className="session-title">
-        <Icon name="message" size={14} /> <span className="grow">{tr(session?.title ?? NEW_SESSION)}</span>
-        {messages.length > 0 && <button className="link-btn" onClick={() => act.newSession(currentTopic(state))}><Icon name="plus" size={13} />{' '}{tr('New session')}</button>}
+      {actions && createPortal(<>
+        {messages.length > 0 && <button className="icon-btn sm" title={tr('New session')} aria-label={tr('New session')} onClick={() => act.newSession(currentTopic(state))}><Icon name="plus" size={15} /></button>}
         {controls}
-      </div>
+      </>, actions)}
       <div className="chat-scroll">
         {messages.length === 0 && selections.length === 0 && (
           <div className="chat-empty">

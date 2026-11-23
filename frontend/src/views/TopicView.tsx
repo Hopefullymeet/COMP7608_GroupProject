@@ -1,8 +1,9 @@
 import { useLanguage } from '../i18n'
-import type { ReactNode } from 'react'
-import { useStore, anyRunning, papersOfTopic, type Tab } from '../data/store'
+import { useState, type ReactNode } from 'react'
+import { useStore, papersOfTopic, type Tab } from '../data/store'
 import { DEMO_TOPIC, PAPERS } from '../data/fixtures'
-import { Icon, Spinner } from '../components/Icon'
+import { HeaderActions, HeaderContext, TraceButton } from '../components/PageHead'
+import { Icon } from '../components/Icon'
 import { useRead } from '../data/WorkspaceProvider'
 import { Discover } from './Discover'
 import { Read } from './Read'
@@ -30,22 +31,23 @@ export function TopicView({ topicId, tab, windowControls, comparison, liveResear
   const { tr } = useLanguage()
   const { state, act } = useStore()
   const topic = state.topics.find((t) => t.id === topicId)
+  const [actions, setActions] = useState<HTMLDivElement | null>(null)
   if (!topic) return null
-  const running = anyRunning(state)
   const session = state.sessions.find((s) => s.id === state.activeSessionId && s.topicId === topicId)
   const request = state.messages.find((m) => m.sessionId === session?.id && m.role === 'user')
   const papers = papersOfTopic(state, topicId)
   const tabs = TABS.filter((item) => item.id === 'synthesis' ? liveResearch : !state.mainline || (item.id !== 'compare' || !!comparison))
 
   return (
-    <div className="topic">
+    <HeaderActions.Provider value={actions}><div className="topic">
       <header className={windowControls ? 'topic-head topic-head--desktop' : 'topic-head'}
         data-tauri-drag-region={windowControls ? '' : undefined}>
         <button className="icon-btn" onClick={() => act.navigate({ view: 'home' })} aria-label={tr('Back to home')}><Icon name="arrowLeft" /></button>
         <div className="topic-title" data-tauri-drag-region={windowControls ? 'deep' : undefined}>
-          <h1 title={windowControls ? topic.title : undefined}>{topic.title}</h1>
-          <small>{topic.goal}</small>
+          <h1 title={topic.title}>{topic.title}</h1>
+          <HeaderContext text={tr(tab === 'read' ? session?.title || 'Read & ask' : TABS.find(item => item.id === tab)!.label)} />
         </div>
+        <div className="header-actions" ref={setActions} />
         {topic.scripted && (liveResearch ? (
           <details className="pt-topic-actions" onKeyDown={(event) => {
             if (event.key !== 'Escape' || !event.currentTarget.open) return
@@ -53,9 +55,7 @@ export function TopicView({ topicId, tab, windowControls, comparison, liveResear
             event.currentTarget.open = false
             event.currentTarget.querySelector('summary')?.focus()
           }}>
-            <summary className="ghost-btn">
-              {tr(tab === 'read' ? 'Research tools' : tabs.find((item) => item.id === tab)?.label ?? 'Research tools')}
-              <Icon name="chevronDown" size={14} />
+            <summary className="icon-btn" aria-label={tr('Research tools')} title={tr('Research tools')}><Icon name="more" size={17} />
             </summary>
             <nav aria-label={tr('Research tools')} className="pt-topic-menu">
               {tabs.map((item) => <button key={item.id} aria-current={tab === item.id ? 'page' : undefined}
@@ -64,10 +64,6 @@ export function TopicView({ topicId, tab, windowControls, comparison, liveResear
                   act.openTopic(topicId, item.id)
                 }}><Icon name={item.icon} size={15} /> {tr(item.label)}</button>)}
               <ManuscriptLinks topicId={topicId} />
-              <button onClick={(event) => {
-                event.currentTarget.closest('details')!.open = false
-                act.showTrace(!state.trace.open)
-              }}><Icon name="trace" size={15} /> {tr('Agent trace')}</button>
               {tab === 'read' && <button onClick={() => act.navigate({ view: 'home' })}>
                 <Icon name="x" size={15} /> {tr('Close Read & ask')}
               </button>}
@@ -83,7 +79,7 @@ export function TopicView({ topicId, tab, windowControls, comparison, liveResear
             ))}
           </nav>
         ))}
-        {(!liveResearch || running || state.trace.open) && <div className="head-meta">
+        <div className="head-meta">
           {!liveResearch && topic.scripted && (
             <>
               <span title={tr('Papers in this topic')}><Icon name="file" size={14} /> {papers.length}</span>
@@ -93,10 +89,8 @@ export function TopicView({ topicId, tab, windowControls, comparison, liveResear
               </>}
             </>
           )}
-          <button className={`trace-btn ${state.trace.open ? 'on' : ''}`} onClick={() => act.showTrace(!state.trace.open)}>
-            {running ? <Spinner /> : <Icon name="trace" size={15} />}{' '}{tr('Agent trace')}
-          </button>
-        </div>}
+          <TraceButton />
+        </div>
         {windowControls}
       </header>
 
@@ -132,6 +126,6 @@ export function TopicView({ topicId, tab, windowControls, comparison, liveResear
           </div>
         ) : tab === 'synthesis' && liveResearch ? <LiteratureWorkbench key={topicId} topicId={topicId} /> : tab === 'discover' ? <Discover /> : tab === 'read' ? <Read /> : (comparison ?? <Compare />)}
       </div>
-    </div>
+    </div></HeaderActions.Provider>
   )
 }

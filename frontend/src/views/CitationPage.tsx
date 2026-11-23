@@ -1,7 +1,7 @@
 import { useLanguage, type Message } from '../i18n'
 import { useState } from 'react'
 import { useStore } from '../data/store'
-import { Dialog, PageHead } from '../components/PageHead'
+import { Dialog, HeaderActions, PageHead } from '../components/PageHead'
 import { Icon } from '../components/Icon'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import type { AuditHistoryItem, Decision, ExportFormat, Finding, Report } from '../api/citation'
@@ -433,8 +433,10 @@ export function CitationPage() {
   const [opened, openReport] = useState<AuditHistoryItem>()
   const history = useRead('audit.history', {}, !demo && !topic)?.items
   const selected = state.topics.find(t => t.id === topic)
-  return <div className="page">
+  const [actions, setActions] = useState<HTMLDivElement | null>(null)
+  return <HeaderActions.Provider value={actions}><div className="page">
     <PageHead sub={tr('Check a manuscript against its selected sources')} trace title={tr('Citation check')} icon="shield">
+      <div className="header-actions audit-header-actions" ref={setActions} />
       {selected && <button className="ghost-btn" disabled={busy} onClick={() => { openReport(undefined); setTopic('') }}>
         {selected.title} <Icon name="chevronDown" size={14}/></button>}
     </PageHead>
@@ -456,5 +458,5 @@ export function CitationPage() {
         </>}
       </section> : demo ? <Manuscripts topic={topic} key={topic}/> : <PdfAudit topic={topic} initialReport={opened} key={topic}/>}
     </div>
-  </div>
+  </div></HeaderActions.Provider>
 }

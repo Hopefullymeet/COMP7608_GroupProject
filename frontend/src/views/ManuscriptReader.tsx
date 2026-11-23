@@ -1,5 +1,8 @@
 import { AuditText } from '../components/AuditText'
-import { lazy, Suspense } from 'react'
+import { Icon } from '../components/Icon'
+import { HeaderActions, HeaderContext } from '../components/PageHead'
+import { createPortal } from 'react-dom'
+import { lazy, Suspense, useContext } from 'react'
 const PdfReader = lazy(() => import('./PdfReader'))
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CitationMark, Report, Snapshot } from '../api/citation'
@@ -36,6 +39,8 @@ export function ManuscriptReader({ topic, draft, version, report, name, onAsk, o
   topic: string; draft: string; version: Snapshot; report?: Report; name: string; onAsk: (question: string, mark?: CitationMark) => Promise<void>; onError: (err: unknown) => void; onChoose: () => void
 }) {
   const { tr, language } = useLanguage()
+  const actions = useContext(HeaderActions)
+  const [panel, setPanel] = useState(true)
   const [view, setView] = useState<'audit' | 'ask'>('audit')
   const [question, setQuestion] = useState('')
   const [page, setPage] = useState(1)
@@ -62,7 +67,7 @@ export function ManuscriptReader({ topic, draft, version, report, name, onAsk, o
   }, [mark])
   useLayoutEffect(() => {
     const root = frame.current, end = heading.current, start = pin.current
-    if (!root || !end || !start || !mark) { setWire(''); return }
+    if (!panel || !root || !end || !start || !mark) { setWire(''); return }
     function measure() {
       if (!root || !end || !start) return
       const base = root.getBoundingClientRect(), a = start.getBoundingClientRect(), b = end.getBoundingClientRect()
@@ -77,17 +82,22 @@ export function ManuscriptReader({ topic, draft, version, report, name, onAsk, o
     observer.observe(root); observer.observe(start); observer.observe(end)
     root.addEventListener('scroll', measure, true)
     return () => { observer.disconnect(); root.removeEventListener('scroll', measure, true) }
-  }, [mark, view])
+  }, [mark, view, panel])
   return <section className="audit-reading">
-    <div className="audit-reader-tools"><button className="ghost-btn" onClick={onChoose}>‹ {tr('Choose your paper')}</button>
-      <strong title={name}>{name}</strong>{report && report.language !== language &&
-        <button className="ghost-btn" disabled={busy} onClick={onLocalizedCheck}>{tr('Generate an English report')}</button>}</div>
-    <div className="audit-spread inspecting" ref={frame}>
+    {actions && createPortal(<>
+      <HeaderContext text={name} />
+      <button className="icon-btn" title={tr('Citation details')} aria-label={tr('Citation details')} aria-expanded={panel} onClick={() => setPanel(v => !v)}><Icon name="panelRight" size={16}/></button>
+      <details className="pt-topic-actions"><summary className="icon-btn" title={tr('More')} aria-label={tr('More')}><Icon name="more" size={16}/></summary>
+        <div className="pt-topic-menu"><button onClick={onChoose}>{tr('Choose your paper')}</button>
+        {report && report.language !== language && <button disabled={busy} onClick={e => { e.currentTarget.closest('details')!.open = false; onLocalizedCheck() }}>{tr('Generate an English report')}</button>}</div>
+      </details>
+    </>, actions)}
+    <div className={'audit-spread' + (panel ? ' inspecting' : '')} ref={frame}>
       <Suspense fallback={<p>{tr('Opening PDF…')}</p>}><PdfReader topic={topic} version={version.version_id} draft={draft} onPage={setPage}
         pageOverlay={number => <CitationPins topic={topic} draft={draft} version={version} page={number} selected={mark}
-          onSelect={(value, button) => { pin.current = button; select(value); setView('audit') }}/>} /></Suspense>
-      {wire && mark && view === 'audit' && <svg className="audit-wire" aria-hidden="true"><path d={wire}/></svg>}
-      <aside className="audit-inspector" aria-label={tr('Citation check')}>
+          onSelect={(value, button) => { setPanel(true); pin.current = button; select(value); setView('audit') }}/>} /></Suspense>
+      {panel && wire && mark && view === 'audit' && <svg className="audit-wire" aria-hidden="true"><path d={wire}/></svg>}
+      <aside hidden={!panel} className="audit-inspector" aria-label={tr('Citation check')}>
         <nav className="audit-panel-nav" aria-label={tr('Citation check')}>
           <button aria-pressed={view === 'audit'} onClick={() => setView('audit')}>{tr('Citation check')}</button>
           <button aria-pressed={view === 'ask'} onClick={() => setView('ask')}>{tr('Ask AI')}</button>
@@ -136,7 +146,7 @@ export function ManuscriptReader({ topic, draft, version, report, name, onAsk, o
       </aside>
     </div>
     {data && remaining.length > 0 && <details><summary>{tr('Citations without a page marker')}</summary>
-      {remaining.map(s => <button className="audit-option" key={s.id} onClick={() => { pin.current = null; setView('audit'); select({
+      {remaining.map(s => <button className="audit-option" key={s.id} onClick={() => { setPanel(true); pin.current = null; setView('audit'); select({
         sentence_id:s.id, label:'', keys:[...s.cites,...(s.unresolved ?? [])], boxes:[] }) }}>{s.text}</button>)}</details>}
   </section>
 }
