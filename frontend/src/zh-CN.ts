@@ -305,6 +305,8 @@ export const zhCN: Readonly<Record<string, string>> = {
   'Show {0} more': '展开其余 {0} 项',
   'Search': '搜索',
   'Resize sidebar': '调整侧栏宽度',
+  'Conversation turns': '会话轮次',
+  '{0} results': '{0} 条结果',
   'paper_read': '阅读论文原文',
   'paper_search': '检索论文段落',
   'wiki_search': '检索 Wiki',

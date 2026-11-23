@@ -149,7 +149,6 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
   const { call, tick, Source } = source
   const [wiki, setWiki] = useState<Wiki>()
   const [error, setError] = useState('')
-  const [message, setMessage] = useState('')
   const [adding, setAdding] = useState<string>()
   const [working, setWorking] = useState(false)
   const autoRefreshed = useRef(false)
@@ -196,13 +195,6 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
   const scroll = useAnswerScroll(topicId, wiki?.pending_reply ? question?.message_id : undefined,
     latest?.role === 'assistant' ? question?.message_id : undefined, latest?.message_id, '')
 
-  async function send(event: FormEvent) {
-    event.preventDefault()
-    const text = message.trim()
-    if (!text) return
-    if (await run(() => call('wiki.chat', { ...scope, text }))) setMessage('')
-  }
-
   if (!wiki) return <div className="wiki-scroll">{error ? <p className="wiki-issue" role="alert">{error}</p>
     : <FlippingBook label={tr('Opening the Wiki…')} />}</div>
 
@@ -224,6 +216,7 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
   return <>
     <div className="wiki-scroll" ref={scroll.panel} onScroll={scroll.onScroll}>
       <div className="wiki-column">
+        {error && <p className="wiki-issue" role="alert">{error}</p>}
         {wiki.map_nodes && <WikiDirectory wiki={wiki} title={title} edit={edit} Source={Source} refresh={()=>void refresh()} busy={busy || working}/>}
         {directory && issue && <p className="wiki-issue" role="alert">{issue}</p>}
         {wiki.map_nodes && !!Object.keys(wiki.pending_removals ?? {}).length && <p>{tr('Pending deletion')} · {Object.values(wiki.pending_removals!).join(' / ')}</p>}
@@ -289,6 +282,7 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
 
         </details>
         {(wiki.thread.length > 0 || wiki.pending_reply) && <section className="wiki-thread" aria-label={tr('Conversation with the Wiki')}>
+          {!wiki.pending_reply && <button className="link-btn quiet" onClick={() => void run(() => call('wiki.clear_chat', scope))}>{tr('Clear conversation')}</button>}
           {wiki.thread.map((m) => <Message key={m.message_id} message={m} />)}
           {wiki.pending_reply && <div className="wiki-msg assistant" role="status" aria-label={tr('Thinking…')}>
             <div className="wiki-bubble wiki-typing"><span /><span /><span /></div>
@@ -299,24 +293,7 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
       </div>
     </div>
 
-    <form className="wiki-composer" onSubmit={(e) => void send(e)}>
-      {error && <p className="wiki-issue" role="alert">{error}</p>}
-      <div className="wiki-input">
-        <textarea aria-label={tr('Message the Wiki')} value={message} maxLength={2000} rows={1}
-          placeholder={summarized ? tr('Ask what this topic’s Wiki knows, or say “remember…” / “forget…”') : tr('Summarize the topic first to start a conversation.')}
-          disabled={!summarized}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit() } }} />
-        <button className="wiki-send" aria-label={tr('Send')} disabled={!summarized || busy || working || !message.trim()}>
-          <Icon name="arrowUp" size={16} />
-        </button>
-      </div>
-      <p className="wiki-hint">
-        {wiki.transfer ? tr('Messages and this topic’s Wiki are sent to {0}.', wiki.transfer.endpoint) : tr('Replies use this topic’s Wiki on this device.')}
-        {wiki.thread.length > 0 && !wiki.pending_reply && <>{' '}<button type="button" className="link-btn quiet"
-          onClick={() => void run(() => call('wiki.clear_chat', scope))}>{tr('Clear conversation')}</button></>}
-      </p>
-    </form>
+
   </>
 }
 

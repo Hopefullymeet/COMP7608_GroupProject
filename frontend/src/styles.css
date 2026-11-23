@@ -494,3 +494,10 @@ html, body, #root {overflow:hidden;overscroll-behavior:none}
 .chat-scroll { overflow-anchor:none; }
 
 .greeting-source { min-height:1.5em; margin:5px 0 12px; font-size:12px; line-height:1.5; color:var(--ink-3); }
+
+.chat-viewport { position: relative; display: flex; flex: 1; min-height: 0; }
+.chat-viewport .chat-scroll { min-width: 0; }
+.turn-rail { position: absolute; z-index: 1; left: 1px; top: 50%; transform: translateY(-50%); max-height: 76%; overflow-y: auto; scrollbar-width: none; }
+.turn-rail button { display: grid; place-items: center; width: 20px; height: 14px; border: 0; padding: 0; background: transparent; }
+.turn-rail button::after { content: ''; width: 6px; height: 2px; background: var(--ink-3); opacity: .45; }
+.turn-rail button:is(:hover, :focus-visible, [aria-current])::after { width: 10px; background: var(--ink); opacity: 1; }

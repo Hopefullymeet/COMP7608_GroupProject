@@ -501,6 +501,8 @@ class Dsh:
                                     for item in found:
                                         seen[item["passage_id"]] = item
                                 observation = f"{len(found)} result(s)."
+                                if name == "paper_search" and isinstance(args.get("query"), str):
+                                    observation += " " + args["query"][:180]
                             elif found.get("limit_reached"):
                                 limited = True
                                 observation = "Evidence budget reached."

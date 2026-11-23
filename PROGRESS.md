@@ -210,3 +210,5 @@ Reading answers now resolve version IDs to paper aliases or titles and localize 
 旧版阅读问答现在可展开已保存的步骤摘要。已核对历史记录中的片段数量，通过前端测试及 macOS 构建。
 
 按最新交互要求移除旧会话步骤摘要。新问答继续保存运行时返回的工具步骤。
+
+Wiki 已移除底部聊天框和发送提示。会话新增按提问跳转的侧边刻度，进入时定位最新轮次；简洁步骤合并连续同类调用，新检索记录查询词。六轮浏览器样例验证最新轮与首轮定位，前端测试和 macOS 构建通过。

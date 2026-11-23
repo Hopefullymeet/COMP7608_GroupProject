@@ -1,6 +1,6 @@
 import { usePreferences } from '../data/preferences'
 import { count, useLanguage } from '../i18n'
-import { lazy, Suspense, useContext, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { lazy, Suspense, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { allEvidence, currentTopic, evidenceFor, hasMessages, paperFor, papersOfTopic, sourceStatus, useStore } from '../data/store'
 import { QUESTIONS } from '../data/scripts'
 import { quoteOffsets } from '../components/quoteRange'
@@ -52,6 +52,16 @@ function AgentMessage({ m }: { m: ChatMessage }) {
   const prefs = usePreferences()
   const lastStep = run?.steps[run.steps.length - 1]
   const tools = run?.steps.filter((s) => s.kind === 'tool').length ?? 0
+  const stepGroups: NonNullable<typeof run>['steps'][] = []
+  for (const step of run?.steps ?? []) {
+    const group = stepGroups.at(-1)
+    if (prefs.steps !== 'detailed' && group?.[0].title === step.title) group.push(step)
+    else stepGroups.push([step])
+  }
+  function stepDetail(detail: string) {
+    const result = detail.match(/^([0-9]+) result\(s\)\.(?: (.*))?$/)
+    return result ? [result[2], tr('{0} results', result[1])].filter(Boolean).join(' · ') : tr(detail)
+  }
   const papers = papersOfTopic(state, currentTopic(state))
   const citationNumbers = new Map<string, number>()
   for (const segment of m.segments) {
@@ -68,9 +78,12 @@ function AgentMessage({ m }: { m: ChatMessage }) {
       {m.wikiTask && state.topics.find(t=>t.id===currentTopic(state))?.wikiTurns?.includes(m.wikiTask) && <small className="wiki-update"><Icon name="wiki" size={13}/>{tr('Wiki updated')}</small>}
       {run && run.steps.length > 0 && <details key={String(m.done) + prefs.collapse} open={!m.done || prefs.collapse === 'never'} className="chat-work-steps">
         <summary>{count(tr,run.steps.length,'step')}</summary>
-        <ol>{run.steps.map(step=><li key={step.id}>{tr(step.title)}
-          {prefs.steps === 'detailed' && <>{step.call && <code>{step.call}</code>}{step.detail && <p>{tr(step.detail)}</p>}</>}
-        </li>)}</ol>
+        <ul>{stepGroups.map(group => {
+          const step = group[0]
+          return <li key={step.id}>{tr(step.title)}{group.length > 1 && ' × ' + group.length}
+            {prefs.steps === 'detailed' && <>{step.call && <code>{step.call}</code>}{step.detail && <p>{stepDetail(step.detail)}</p>}</>}
+          </li>
+        })}</ul>
       </details>}
       {m.segments.length > 0 && (
         <div className="answer">
@@ -162,6 +175,37 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
   const scroll = useAnswerScroll(session?.id, agent && !agent.done ? turn : last?.role === 'user' && last.id.startsWith('user:') ? last.id.slice(5) : undefined,
     agent?.done ? turn : undefined, agent?.id, agent?.done ? '' : agent?.segments.map(s => s.text).join('') ?? '')
 
+  const turns = [
+    ...messages.filter(m => m.role === 'user').map(m => ({ id: m.id, label: m.segments[0]?.text ?? '' })),
+    ...selections.map(a => ({ id: 'selection:' + a.id, label: a.question })),
+  ]
+  const [visibleTurn, setVisibleTurn] = useState('')
+  const opened = useRef<string>()
+  function jumpToTurn(id: string) {
+    const panel = scroll.panel.current
+    const target = panel?.querySelector<HTMLElement>('[data-turn-id="' + CSS.escape(id) + '"]')
+    if (!target || !panel || !scroll.space.current) return
+    const inset = parseFloat(getComputedStyle(panel).paddingTop) || 0
+    const top = target.getBoundingClientRect().top - panel.getBoundingClientRect().top + panel.scrollTop - inset
+    const spacer = scroll.space.current
+    spacer.style.height = Math.ceil(Math.max(0, top + panel.clientHeight - panel.scrollHeight + spacer.offsetHeight)) + 'px'
+    panel.scrollTop = top
+    setVisibleTurn(id)
+  }
+  const latestTurn = turns.at(-1)?.id
+  useLayoutEffect(() => {
+    if (!latestTurn || !session || opened.current === session.id) return
+    opened.current = session.id
+    if (!state.qaRunning) jumpToTurn(latestTurn)
+  }, [session?.id, latestTurn, state.qaRunning])
+  function trackTurn() {
+    scroll.onScroll()
+    const panel = scroll.panel.current
+    if (!panel) return
+    const edge = panel.getBoundingClientRect().top + parseFloat(getComputedStyle(panel).paddingTop) + 2
+    const nodes = Array.from(panel.querySelectorAll<HTMLElement>('[data-turn-id]'))
+    setVisibleTurn((nodes.reverse().find(node => node.getBoundingClientRect().top <= edge) ?? nodes.at(-1))?.dataset.turnId ?? '')
+  }
   const send = async (t: string, fromComposer = false) => {
     if (!t.trim() || state.qaRunning || !canAsk) return
     const attached = fromComposer ? annotations.items : []
@@ -208,7 +252,12 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
         {messages.length > 0 && <button className="icon-btn sm" title={tr('New session')} aria-label={tr('New session')} onClick={() => act.newSession(currentTopic(state))}><Icon name="plus" size={15} /></button>}
         {controls}
       </>, actions)}
-      <div className="chat-scroll" ref={scroll.panel} onScroll={scroll.onScroll}>
+      <div className="chat-viewport">
+      {turns.length > 0 && <nav className="turn-rail" aria-label={tr('Conversation turns')}>
+        {turns.map(t => <button key={t.id} title={t.label} aria-label={t.label}
+          aria-current={visibleTurn === t.id ? 'location' : undefined} onClick={() => jumpToTurn(t.id)} />)}
+      </nav>}
+      <div className="chat-scroll" ref={scroll.panel} onScroll={trackTurn}>
         {messages.length === 0 && selections.length === 0 && (
           <div className="chat-empty">
             <h2>{tr('Start a fresh reading question')}</h2>
@@ -217,13 +266,13 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
         )}
         {messages.map((m) =>
           m.role === 'user'
-            ? <div key={m.id} className="msg user"><p>{m.segments[0]?.text}</p></div>
+            ? <div key={m.id} data-turn-id={m.id} className="msg user"><p>{m.segments[0]?.text}</p></div>
             : prefs.collapse === 'finished' && prefs.replies === 'latest' && m.done && messages.slice(messages.indexOf(m)+1).some(next=>next.role==='agent' && next.done)
               ? <details key={m.id}><summary>{tr('Earlier answer')}</summary><AgentMessage m={m}/></details>
               : <AgentMessage key={m.id} m={m} />,
         )}
         {selections.map((answer) => <div key={answer.id}>
-          <div className="msg user"><p>{answer.question}</p></div>
+          <div data-turn-id={'selection:' + answer.id} className="msg user"><p>{answer.question}</p></div>
           <div className="msg agent">
             <AnswerText text={answer.answer} />
             <button className="link-btn" onClick={() => onSource?.(answer)}>
@@ -234,6 +283,7 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
         <div ref={scroll.space} aria-hidden="true" style={{ flexShrink: 0 }} />
       </div>
 
+      </div>
       {(state.mainline ? readable.length > 0 : papers.length > 0) && <div className="chat-bottom">
         {suggestions.length > 0 && (
           <div className="suggest-row">
