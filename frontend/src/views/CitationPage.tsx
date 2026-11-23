@@ -6,6 +6,7 @@ import { Icon } from '../components/Icon'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import type { AuditHistoryItem, Decision, ExportFormat, Finding, Report } from '../api/citation'
 import { EvidenceLink } from './Notes'
+import { TopicChooser } from '../components/TopicChooser'
 import { PdfAudit } from './PdfAudit'
 
 function Manuscripts({ topic }: { topic: string }) {
@@ -427,7 +428,7 @@ function Manuscripts({ topic }: { topic: string }) {
 export function CitationPage() {
   const { demo, busy } = useWorkspace()
   const { tr, language } = useLanguage()
-  const { state, act } = useStore()
+  const { state } = useStore()
   const route = state.route.view === 'check' ? state.route : undefined
   const [topic, setTopic] = useState(route?.draftId ? route.topicId ?? '' : '')
   const [opened, openReport] = useState<AuditHistoryItem>()
@@ -435,19 +436,12 @@ export function CitationPage() {
   const selected = state.topics.find(t => t.id === topic)
   const [actions, setActions] = useState<HTMLDivElement | null>(null)
   return <HeaderActions.Provider value={actions}><div className="page">
-    <PageHead sub={tr('Check a manuscript against its selected sources')} trace title={tr('Citation check')} icon="shield">
+    <PageHead onBack={selected ? () => { openReport(undefined); setTopic('') } : undefined} backDisabled={busy} sub={tr('Check a manuscript against its selected sources')} trace title={tr('Citation check')} icon="shield">
       <div className="header-actions audit-header-actions" ref={setActions} />
-      {selected && <button className="ghost-btn" disabled={busy} onClick={() => { openReport(undefined); setTopic('') }}>
-        {selected.title} <Icon name="chevronDown" size={14}/></button>}
     </PageHead>
     <div className="page-body scroll">
       {!selected ? <section className="audit-chooser">
-        <h2>{tr('Choose a topic to begin')}</h2>
-        <div className="audit-options">{state.topics.map(t => <button key={t.id}
-          className="audit-option" onClick={() => setTopic(t.id)}>
-          <Icon name="book" size={19}/><span>{t.title}</span><span aria-hidden="true">›</span>
-        </button>)}</div>
-        {!state.topics.length && <button className="ghost-btn" onClick={() => act.newTopic()}>{tr('New topic')}</button>}
+        <TopicChooser onSelect={setTopic} />
         {history && history.length > 0 && <>
           <h3>{tr('Audit history')}</h3>
           <div className="audit-options">{history.map(item => <button key={item.report_id} className="audit-option"

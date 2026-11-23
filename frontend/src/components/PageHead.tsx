@@ -29,12 +29,14 @@ export function TraceButton() {
 }
 
 /** Header for the workspace pages (Library, Citation check, Models & services). */
-export function PageHead({ icon, title, sub, children, trace = false }: {
-  icon: string; title: string; sub: string; children?: ReactNode; trace?: boolean
+export function PageHead({ icon, title, sub, children, trace = false, onBack, backDisabled }: {
+  icon: string; title: string; sub: string; children?: ReactNode; trace?: boolean; onBack?: () => void; backDisabled?: boolean
 }) {
+  const { tr } = useLanguage()
   return (
     <header className="page-head" data-tauri-drag-region>
-      <Icon name={icon} size={17} />
+      {onBack ? <button className="icon-btn" aria-label={tr('Back to topics')} title={tr('Back to topics')}
+        disabled={backDisabled} onClick={onBack}><Icon name="arrowLeft" size={17} /></button> : <Icon name={icon} size={17} />}
       <h1 title={title} aria-description={sub}>{title}</h1>
       {children}
       {trace && <TraceButton />}

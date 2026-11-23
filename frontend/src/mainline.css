@@ -333,3 +333,31 @@
 .topic-body > .read .pt-reader-frame::before { content: ''; display: block; height: var(--header-fade); }
 .topic-body > .read :is(.pt-paper-directory, .pt-pdf-rail) { top: calc(12px + var(--header-fade)); }
 .header-context[data-truncated] { text-overflow: clip; mask-image: linear-gradient(to right, black calc(100% - 16px), transparent); }
+
+.wiki-page .page-head:has(.header-context) h1 { margin-inline-end: 0; flex: none; }
+.page-body:has(> .audit-reading) {
+  container-type: inline-size; padding: calc(var(--header-fade) + 8px) 12px 8px;
+  display: flex; flex-direction: column;
+}
+.page-body:has(> .audit-reading)::before { display: none; }
+.audit-reading { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; max-width: none; padding: 0; margin: 0; }
+.audit-reading > details { flex: none; max-height: 30%; overflow: auto; }
+.audit-reading .audit-spread { flex: 1; min-height: 0; grid-template-rows: minmax(0,1fr); }
+.audit-reading .audit-spread.inspecting { grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); gap: 12px; }
+.audit-spread > .pt-reader { align-self: stretch; grid-template-rows: minmax(0,1fr); }
+.audit-spread .pt-reader-frame { max-height: none; min-height: 0; }
+.audit-spread .audit-inspector { max-height: none; min-height: 0; overflow: auto; }
+@container (max-width: 650px) {
+  .audit-reading .audit-spread.inspecting {
+    grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(0,3fr) minmax(0,2fr); gap: 8px;
+  }
+  .audit-spread .audit-wire { display: none; }
+}
+@media (max-width: 1023px) {
+  .app:has(.audit-header-actions, .wiki-page) { min-width: 0; }
+}
+@media (max-width: 780px) {
+  .app:has(.audit-header-actions, .wiki-page) { flex-direction: column; }
+  .app:has(.audit-header-actions, .wiki-page) > .workspace-sidebar { width: 100%; max-height: 24dvh; }
+  .app:has(.audit-header-actions, .wiki-page) > .main { min-height: 0; }
+}

@@ -5,7 +5,8 @@ import { useWorkspace } from '../data/WorkspaceProvider'
 import { errorText } from '../api/contract'
 import type { Wiki, WikiEdit, WikiEntry, WikiKind, WikiMessage, WikiMethods, WikiOrigin } from '../api/wiki'
 import { Icon } from '../components/Icon'
-import { PageHead } from '../components/PageHead'
+import { TopicChooser } from '../components/TopicChooser'
+import { HeaderContext, PageHead } from '../components/PageHead'
 import { EvidenceLink } from './Notes'
 
 type Params<M extends keyof WikiMethods> = Omit<WikiMethods[M][0], 'operation_id'>
@@ -301,21 +302,16 @@ export function WikiPage() {
   const { tr } = useLanguage()
   const { state } = useStore()
   const routed = state.route.view === 'wiki' ? state.route.topicId : undefined
-  const [selected, select] = useState('')
-  const topic = state.topics.find((t) => t.id === (selected || routed))?.id ?? state.topics[0]?.id
+  const [selected, select] = useState(routed ?? '')
+  const topic = state.topics.find(t => t.id === selected)
   return (
     <div className="page wiki-page">
-      <PageHead icon="book" title={tr('Wiki')} sub={tr('Long-term memory for the whole topic')}>
-        {topic && <select className="lib-select" aria-label={tr('Research topic')} value={topic}
-          onChange={(e) => select(e.currentTarget.value)}>
-          {state.topics.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
-        </select>}
+      <PageHead icon="book" title={tr('Wiki')} sub={tr('Long-term memory for the whole topic')}
+        onBack={topic ? () => select('') : undefined}>
+        {topic && <HeaderContext text={topic.title} />}
       </PageHead>
-      {topic ? <TopicWiki key={topic} topicId={topic} />
-        : <div className="wiki-scroll"><section className="wiki-empty">
-          <span className="wiki-empty-icon" aria-hidden="true"><Icon name="book" size={30} /></span>
-          <h2>{tr('Create a topic to start its Wiki.')}</h2>
-        </section></div>}
+      {topic ? <TopicWiki key={topic.id} topicId={topic.id} />
+        : <div className="page-body scroll"><section className="audit-chooser"><TopicChooser onSelect={select} /></section></div>}
     </div>
   )
 }

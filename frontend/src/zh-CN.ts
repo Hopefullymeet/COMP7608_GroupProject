@@ -2,6 +2,7 @@
 export const zhCN: Readonly<Record<string, string>> = {
   'Previous supporting passage': '上一段依据',
   'Next supporting passage': '下一段依据',
+  'Back to topics': '返回主题选择',
   'More': '更多操作',
   'Citation details': '引用详情',
   'Checking citations.': '正在核查引用。',
