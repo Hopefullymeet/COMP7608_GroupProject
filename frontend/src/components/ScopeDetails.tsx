@@ -8,6 +8,7 @@ export function ScopeDetails({
 }) {
   const { tr } = useLanguage()
   const { input, budget } = scope
+  const limit = (value: number | null) => value?.toLocaleString() ?? tr('Unlimited')
   const versions =
     scope.source_versions ??
     ('sources' in input.input
@@ -35,8 +36,8 @@ export function ScopeDetails({
       )}
       {budget && (
         <small>
-          {tr('Limits ·')}{' '}{budget.calls}{' '}{tr('calls ·')}{' '}{budget.tokens.toLocaleString()}{' '}{tr('tokens ·')}{' '}{budget.minutes}{' '}{tr('min · USD')}{' '}
-          {budget.cost}
+          {tr('Limits ·')}{' '}{limit(budget.calls)}{' '}{tr('calls ·')}{' '}{limit(budget.tokens)}{' '}{tr('tokens ·')}{' '}{limit(budget.minutes)}{' '}{tr('min · USD')}{' '}
+          {limit(budget.cost)}
         </small>
       )}
     </div>

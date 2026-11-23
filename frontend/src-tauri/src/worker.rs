@@ -19,6 +19,7 @@ const RESEARCH_TOOLS: &[u8] = include_bytes!("../../../backend/research-tools.mj
 const CITATIONS: &[u8] = include_bytes!("../../../backend/citations.py");
 const READER: &[u8] = include_bytes!("../../../backend/reader.py");
 const DSH: &[u8] = include_bytes!("../../../backend/dsh.py");
+const CREDENTIALS: &[u8] = include_bytes!("../../../backend/credentials.py");
 const BIBLIOGRAPHY: &[u8] = include_bytes!("../../../backend/bibliography.py");
 const VENUE_RANKS: &[u8] = include_bytes!("../../../backend/venue_ranks.py");
 type Reply = Result<Value, String>;
@@ -47,6 +48,7 @@ impl Worker {
         let mut hash = DefaultHasher::new();
         WORKER.hash(&mut hash);
         DSH.hash(&mut hash);
+        CREDENTIALS.hash(&mut hash);
         CITATIONS.hash(&mut hash);
         READER.hash(&mut hash);
         LITERATURE.hash(&mut hash);
@@ -59,6 +61,7 @@ impl Worker {
         let script = runtime.join("papertrace.py");
         for (path, contents) in [
             (&script, WORKER), (&runtime.join("dsh.py"), DSH),
+            (&runtime.join("credentials.py"), CREDENTIALS),
             (&runtime.join("literature.py"), LITERATURE), (&runtime.join("workbench.py"), WORKBENCH),
             (&runtime.join("research-tools.mjs"), RESEARCH_TOOLS),
             (&runtime.join("citations.py"), CITATIONS),

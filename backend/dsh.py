@@ -6,14 +6,19 @@ import os
 from pathlib import Path
 import queue
 import re
+from shutil import which
 import subprocess
 import tempfile
 import threading
 import time
 
+from credentials import deepseek_api_key
 
-ENDPOINT = "https://api.deepseek.com/anthropic"
+
+ENDPOINT = "https://api.deepseek.com"
+LEGACY_ENDPOINT = "https://api.deepseek.com/anthropic"
 MODEL = "deepseek-flash"
+NPM_CLI = Path("node_modules/@deepseek-ai/dsh/lib/bin.js")
 DISABLED_TOOLS = (
     "tool-fs", "tool-working-directory", "terminal-bash", "terminal-pwsh",
     "persistent-bash", "persistent-pwsh", "mcp-resources", "compaction-basic", "image-offload",
@@ -72,40 +77,58 @@ def read_json_answer(text, seen):
 
 
 class Dsh:
-    def __init__(self, node, cli, key, workspace):
+    def __init__(self, node, cli, key, workspace, *, use_system_credential=False):
         self.node = node
         self.cli = Path(cli).resolve()
-        self.key = key
+        self._key = key
+        self._use_system_credential = use_system_credential
         self.endpoint = ENDPOINT
         self.model = MODEL
         self.workspace = Path(workspace)
 
-    def for_model(self, model):
+    @property
+    def key(self):
+        return deepseek_api_key() if self._use_system_credential else self._key
+
+    def for_model(self, model, endpoint=ENDPOINT):
         runtime = copy(self)
         runtime.model = model
+        runtime.endpoint = endpoint
+        runtime._key = self.key
+        runtime._use_system_credential = False
         return runtime
 
     @classmethod
     def configured(cls, directory):
         cli = os.getenv("PAPERTRACE_AGENT_CLI") or os.getenv("PAPERTRACE_DSH_CLI")
+        if not cli and os.name == "nt":
+            shim = which("dsh.cmd")
+            appdata = os.getenv("APPDATA")
+            prefixes = [Path(shim).parent] if shim else []
+            if appdata:
+                prefixes.append(Path(appdata) / "npm")
+            cli = next((prefix / NPM_CLI for prefix in prefixes if (prefix / NPM_CLI).is_file()), None)
         if not cli:
             return None
         return cls(os.getenv("PAPERTRACE_AGENT_NODE") or os.getenv("PAPERTRACE_DSH_NODE", "node"), cli,
-                   os.getenv("DEEPSEEK_API_KEY"), directory)
+                   None, directory, use_system_credential=True)
+
+    def tools_entry(self):
+        npm_tools = Path("node_modules/@deepseek-ai/dsh-tools/lib/index.js")
+        candidates = [self.cli.parent.parent / npm_tools]
+        if len(self.cli.parents) >= 4:
+            root = self.cli.parents[3]
+            candidates.extend((root / "packages/core/tools/lib/index.js", root.parent / npm_tools))
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+        raise failure("MODEL_UNAVAILABLE", False, "configure_service")
 
     def check(self):
         if not self.key:
             raise failure("SERVICE_AUTH_FAILED", False, "configure_service")
         if not self.cli.is_file():
             raise failure("MODEL_UNAVAILABLE", False, "configure_service")
-
-    def probe(self, cancelled):
-        self.check()
-        with tempfile.TemporaryDirectory(prefix="dsh-check-", dir=self.workspace) as folder:
-            root = Path(folder)
-            patch = root / "papertrace.patch.yml"
-            self.write_patch(patch, root, None)
-            self.run(root, patch, {}, "Reply with OK.", cancelled, probe=True)
 
     def answer(self, question, sources, cancelled, context="paper abstract passages"):
         self.check()
@@ -125,9 +148,7 @@ class Dsh:
             "Answer in the language of the question.\n"
             f"Approved passage IDs: {json.dumps(list(passages))}\nResearch question: {question}"
         )
-        tools = self.cli.parents[3] / "packages/core/tools/lib/index.js"
-        if not tools.is_file():
-            raise failure("MODEL_UNAVAILABLE", False, "configure_service")
+        tools = self.tools_entry()
         with tempfile.TemporaryDirectory(prefix="dsh-", dir=self.workspace) as folder:
             root = Path(folder)
             scope = root / "scope.json"
@@ -273,9 +294,7 @@ class Dsh:
         return result
 
     def run_research(self, prompt, sources, wiki, cancelled, mode, progress, question):
-        tools = self.cli.parents[3] / "packages/core/tools/lib/index.js"
-        if not tools.is_file():
-            raise failure("MODEL_UNAVAILABLE", False, "configure_service")
+        tools = self.tools_entry() if mode != "fixed" else None
         with tempfile.TemporaryDirectory(prefix="dsh-", dir=self.workspace) as folder:
             root = Path(folder)
             scope = root / "scope.json"
@@ -284,9 +303,10 @@ class Dsh:
                                          "sources": sources, "wiki": wiki, **budget},
                                         ensure_ascii=False), encoding="utf-8")
             plugin = root / "research-tools.mjs"
-            plugin.write_text(Path(__file__).with_name("research-tools.mjs").read_text(encoding="utf-8")
-                              .replace('"__TOOLS__"', json.dumps(tools.as_uri()))
-                              .replace('"__SCOPE__"', json.dumps(str(scope))), encoding="utf-8")
+            if tools:
+                plugin.write_text(Path(__file__).with_name("research-tools.mjs").read_text(encoding="utf-8")
+                                  .replace('"__TOOLS__"', json.dumps(tools.as_uri()))
+                                  .replace('"__SCOPE__"', json.dumps(str(scope))), encoding="utf-8")
             patch = root / "papertrace.patch.yml"
             self.write_patch(patch, root, plugin if mode != "fixed" else None)
             fixed = self.fixed_search(question, sources) if mode == "fixed" else {}
@@ -321,7 +341,7 @@ class Dsh:
             *([{"insert": [{"id": "papertrace-paper-tools", "name": str(plugin)}]}] if plugin else []),
         ]), encoding="utf-8")
 
-    def run(self, root, patch, passages, prompt, cancelled, research=False, progress=None, probe=False):
+    def run(self, root, patch, passages, prompt, cancelled, research=False, progress=None):
         env = {k: v for k, v in os.environ.items() if not k.startswith(("DSH_", "DEEPSEEK_", "PAPERTRACE_"))
                and k not in ("NODE_OPTIONS", "NODE_PATH", "NODE_EXTRA_CA_CERTS", "NODE_TLS_REJECT_UNAUTHORIZED")}
         env.update(DSH_HOME=str(root / "home"), DSH_TELEMETRY_DISABLED="1", DSH_PRIMARY_RUNTIME="",
@@ -349,8 +369,8 @@ class Dsh:
         reader = threading.Thread(target=read, daemon=True)
         reader.start()
         started = time.monotonic()
-        deadline = started + (8 if probe else 180 if research else 90)
-        max_tokens = 32 if probe else 5400 if research else 800
+        deadline = started + (180 if research else 90)
+        max_tokens = 5400 if research else 800
         calls, seen, text = {}, dict(passages) if research else {}, ""
         trace, step_count = [], 0
         limited = False
@@ -458,12 +478,10 @@ class Dsh:
                 raise failure("SERVICE_AUTH_FAILED", False, "configure_service")
             if "402" in issues:
                 raise failure("SERVICE_QUOTA_EXHAUSTED", False, "check_quota")
-            if probe and "429" in issues:
+            if "429" in issues:
                 raise failure("SERVICE_RATE_LIMITED", True, "retry")
             if reason not in ("completed",) or not text:
                 raise failure()
-            if probe:
-                return
             if research:
                 raw = json.loads(re.sub(r"\A```(?:json)?\s*|\s*```\Z", "", text.strip(), flags=re.IGNORECASE))
                 if not isinstance(raw, dict):

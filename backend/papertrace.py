@@ -4,6 +4,7 @@ import base64
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 import datetime
+from http.client import HTTPException
 import json
 import math
 import os
@@ -13,9 +14,13 @@ import re
 import sqlite3
 import sys
 import threading
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
 
-from dsh import Dsh, DshFailure, ENDPOINT, MODEL
+from credentials import deepseek_api_key, system_key, store
+from dsh import Dsh, DshFailure, ENDPOINT, LEGACY_ENDPOINT, MODEL
 from literature import LiteratureError, MAX_VERSIONS, digest, init_corpus
 from workbench import Workbench
 from citations import CitationWorkspace, init_citations
@@ -50,6 +55,7 @@ PUBMEDQA = {
     "read_scope": "abstract",
 }
 QUOTE = "the corresponding abstract without its conclusion"
+DEFAULT_BUDGET = dict.fromkeys(("calls", "tokens", "minutes", "cost"))
 
 
 class RpcError(Exception):
@@ -74,6 +80,60 @@ def required(params, key):
     if not isinstance(value, str) or not value.strip():
         raise invalid(f"{key} must be a nonempty string.")
     return value
+
+
+def model_endpoint(value):
+    endpoint = value.strip().rstrip("/")
+    try:
+        url = urlsplit(endpoint)
+        port = url.port
+        if (url.scheme in ("http", "https") and url.hostname and url.username is None
+                and (port is None or port > 0) and not re.search(r'[\s\x00-\x1f\x7f\\?#<>"`]', endpoint)):
+            return ENDPOINT if endpoint == LEGACY_ENDPOINT else endpoint
+    except ValueError:
+        pass
+    raise invalid("Enter an HTTP(S) base URL without credentials, query parameters or fragments.")
+
+
+class NoServiceRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def probe_model(endpoint, model, key):
+    if not key:
+        return {"ok": False, "message": "Save a DeepSeek API key before testing the connection."}
+    request = Request(endpoint + "/chat/completions", data=encode({
+        "model": model, "messages": [{"role": "user", "content": "Reply with OK."}],
+        "max_tokens": 16, "stream": False,
+    }).encode("utf-8"), headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+    try:
+        with build_opener(NoServiceRedirect()).open(request, timeout=8) as response:
+            reply = json.loads(response.read(65536))
+        choices = reply.get("choices") if isinstance(reply, dict) else None
+        if isinstance(choices, list) and choices and isinstance(choices[0], dict) and isinstance(choices[0].get("message"), dict):
+            return {"ok": True, "message": "The saved endpoint and model responded successfully."}
+        message = "The endpoint returned an invalid Chat Completions response."
+    except HTTPError as error:
+        status = error.code
+        error.close()
+        if 300 <= status < 400:
+            message = "The endpoint redirected the request. Enter its final base URL."
+        else:
+            message = {
+                401: "The endpoint rejected the API key. Check the saved key.",
+                402: "The endpoint reported insufficient balance.",
+                403: "The endpoint denied access. Check the API key and model permissions.",
+                404: "The endpoint or model was not found. Check the base URL and model ID.",
+                429: "The endpoint is rate limiting requests. Try again shortly.",
+            }.get(status, f"The endpoint returned HTTP {status}.")
+    except (OSError, HTTPException) as error:
+        cause = error.reason if isinstance(error, URLError) else error
+        message = ("The endpoint did not respond in time." if isinstance(cause, TimeoutError)
+                   else "Could not reach the endpoint. Check the base URL and network.")
+    except (ValueError, RecursionError):
+        message = "The endpoint returned an invalid Chat Completions response."
+    return {"ok": False, "message": message}
 
 
 class Worker:
@@ -244,17 +304,53 @@ class Worker:
             return result
         return self.dispatch(method, params, after)
 
-    def services_config(self):
+    def credential_status(self):
+        stored = bool(system_key())
+        return {"configured": stored or bool(os.getenv("DEEPSEEK_API_KEY")), "stored": stored}
+
+    def update_credential(self, params):
+        if required(params, "id") != MODEL:
+            raise missing("This service was not found.")
+        action = params.get("action")
+        if action not in ("save", "delete"):
+            raise invalid("Choose whether to save or remove the stored API key.")
+        if action == "save":
+            key = required(params, "api_key").strip()
+            if not re.fullmatch(r"[!-~]{1,512}", key):
+                raise invalid("Enter an API key without spaces.")
+        try:
+            vault = store(sys.platform)
+            if vault is None:
+                raise RpcError(-32015, "CREDENTIALS_HOST_REQUIRED", "configure_service",
+                               "Configure the DeepSeek API key in the desktop launch environment.")
+            if action == "save":
+                vault.save(key)
+            else:
+                vault.delete()
+            stored_key = vault.read()
+            if stored_key != (key if action == "save" else None):
+                raise OSError("Credential readback did not match the requested change.")
+        except (OSError, UnicodeError):
+            raise RpcError(-32015, "CREDENTIAL_STORE_FAILED", "configure_service",
+                           "The system credential store could not complete the request.") from None
+        return {"configured": bool(stored_key or os.getenv("DEEPSEEK_API_KEY")),
+                "stored": bool(stored_key)}
+
+    def service_settings(self):
         stored = self.rows("service_config")
-        settings = stored[0] if stored else {"revision": "local-contract", "model": MODEL}
-        available = bool(self.dsh and self.dsh.key)
+        return {"revision": "local-contract", "model": MODEL, "endpoint": ENDPOINT, **(stored[0] if stored else {})}
+
+    def services_config(self):
+        settings = self.service_settings()
+        credential = self.credential_status()
         return {"revision": settings["revision"], "model_id": MODEL, "models": [{
-            "id": MODEL, "label": "DeepSeek", "model": settings["model"], "endpoint": ENDPOINT,
-            "local": False, "credential_configured": available,
-        }], "budget": {
-            "calls": 4 if self.dsh else 0, "tokens": 3200 if self.dsh else 0,
-            "minutes": 1.5 if self.dsh else 1, "cost": 0,
-        }, "ask_before_overage": True, "services": [] if self.discovery_fixture else [{
+            "id": MODEL, "label": "DeepSeek", "model": settings["model"], "endpoint": settings["endpoint"],
+            "local": False, "credential_configured": credential["configured"],
+            "credential_stored": credential["stored"],
+            "credential_store": sys.platform in ("win32", "darwin"),
+        }], "budget": settings.get("budget", DEFAULT_BUDGET.copy()),
+            "ask_before_overage": settings.get("ask_before_overage", True),
+            "services": [] if self.discovery_fixture else [{
             "id": "openalex", "label": "OpenAlex", "kind": "search", "enabled": True,
             "status": "Available", "fields": ["year", "venue"],
         }]}
@@ -270,17 +366,33 @@ class Worker:
         model = required(models[0], "model").strip()
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", model):
             raise invalid("Use a model ID with up to 128 letters, digits, dots, underscores, or hyphens.")
-        if (models[0].get("endpoint") != ENDPOINT or params.get("services") != config["services"]
-                or params.get("budget") != config["budget"] or params.get("ask_before_overage") is not True):
-            raise RpcError(-32016, "SETTINGS_READ_ONLY", "correct_request", "Only the model ID can currently be edited.")
-        if model != config["models"][0]["model"]:
-            self.put("service_config", "active", {"revision": identifier(), "model": model})
+        endpoint = model_endpoint(required(models[0], "endpoint"))
+        if params.get("services") != config["services"]:
+            raise RpcError(-32016, "SETTINGS_READ_ONLY", "correct_request", "The service list is read-only.")
+        budget = params.get("budget")
+        if not isinstance(budget, dict) or budget.keys() != DEFAULT_BUDGET.keys():
+            raise invalid("Provide all four budget limits.")
+        for key, limit in budget.items():
+            if limit is None:
+                continue
+            if (type(limit) not in (int, float) or not 0 <= limit <= 2**53 - 1
+                    or (key in ("calls", "tokens") and limit != int(limit))):
+                raise invalid("Budget limits must be nonnegative numbers or null. Calls and tokens must be whole numbers.")
+        ask = params.get("ask_before_overage")
+        if type(ask) is not bool:
+            raise invalid("ask_before_overage must be a boolean.")
+        if (model != config["models"][0]["model"] or endpoint != config["models"][0]["endpoint"]
+                or budget != config["budget"]
+                or ask != config["ask_before_overage"]):
+            self.put("service_config", "active", {"revision": identifier(), "model": model, "endpoint": endpoint,
+                                                  "budget": budget, "ask_before_overage": ask})
             config = self.services_config()
         return config
 
     def dsh_for_task(self, task):
-        model = task.get("dsh_model", MODEL)
-        return self.dsh.for_model(model) if isinstance(self.dsh, Dsh) else self.dsh
+        if isinstance(self.dsh, Dsh):
+            return self.dsh.for_model(task.get("dsh_model", MODEL), task.get("dsh_endpoint", ENDPOINT))
+        return self.dsh
 
     def test_service(self, params):
         operation = required(params, "operation_id")
@@ -293,22 +405,9 @@ class Worker:
                     return saved
                 if service_id != MODEL:
                     raise missing("This service was not found.")
-                model = self.services_config()["models"][0]["model"]
-                runtime = self.dsh_for_task({"dsh_model": model})
-            if runtime is None:
-                result = {"ok": False, "message": "DeepSeek Harness is not configured in the desktop host."}
-            else:
-                try:
-                    runtime.probe(self.closing)
-                    result = {"ok": True, "message": f"{model} responded through DeepSeek Harness."}
-                except DshFailure as failure:
-                    message = {
-                        "SERVICE_AUTH_FAILED": "Check the DeepSeek API key in the desktop host.",
-                        "SERVICE_QUOTA_EXHAUSTED": "DeepSeek reported insufficient balance.",
-                        "SERVICE_RATE_LIMITED": "DeepSeek is rate limiting requests. Try again shortly.",
-                        "TASK_TIMEOUT": "DeepSeek Harness did not respond in time.",
-                    }.get(failure.issue["reason"], "DeepSeek Harness could not reach the saved model. Check the model ID and network.")
-                    result = {"ok": False, "message": message}
+                provider = self.service_settings()
+                key = deepseek_api_key()
+            result = probe_model(provider["endpoint"], provider["model"], key)
             with self.lock, self.db:
                 self.save_operation("services.test", operation, fingerprint, result)
             return result
@@ -618,8 +717,7 @@ class Worker:
         if method == "services.save":
             return self.save_services(params)
         if method == "services.credentials":
-            raise RpcError(-32015, "CREDENTIALS_HOST_REQUIRED", "configure_service",
-                           "Configure the DeepSeek API key in the desktop host.")
+            return self.update_credential(params)
         if method == "workspace.activity":
             if "topic_id" in params:
                 self.topic(params)
@@ -1021,6 +1119,7 @@ class Worker:
         if not isinstance(input_, dict):
             raise invalid("input must be an object.")
         task_data = {"topic_id": topic, "kind": kind, "input": input_}
+        provider = self.service_settings() if kind != "discovery" else None
         if kind == "discovery":
             if "previous_search_id" in input_:
                 if set(input_) != {"previous_search_id"}:
@@ -1074,8 +1173,7 @@ class Worker:
                 task_data["session_id"] = self.session(params)["session_id"]
         elif kind == "reader_translation":
             target = required(input_, "source_version_id")
-            translation_model = self.services_config()["models"][0]["model"]
-            plans = self.reader.translation_plan(topic, input_, translation_model)
+            plans = self.reader.translation_plan(topic, input_, provider["model"], provider["endpoint"])
             task_data["translation_keys"] = [plan["key"] for plan in plans]
             pending_translation = [plan for plan in plans if plan["units"] and
                                    not self.reader.translation_available(plan["key"])]
@@ -1124,19 +1222,15 @@ class Worker:
         if audit:
             task_data["audit_sources"] = {j["job_id"]: j["source"]["source_version_id"] for j in audit_pending} if live else {}
 
-        model = ""
-        if translation:
-            model = translation_model
-        elif live:
-            model = self.services_config()["models"][0]["model"]
+        model = provider["model"] if live or translation else ""
         search_live = "search_request" in task_data
-        endpoint = ENDPOINT if live else OPENALEX if search_live else "local-fixture"
+        endpoint = provider["endpoint"] if live or translation else OPENALEX if search_live else "local-fixture"
         fingerprint = encode([task_data, endpoint, model])
         if method == "task.prepare":
             cid = identifier()
             self.put("confirmation", cid, {"fingerprint": fingerprint, "used": False})
             transfers = [{
-                "endpoint": ENDPOINT,
+                "endpoint": endpoint,
                 "purpose": "Answer the question using DeepSeek Harness and approved abstract passages",
                 "data_categories": ["Research question", "Approved passage IDs and abstract excerpts"],
             }] if live else []
@@ -1147,20 +1241,20 @@ class Worker:
                                   (("year_from", "From year"), ("year_to", "To year"))
                                   if key in filters)]}]
             if live and kind == "reading_qa" and any(s["requested_scope"] == "full_text" for s in input_["sources"]):
-                transfers = [{"endpoint": ENDPOINT, "purpose": "Answer using selected sources",
+                transfers = [{"endpoint": endpoint, "purpose": "Answer using selected sources",
                               "data_categories": ["Research question and excerpts from the selected papers"]}]
             if audit:
-                transfers = [{"endpoint": ENDPOINT, "purpose": "Check cited claims against selected papers",
+                transfers = [{"endpoint": endpoint, "purpose": "Check cited claims against selected papers",
                               "data_categories": ["Selected manuscript sentences and cited full-text excerpts"]}] if live else []
             if suggest:
-                transfers = [{"endpoint": ENDPOINT, "purpose": "Find citations for selected manuscript sentences",
+                transfers = [{"endpoint": endpoint, "purpose": "Find citations for selected manuscript sentences",
                               "data_categories": ["Selected manuscript sentences", "Selected paper titles and excerpts"]}] if live else []
                 return {"confirmation_id": cid, "transfers": transfers, "source_versions": task_data["suggestion_sources"]}
             if reader_question:
-                transfers = [{"endpoint": ENDPOINT, "purpose": "Answer from the selected PDF text",
+                transfers = [{"endpoint": endpoint, "purpose": "Answer from the selected PDF text",
                               "data_categories": ["Only the selected text and the question"]}] if live else []
             if translation:
-                transfers = [{"endpoint": ENDPOINT, "purpose": "Translate the selected PDF text",
+                transfers = [{"endpoint": endpoint, "purpose": "Translate the selected PDF text",
                               "data_categories": ["PDF text on page(s) " + ", ".join(
                                   str(plan["page"]) for plan in pending_translation),
                                   "Target language and any glossary terms supplied"]}] if live else []
@@ -1175,7 +1269,7 @@ class Worker:
                                       for plan in plans],
                         }}
             if synthesis:
-                transfers = [{"endpoint": ENDPOINT,
+                transfers = [{"endpoint": endpoint,
                               "purpose": ("Compare selected papers" if kind == "paper_comparison"
                                           else "Build an evidence-based outline"),
                               "data_categories": ["Research question, selected paper titles and excerpts",
@@ -1199,6 +1293,7 @@ class Worker:
                 "label": label, "steps": [], "last_event_seq": 0, "started_at": now()}
         if live or translation:
             task["dsh_model"] = model
+            task["dsh_endpoint"] = endpoint
         if kind == "reading_qa":
             task["scope_id"] = identifier()
         confirmation["used"] = True

@@ -3,15 +3,86 @@ import { useEffect, useState } from 'react'
 import { Dialog, PageHead } from '../components/PageHead'
 import { Icon } from '../components/Icon'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
-import type { Config, Offer, ServiceMethods } from '../api/services'
+import type { Config, Model, Offer, ServiceMethods } from '../api/services'
+
+function CredentialDialog({ model, onClose, onSaved }: { model: Model; onClose: () => void; onSaved: () => void }) {
+  const { tr } = useLanguage()
+  const { api } = useWorkspace()
+  const [key, setKey] = useState('')
+  const [pending, setPending] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const [confirmRemoval, setConfirmRemoval] = useState(false)
+  const validKey = /^[!-~]{1,512}$/.test(key.trim())
+
+  async function update(action: 'save' | 'delete') {
+    setPending(true)
+    setFailed(false)
+    try {
+      const result = await api.call('services.credentials', action === 'save'
+        ? { id: model.id, action, api_key: key.trim() }
+        : { id: model.id, action })
+      if (result.stored !== (action === 'save')) {
+        setFailed(true)
+        return
+      }
+      setKey('')
+      onSaved()
+    } catch {
+      setFailed(true)
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <Dialog title={tr('Manage system credentials')} onClose={() => { if (!pending) onClose() }}>
+      <form onSubmit={(event) => {
+        event.preventDefault()
+        if (!pending && (confirmRemoval || validKey)) void update(confirmRemoval ? 'delete' : 'save')
+      }}>
+        {confirmRemoval ? <p>{tr('Remove the DeepSeek API key from this device’s credential store?')}</p> : (
+          <>
+            <p>{tr('Your API key is protected by this device’s operating system.')}</p>
+            {model.credential_configured && !model.credential_stored &&
+              <p>{tr('The API key currently comes from the launch environment.')}</p>}
+            <label className="set-field">
+              {tr('DeepSeek API key')}
+              <input className="text-field" type="password" autoComplete="off" spellCheck={false}
+                disabled={pending} value={key} onChange={(event) => setKey(event.target.value)} />
+            </label>
+          </>
+        )}
+        {failed && <p className="set-error" role="alert">{tr('The system credential store could not complete the request.')}</p>}
+        <div className="dialog-actions">
+          {!confirmRemoval && model.credential_stored && (
+            <button type="button" className="ghost-btn" disabled={pending}
+              onClick={() => { setFailed(false); setConfirmRemoval(true) }}>{tr('Remove API key')}</button>
+          )}
+          <button type="button" className="ghost-btn" disabled={pending} onClick={onClose}>{tr('Cancel')}</button>
+          <button className={confirmRemoval ? 'danger' : 'primary'} disabled={pending || (!confirmRemoval && !validKey)}>
+            {tr(confirmRemoval ? 'Remove API key' : 'Save API key')}
+          </button>
+        </div>
+      </form>
+    </Dialog>
+  )
+}
 
 function SettingsForm({ config }: { config: Config }) {
   const { tr } = useLanguage()
-  const { write, busy, report, demo } = useWorkspace()
-  const [draft, set] = useState(config),
-    [test, setTest] = useState<Message>()
+  const { write, busy, report, demo, refresh } = useWorkspace()
+  const [saved, setSaved] = useState(config),
+    [draft, set] = useState(config),
+    [saving, setSaving] = useState(false),
+    [test, setTest] = useState<{ id: string; result: Message }>(),
+    [managingCredentials, setManagingCredentials] = useState(false)
   const selected = draft.models.find((m) => m.id === draft.model_id) ?? draft.models[0]
-  const dirty = JSON.stringify(draft) !== JSON.stringify(config)
+  const credentials = config.models.find((m) => m.id === selected?.id)
+  function closeCredentials() {
+    setManagingCredentials(false)
+    refresh()
+  }
+  const dirty = JSON.stringify(draft) !== JSON.stringify(saved)
   const budgetFields = [
     ['calls', 'Model calls'],
     ['tokens', 'Tokens'],
@@ -19,26 +90,43 @@ function SettingsForm({ config }: { config: Config }) {
     ['cost', 'Spend cap (USD)'],
   ] as const
   function validEndpoint(text: string) {
+    const endpoint = text.trim()
     try {
-      const u = new URL(text)
-      return ['https:', 'http:'].includes(u.protocol) && !u.username && !u.password && !u.hash && !u.search
+      const u = new URL(endpoint)
+      return /^https?:\/\//i.test(endpoint) && !/[\s\\?#<>"`]/.test(endpoint) &&
+        !u.username && !u.password && !endpoint.split('/')[2]?.includes('@') && u.port !== '0'
     } catch {
       return false
     }
   }
   const valid =
-    draft.models.every((m) => m.model.trim() && validEndpoint(m.endpoint)) &&
-    budgetFields.every(([k]) => Number.isFinite(draft.budget[k]) && draft.budget[k] >= 0) &&
-    Number.isInteger(draft.budget.calls) &&
-    Number.isInteger(draft.budget.tokens)
+    draft.models.every((m) => (demo ? m.model.trim() : /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(m.model.trim())) &&
+      validEndpoint(m.endpoint)) &&
+    budgetFields.every(([k]) => {
+      const limit = draft.budget[k]
+      return limit === null || (Number.isFinite(limit) && limit >= 0 && limit <= Number.MAX_SAFE_INTEGER &&
+        ((k !== 'calls' && k !== 'tokens') || Number.isInteger(limit)))
+    })
   async function save() {
     const { revision, ...fields } = draft
-    await write('services.save', { ...fields, base_revision: revision })
+    setSaving(true)
+    try {
+      const result = await write('services.save', { ...fields, base_revision: revision })
+      setSaved(result)
+      set(result)
+    } finally {
+      setSaving(false)
+    }
   }
   const tryService = (id: string) =>
     void write('services.test', { id })
-      .then((r) => setTest([r.ok ? 'Passed · {0}' : 'Failed · {0}', r.message]))
+      .then((r) => setTest({ id, result: [r.ok ? 'Passed · {0}' : 'Failed · {0}', r.message] }))
       .catch(report)
+  const testStatus = (id: string) => test?.id === id && (
+    <p className="record-meta" role="status">
+      {tr(test.result[0], tr(String(test.result[1])))}
+    </p>
+  )
   return (
     <>
       <section className="set-section">
@@ -54,6 +142,7 @@ function SettingsForm({ config }: { config: Config }) {
                   type="radio"
                   name="model-provider"
                   checked={selected?.id === m.id}
+                  disabled={saving}
                   onChange={() => {
                     set({ ...draft, model_id: m.id })
                     setTest(undefined)
@@ -73,6 +162,10 @@ function SettingsForm({ config }: { config: Config }) {
                     {k === 'model' ? tr('Model ID') : tr('Endpoint base URL')}
                     <input
                       className="text-field"
+                      inputMode={k === 'endpoint' ? 'url' : undefined}
+                      autoComplete="off"
+                      spellCheck={false}
+                      disabled={saving}
                       aria-invalid={
                         k === 'model' ? !selected.model.trim() : !validEndpoint(selected.endpoint)
                       }
@@ -89,6 +182,7 @@ function SettingsForm({ config }: { config: Config }) {
                   </label>
                 ))}
               </div>
+              {!demo && <p className="fine">{tr('Use an OpenAI-compatible base URL. The connection test uses the saved URL, model ID and API key.')}</p>}
               <div className="set-controls">
                 <button
                   className="ghost-btn"
@@ -97,11 +191,11 @@ function SettingsForm({ config }: { config: Config }) {
                 >
                   {tr('Test connection')}
                 </button>
-                {!selected.local && (
+                {credentials?.credential_store && (
                   <button
                     className="ghost-btn"
-                    disabled={demo || busy}
-                    onClick={() => void write('services.credentials', { id: selected.id }).catch(report)}
+                    disabled={busy}
+                    onClick={() => setManagingCredentials(true)}
                   >
                     {tr('Manage system credentials')}
                   </button>
@@ -109,17 +203,25 @@ function SettingsForm({ config }: { config: Config }) {
               </div>
             </>
           )}
-          <p className="fine">
+          <p className="fine" role="status">
             {demo
               ? tr('The fixture tests configuration locally.')
-              : tr('Credentials are managed in the system keychain.')}
+              : tr(credentials?.credential_stored ? 'DeepSeek API key saved on this device.'
+                : credentials?.credential_configured ? 'The API key currently comes from the launch environment.'
+                : 'DeepSeek API key not configured.')}
           </p>
+          {selected && testStatus(selected.id)}
+          {managingCredentials && credentials?.credential_store && (
+            <CredentialDialog model={credentials} onClose={closeCredentials}
+              onSaved={() => { setTest(undefined); closeCredentials() }} />
+          )}
         </div>
       </section>
       <section className="set-section">
         <div className="set-intro">
           <h2>{tr('Task budget')}</h2>
-          <p>{tr('Limits apply per task.')}</p>
+          <p>{tr('Leave a limit blank for unlimited usage.')}</p>
+          {!demo && <p>{tr('Desktop tasks currently use the runtime limits.')}</p>}
         </div>
         <div className="set-body">
           <div className="budget-grid">
@@ -130,9 +232,11 @@ function SettingsForm({ config }: { config: Config }) {
                   type="number"
                   min="0"
                   step={k === 'tokens' || k === 'calls' ? 1 : 'any'}
-                  value={draft.budget[k]}
+                  placeholder={tr('Unlimited')}
+                  value={draft.budget[k] ?? ''}
+                  disabled={saving}
                   onChange={(e) =>
-                    set({ ...draft, budget: { ...draft.budget, [k]: Number(e.target.value) } })
+                    set({ ...draft, budget: { ...draft.budget, [k]: e.target.value === '' ? null : e.target.valueAsNumber } })
                   }
                 />
               </label>
@@ -142,6 +246,7 @@ function SettingsForm({ config }: { config: Config }) {
             <input
               type="checkbox"
               checked={draft.ask_before_overage}
+              disabled={saving}
               onChange={(e) => set({ ...draft, ask_before_overage: e.target.checked })}
             />
             {tr('Ask before exceeding a limit')}
@@ -163,6 +268,7 @@ function SettingsForm({ config }: { config: Config }) {
                     role="switch"
                     aria-label={tr('Use {0}', s.label)}
                     aria-checked={s.enabled}
+                    disabled={!demo || saving}
                     className={'switch' + (s.enabled ? ' on' : '')}
                     onClick={() =>
                       set({
@@ -189,6 +295,7 @@ function SettingsForm({ config }: { config: Config }) {
                   <button className="ghost-btn sm" disabled={dirty || busy} onClick={() => tryService(s.id)}>
                     {tr('Test')}
                   </button>
+                  {testStatus(s.id)}
                 </div>
               ))}
           </div>
@@ -197,24 +304,22 @@ function SettingsForm({ config }: { config: Config }) {
       <div className="lib-tools settings-save">
         <button
           className="primary"
-          disabled={!valid || !dirty || busy}
+          disabled={!valid || !dirty || busy || saving}
           onClick={() => void save().catch(report)}
         >
           {tr('Save settings')}
         </button>
         {dirty && (
-          <button className="ghost-btn" onClick={() => set(config)}>
+          <button className="ghost-btn" disabled={saving} onClick={() => set(saved)}>
             {tr('Discard edits')}
           </button>
         )}
+        <span className="record-meta" role="status">
+          {tr(saving ? 'Saving settings…' : dirty ? 'Unsaved changes' : 'Settings saved')}
+        </span>
         {!valid && (
           <span className="set-error" role="alert">
             {tr('Check model endpoints, IDs and budget limits.')}
-          </span>
-        )}
-        {test && (
-          <span className="record-meta" role="status">
-            {tr(test[0], tr(String(test[1])))}
           </span>
         )}
       </div>
@@ -349,7 +454,7 @@ function AccessAndBackup() {
 export function ServicesPage() {
   const { tr } = useLanguage()
   const config = useRead('services.get', {})
-  const { refresh } = useWorkspace()
+  const { demo, refresh } = useWorkspace()
   useEffect(() => {
     const id = setInterval(refresh, 8000)
     return () => clearInterval(id)
@@ -364,7 +469,7 @@ export function ServicesPage() {
       />
       <div className="page-body scroll settings">
         {config && <SettingsForm key={config.revision} config={config} />}
-        <AccessAndBackup />
+        {demo && <AccessAndBackup />}
       </div>
     </div>
   )

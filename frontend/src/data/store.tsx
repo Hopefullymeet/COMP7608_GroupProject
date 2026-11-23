@@ -5,6 +5,7 @@ import { DEFAULT_QUESTION, DEMO_TOPIC, EVIDENCE, PAPERS, SEED_SESSION, SESSIONS,
 import { checkScript, wikiScript } from './workspaceScripts'
 import { buildWikiProposal, reviewWikiProposal } from './wiki'
 import { enabledSources, modelErrors, type ModelConfig, type ModelProvider, type RunConfiguration, type Settings, type Usage } from './serviceSettings'
+import { unlimitedBudget } from '../api/services'
 import { MANUSCRIPTS, DUPLICATE_REVIEW, LIBRARY_META, LIBRARY_SEED, SAMPLE_MEMBERSHIP, WIKI_NOTE_SEED, WIKI_SEED } from './workspace'
 import type {
   AgentRun, Candidate, ChatMessage, ComparisonRow, Coverage, Decision, DraftSentence, DraftSnapshot, FileVersion, Finding, FindingDecision, SearchAngle, Session,
@@ -25,8 +26,6 @@ export interface State {
     demo: boolean; papers: Record<string, Paper>; evidence: Record<string, EvidenceAnchor>
     search: (query: string, filters?: { year_from?: number; year_to?: number; venue?:string }) => void
     pages?:Page[]
-    readVersions?:string[]
-    selectVersions?:(ids:string[])=>void
     addCandidates?:(ids:string[])=>void
     venueFilter?:boolean
     interval?:number
@@ -100,7 +99,7 @@ export const baseState: State = {
   }])) },
   wiki: { status: 'idle', runId: null, pages: WIKI_SEED, proposal: null, active: WIKI_SEED[0].id, discarded: false },
   settings: {
-    model: 'anthropic', tested: {}, budget: { calls: 40, tokens: 200000, minutes: 10, cost: 2 }, askBeyond: true,
+    model: 'anthropic', tested: {}, budget: { ...unlimitedBudget }, askBeyond: true,
     models: {
       anthropic: { modelId: 'claude-sonnet-5-5', endpoint: '' },
       compatible: { modelId: '', endpoint: '' },
@@ -693,11 +692,11 @@ function useActions(dispatch: React.Dispatch<Action>, getState: () => State) {
     openTopic: (topicId: string, tab: Tab = 'discover') => dispatch({ type: 'navigate', route: { view: 'topic', topicId, tab } }),
 
     newTopic: () => dispatch({ type: 'home-new' }),
-    startFromHome(text: string) {
+    startFromHome(name: string, text = '') {
       const s = getState()
       const question = text.trim()
-      if (!question && !s.dropped.length) return
-      const title = question || s.dropped[0].replace(/\.[^.]+$/, '')
+      if (!name.trim() && !question && !s.dropped.length) return
+      const title = name.trim() || question || s.dropped[0].replace(/\.[^.]+$/, '')
       const shortTitle = title.length > 48 ? `${title.slice(0, 46)}…` : title
       const topic: Topic = { id: id('topic'), title: shortTitle, goal: question || 'Read the attached papers',
         paperCount: s.dropped.length, updated: 'Just now', scripted: false }

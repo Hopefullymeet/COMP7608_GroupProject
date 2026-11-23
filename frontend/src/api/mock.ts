@@ -28,7 +28,8 @@ import { researchFixture, type ResearchFixture } from './researchFixture'
 import { asLocated, emptyLibrary, type LibraryFixture } from './library'
 import { libraryFixture } from './libraryFixture'
 
-import { defaultConfig, type Activity, type Config, type Grant, type Offer, type Watch } from './services'
+import { defaultConfig, unlimitedBudget, type Activity, type Config, type Grant, type Offer, type Watch } from './services'
+import { budgetLimit } from '../data/serviceSettings'
 
 type Run = {
   origin_task_id?: string
@@ -101,6 +102,7 @@ export function createMock(): Client {
   const state: State = JSON.parse(localStorage.getItem(key) ?? 'null') ?? initial
   state.shelf ??= emptyLibrary()
   state.config ??= defaultConfig()
+  if (state.config.revision === 'initial') state.config.budget = { ...unlimitedBudget }
   state.grants ??= []
   state.watches ??= []
   state.activity ??= []
@@ -899,9 +901,8 @@ export function createMock(): Client {
         ms: 750,
         cost: 0,
       }
-      const cap = state.config.budget
       const script: EventBody[] =
-        usage.calls > cap.calls || usage.tokens > cap.tokens || usage.ms > cap.minutes * 60000
+        budgetLimit(usage, state.config.budget)
           ? [
               {
                 type: 'task.finished',

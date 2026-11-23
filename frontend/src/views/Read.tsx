@@ -1,9 +1,8 @@
 import { count, useLanguage } from '../i18n'
-import { lazy, Suspense, useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { NEW_SESSION, allEvidence, currentTopic, evidenceFor, paperFor, papersOfTopic, sourceStatus, useStore } from '../data/store'
 import { QUESTIONS } from '../data/scripts'
 import { Icon, Spinner } from '../components/Icon'
-import { Disclosure } from '../components/Disclosure'
 import { scrollWithin } from '../components/util'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { Dialog } from '../components/PageHead'
@@ -70,7 +69,9 @@ function AgentMessage({ m }: { m: ChatMessage }) {
   )
 }
 
-function Chat({ selections = [], onSource }: { selections?: ReaderAnswer[]; onSource?: (answer: ReaderAnswer) => void }) {
+function Chat({ controls, selections = [], onSource }: {
+  controls: ReactNode; selections?: ReaderAnswer[]; onSource?: (answer: ReaderAnswer) => void
+}) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
   const [text, setText] = useState('')
@@ -79,29 +80,29 @@ function Chat({ selections = [], onSource }: { selections?: ReaderAnswer[]; onSo
   const messages = state.messages.filter((m) => m.sessionId === session?.id)
   const asked = new Set(messages.filter((m) => m.role === 'user').map((m) => m.segments[0]?.text))
   const papers = papersOfTopic(state, currentTopic(state))
+  const readable = papers.filter((id) => paperFor(state, id).stored !== 'metadata')
+  const canAsk = !state.mainline || readable.length > 0
 
   useEffect(() => { scrollWithin(endRef.current, '.chat-scroll', 'end') }, [messages.length, state.messages, selections.length])
 
   const send = (t: string) => {
-    if (!t.trim() || state.qaRunning) return
+    if (!t.trim() || state.qaRunning || !canAsk) return
     if (act.ask(t.trim()) === false) return
     setText('')
   }
 
-  const readable = papers.filter((id) => paperFor(state, id).stored !== 'metadata')
-  const selected = readable.includes(state.readerPaperId) ? state.readerPaperId : readable[0]
-  const readingScope = state.mainline?.readVersions?.length ? state.mainline.readVersions : [selected]
   const suggestions = (state.mainline
     ? state.mainline.demo ? [{ id: 'pubmedqa', text: 'What context does PubMedQA provide to the model?', requires: undefined },{id:'limits',text:'What does the abstract establish about the conclusions?',requires:undefined}] : []
     : QUESTIONS).filter((q) => !asked.has(q.text))
 
   return (
     <section className="chat" aria-label={tr('Conversation')}>
-      <div className="chat-scroll">
         <div className="session-title">
           <Icon name="message" size={14} /> <span className="grow">{tr(session?.title ?? NEW_SESSION)}</span>
           {messages.length > 0 && <button className="link-btn" onClick={() => act.newSession(currentTopic(state))}><Icon name="plus" size={13} />{' '}{tr('New session')}</button>}
+          {controls}
         </div>
+      <div className="chat-scroll">
         {messages.length === 0 && selections.length === 0 && (
           <div className="chat-empty">
             <h2>{tr('Start a fresh reading question')}</h2>
@@ -132,7 +133,7 @@ function Chat({ selections = [], onSource }: { selections?: ReaderAnswer[]; onSo
             {suggestions.map((q) => {
               const blocked = state.mainline ? null : !papers.includes('qasper') ? 'qasper' : q.requires && !papers.includes(q.requires) ? q.requires : null
               return (
-                <button key={q.id} className="chip-btn" disabled={!!blocked || state.qaRunning} onClick={() => send(q.text)}
+                <button key={q.id} className="chip-btn" disabled={!!blocked || state.qaRunning || !canAsk} onClick={() => send(q.text)}
                   title={blocked ? tr('Add {0} to the topic first', paperFor(state, blocked).short) : undefined}>
                   {tr(q.text)}{blocked && <small>{' '}{tr('· needs')}{' '}{paperFor(state, blocked).short}</small>}
                 </button>
@@ -145,24 +146,8 @@ function Chat({ selections = [], onSource }: { selections?: ReaderAnswer[]; onSo
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(text) } }} />
           <div className="composer-bar">
-            {state.mainline && readable.length > 1 ? (
-              <Disclosure className="scope-select" icon="book" title={tr('Reading scope ({0})', readingScope.length)}>
-                <div className="card scope-options">
-                  {readable.map((id) => (
-                    <label key={id} className="check-row">
-                      <input type="checkbox" checked={readingScope.includes(id)}
-                        onChange={(e) => state.mainline?.selectVersions?.(e.target.checked
-                          ? [...readingScope, id] : readingScope.filter((version) => version !== id))} />
-                      <span>{paperFor(state, id).short}</span>
-                    </label>
-                  ))}
-                </div>
-              </Disclosure>
-            ) : (
-              <span className="scope-pill"><Icon name="file" size={13} />{' '}{tr('Reading scope:')}{' '}{(state.mainline && selected ? readingScope : readable).map((id) => paperFor(state, id).short).join(', ')}</span>
-            )}
             <span className="grow" />
-            <button className="send" disabled={state.qaRunning || !text.trim()} onClick={() => send(text)} aria-label={tr('Send')}><Icon name="arrowUp" size={16} /></button>
+            <button className="send" disabled={state.qaRunning || !canAsk || !text.trim()} onClick={() => send(text)} aria-label={tr('Send')}><Icon name="arrowUp" size={16} /></button>
           </div>
         </div>
       </div>}
@@ -350,7 +335,9 @@ function Reader({ pdf }: { pdf?: PdfActions }) {
   const withPdf = Boolean(pdf && paper.pdfAvailable)
   const location = pdf?.location?.version === paper.id ? pdf.location : undefined
   const evidencePage = state.activeEvidence?.pdfPage
-  const currentLocation = location ?? { page: evidencePage && evidencePage > 0 ? evidencePage : 1, rect: state.activeEvidence?.region }
+  const currentLocation = location ?? (state.activeEvidence
+    ? { page: evidencePage && evidencePage > 0 ? evidencePage : 1, rect: state.activeEvidence.region }
+    : undefined)
   const used = new Set<string>()
   state.messages.filter((m) => m.sessionId === state.activeSessionId)
     .forEach((m) => m.segments.forEach((s) => s.evidenceId && used.add(s.evidenceId)))
@@ -384,9 +371,9 @@ function Reader({ pdf }: { pdf?: PdfActions }) {
       </div>}
       <div className="pt-reading-content">
       {pdf && withPdf ? <><Suspense fallback={<p className="pt-pdf-loading" role="status">{tr('Opening PDF…')}</p>}>
-        <PdfReader key={paper.id} topic={currentTopic(state)} version={paper.id} page={currentLocation.page}
+        <PdfReader key={paper.id} topic={currentTopic(state)} version={paper.id} page={currentLocation?.page}
           session={state.activeSessionId ?? undefined} resume={!location && !state.activeEvidence}
-          target={currentLocation.rect}
+          target={currentLocation?.rect}
           onAsk={(selection) => pdf.ask(paper.id, selection)} onFind={pdf.find} onPaperInfo={setMode}
           onWiki={() => act.navigate({ view: 'wiki', topicId: currentTopic(state) })} />
       </Suspense>
@@ -456,6 +443,106 @@ function Reader({ pdf }: { pdf?: PdfActions }) {
   )
 }
 
+function ReadingSplit({ live = false, chat, reader }: {
+  live?: boolean
+  chat: (controls: ReactNode, revealPaper: () => void) => ReactNode
+  reader: ReactNode
+}) {
+  const { tr } = useLanguage()
+  const { state } = useStore()
+  const layout = useRef<HTMLDivElement>(null)
+  const toggleChat = useRef<HTMLButtonElement>(null)
+  const restoreChat = useRef<HTMLButtonElement>(null)
+  const drag = useRef<{ id: number; offset: number }>()
+  const chatId = useId()
+  const paperId = useId()
+  const [collapsed, setCollapsed] = useState<'chat' | 'paper'>()
+  const [dragging, setDragging] = useState(false)
+  const [width, setWidth] = useState(0)
+  const [preferredShare, setPreferredShare] = useState<number>()
+  const minShare = width ? Math.min(240 / width, .4) : .4
+  const maxShare = .6
+  const defaultShare = width ? (live ? .28 : 430 / width) : .4
+  const share = Math.max(minShare, Math.min(maxShare, preferredShare ?? defaultShare))
+  const revealPaper = () => setCollapsed((current) => current === 'paper' ? undefined : current)
+
+  useEffect(() => {
+    if (!layout.current) return
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
+    observer.observe(layout.current)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (state.activeEvidence?.scroll) setCollapsed((current) => current === 'paper' ? undefined : current)
+  }, [state.activeEvidence])
+
+  const paperLabel = tr(collapsed === 'paper' ? 'Show paper pane' : 'Hide paper pane')
+  const chatLabel = tr(collapsed === 'chat' ? 'Show conversation pane' : 'Hide conversation pane')
+
+  return <div ref={layout} className={`read${dragging ? ' read--resizing' : ''}`}
+    data-collapsed={collapsed} style={{ '--read-chat-width': `${share * 100}%` } as CSSProperties}>
+    <div className="read-chat-pane" id={chatId} hidden={collapsed === 'chat'}>
+      {chat(<>
+        <button className="icon-btn sm" type="button" title={paperLabel} aria-label={paperLabel}
+          aria-controls={paperId} aria-expanded={collapsed !== 'paper'}
+          onClick={() => setCollapsed(collapsed === 'paper' ? undefined : 'paper')}>
+          <Icon name="panelRight" size={16} />
+        </button>
+        {collapsed !== 'paper' && <button ref={toggleChat} className="icon-btn sm" type="button"
+          title={chatLabel} aria-label={chatLabel} aria-controls={chatId} aria-expanded
+          onClick={() => {
+            setCollapsed('chat')
+            requestAnimationFrame(() => restoreChat.current?.focus({ preventScroll: true }))
+          }}>
+          <Icon name="sidebar" size={16} />
+        </button>}
+      </>, revealPaper)}
+    </div>
+    {collapsed === 'chat' && <div className="read-collapsed-chat">
+      <button ref={restoreChat} className="icon-btn" type="button" title={chatLabel} aria-label={chatLabel}
+        aria-controls={chatId} aria-expanded={false} onClick={() => {
+          setCollapsed(undefined)
+          requestAnimationFrame(() => toggleChat.current?.focus({ preventScroll: true }))
+        }}>
+        <Icon name="sidebar" size={16} />
+      </button>
+    </div>}
+    {!collapsed && <div className="read-divider" role="separator" tabIndex={0} aria-orientation="vertical"
+      aria-label={tr('Resize paper pane')} title={tr('Drag to resize the paper pane')}
+      aria-controls={paperId} aria-valuemin={Math.round((1 - maxShare) * 100)}
+      aria-valuemax={Math.round((1 - minShare) * 100)} aria-valuenow={Math.round((1 - share) * 100)}
+      onPointerDown={(event) => {
+        if (!event.isPrimary || event.button !== 0) return
+        const { left, width: handleWidth } = event.currentTarget.getBoundingClientRect()
+        drag.current = { id: event.pointerId, offset: event.clientX - left - handleWidth / 2 }
+        event.currentTarget.setPointerCapture(event.pointerId)
+        setDragging(true)
+      }}
+      onPointerMove={(event) => {
+        if (drag.current?.id !== event.pointerId || !layout.current) return
+        const bounds = layout.current.getBoundingClientRect()
+        const next = (event.clientX - bounds.left - drag.current.offset) / bounds.width
+        setPreferredShare(Math.max(minShare, Math.min(maxShare, next)))
+      }}
+      onLostPointerCapture={() => { drag.current = undefined; setDragging(false) }}
+      onDoubleClick={() => setPreferredShare(undefined)}
+      onKeyDown={(event) => {
+        let next: number
+        switch (event.key) {
+          case 'ArrowLeft': next = share - .03; break
+          case 'ArrowRight': next = share + .03; break
+          case 'Home': next = maxShare; break
+          case 'End': next = minShare; break
+          default: return
+        }
+        event.preventDefault()
+        setPreferredShare(Math.max(minShare, Math.min(maxShare, next)))
+      }} />}
+    <div className="read-paper-pane" id={paperId} hidden={collapsed === 'paper'}>{reader}</div>
+  </div>
+}
+
 function LiveReading({ topic, session }: { topic: string; session: string }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
@@ -483,9 +570,12 @@ function LiveReading({ topic, session }: { topic: string; session: string }) {
     setPicked({ version, selection })
   }
 
-  return <div className="read">
-    <Chat selections={answers} onSource={(answer) => open(answer.source_version_id, answer.page, answer.rect)} />
-    <Reader pdf={{ location, open, ask, find: () => setFinding(true) }} />
+  return <>
+    <ReadingSplit live chat={(controls, revealPaper) => <Chat controls={controls} selections={answers}
+      onSource={(answer) => {
+        revealPaper()
+        open(answer.source_version_id, answer.page, answer.rect)
+      }} />} reader={<Reader pdf={{ location, open, ask, find: () => setFinding(true) }} />} />
     {finding && <FigureSearch topic={topic} versions={papers.map((paper) => paper.id)} names={names}
       onOpen={(figure) => open(figure.source_version_id, figure.page, figure.rect)}
       onAsk={(figure) => {
@@ -512,7 +602,7 @@ function LiveReading({ topic, session }: { topic: string; session: string }) {
         </div>
       </form>
     </Dialog>}
-  </div>
+  </>
 }
 
 export function Read() {
@@ -524,10 +614,5 @@ export function Read() {
   if (state.mainline && !state.mainline.demo) {
     return <LiveReading key={state.activeSessionId} topic={currentTopic(state)} session={state.activeSessionId} />
   }
-  return (
-    <div className="read">
-      <Chat />
-      <Reader />
-    </div>
-  )
+  return <ReadingSplit chat={(controls) => <Chat controls={controls} />} reader={<Reader />} />
 }

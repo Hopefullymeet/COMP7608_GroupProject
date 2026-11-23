@@ -41,9 +41,10 @@ export function usePdfDrop(onDrop: ((files: string[]) => void) | undefined) {
   }, [enabled])
 }
 
-export function PaperImportDialog({ topics, initialTopic, initialFiles = [], paperId, onClose, onImported, onOpenTopic }: {
+export function PaperImportDialog({ topics, initialTopic, initialTitle = '', initialFiles = [], paperId, onClose, onImported, onOpenTopic }: {
   topics: Topic[]
   initialTopic?: string
+  initialTitle?: string
   initialFiles?: Attachment[]
   paperId?: string
   onClose: () => void
@@ -53,7 +54,7 @@ export function PaperImportDialog({ topics, initialTopic, initialFiles = [], pap
   const { tr } = useLanguage()
   const workspace = useWorkspace()
   const [topic, setTopic] = useState(initialTopic || topics[0]?.id || '')
-  const [title, setTitle] = useState('')
+  const [title, setTitle] = useState(initialTitle)
   const [input, setInput] = useState('')
   const [rows, setRows] = useState<ImportRow[]>(() => pdfRows(initialFiles))
   const [processing, setProcessing] = useState(false)
@@ -132,7 +133,7 @@ export function PaperImportDialog({ topics, initialTopic, initialFiles = [], pap
       event.preventDefault()
       queueFiles(Array.from(event.dataTransfer.files))
     }}>
-      {(topics.length > 1 || (!initialTopic && onOpenTopic)) && <label className="rename-field">{tr('Research topic')}
+      {(topics.length > 1 || (topics.length > 0 && !initialTopic && onOpenTopic)) && <label className="rename-field">{tr('Research topic')}
         <select value={topic} disabled={processing || started}
           onChange={(event) => setTopic(event.currentTarget.value)}>
           {!!onOpenTopic && !initialTopic && <option value="">{tr('New topic')}</option>}
@@ -141,7 +142,7 @@ export function PaperImportDialog({ topics, initialTopic, initialFiles = [], pap
         </select>
       </label>}
       {!topic && paperId && <p>{tr('Select a topic to import PDFs.')}</p>}
-      {!topic && !paperId && <label className="rename-field">{tr('Topic name')}
+      {!topic && !paperId && !initialTitle && <label className="rename-field">{tr('Topic name')}
         <input className="text-field" value={title} disabled={processing} maxLength={160}
           onChange={(event) => setTitle(event.currentTarget.value)} />
       </label>}
