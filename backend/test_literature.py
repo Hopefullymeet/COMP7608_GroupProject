@@ -12,7 +12,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from dsh import Dsh, failure
-from literature import poppler
+from literature import body_passage_starts, poppler
 from papertrace import Worker
 
 
@@ -78,6 +78,17 @@ class ScriptedSynthesis:
 
 
 @unittest.skipUnless(shutil.which(poppler("pdftotext")), "Poppler is required")
+class BodyEvidenceTest(unittest.TestCase):
+    def test_abstract_across_chunks_and_body_on_same_page(self):
+        rows = [("a", 1, "Title Abstract—We report an improvement."),
+                ("b", 1, "More abstract text. I. INTRODUCTION Actual body evidence."),
+                ("c", 2, "Methods and experimental conditions.")]
+        starts = body_passage_starts(rows)
+        self.assertEqual([text[starts.get(pid, 0):].strip() for pid, _, text in rows],
+                         ["", "Actual body evidence.", rows[2][2]])
+        self.assertEqual(body_passage_starts([("a", 1, "Methods and experimental conditions.")]), {})
+
+
 class LiteratureTest(unittest.TestCase):
     def setUp(self):
         self.workspace = tempfile.TemporaryDirectory()

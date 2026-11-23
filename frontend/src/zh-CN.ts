@@ -1,5 +1,7 @@
 // Simplified Chinese interface messages, keyed by their English source text.
 export const zhCN: Readonly<Record<string, string>> = {
+  'Previous supporting passage': '上一段依据',
+  'Next supporting passage': '下一段依据',
   'More': '更多操作',
   'Citation details': '引用详情',
   'Checking citations.': '正在核查引用。',

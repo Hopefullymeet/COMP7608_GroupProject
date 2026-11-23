@@ -12,6 +12,11 @@ export function apply(ctx) {
     (paper.passages ?? []).map((passage) => [passage.passage_id, {
       ...passage, paper_id: paper.paper_id, source_version_id: paper.source_version_id,
     }])))
+  const bodyStarts = Object.assign({}, ...scope.sources.map(paper => paper.body_starts ?? {}))
+  function body(row) {
+    const offset = bodyStarts[row.passage_id]
+    return offset ? { ...row, text: Array.from(row.text).slice(offset).join('').trim() } : row
+  }
   const slots = [...fullVersions].map(() => '?').join(',')
   const select = 'passage_id, version_id AS source_version_id, page, ordinal, text'
   const terms = (query) => [...new Set(query.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])].slice(0, 12)
@@ -40,7 +45,7 @@ export function apply(ctx) {
       const expression = tokens.map((word) => '"' + word + '"').join(' OR ')
       const rows = full.length ? db.prepare(`SELECT ${select} FROM paper_passages
         WHERE paper_passages MATCH ? AND version_id IN (${placeholders})
-        ORDER BY bm25(paper_passages), version_id, page, ordinal LIMIT 10`).all(expression, ...full) : []
+        ORDER BY bm25(paper_passages), version_id, page, ordinal LIMIT 48`).all(expression, ...full).map(body).filter(row => row.text).slice(0, 10) : []
       const results = [...rows, ...[...abstract.values()].filter((p) => selected.includes(p.source_version_id)
         && tokens.some((token) => p.text.toLowerCase().includes(token)))]
       return results.slice(0, 12).map(({ text, ...row }) => ({ ...row, preview: text.slice(0, 180) }))
@@ -67,7 +72,7 @@ export function apply(ctx) {
           const context = db.prepare(`SELECT ${lookup} FROM passage_lookup AS lookup JOIN paper_passages ON paper_passages.rowid = lookup.fts_rowid
             WHERE lookup.version_id = ? AND lookup.page = ? AND lookup.ordinal BETWEEN ? AND ? ORDER BY lookup.ordinal`)
             .all(row.source_version_id, row.page, row.ordinal - 1, row.ordinal + 1)
-          for (const p of context) results.set(p.passage_id, p)
+          for (const p of context.map(body)) if (p.text) results.set(p.passage_id, p)
         }
       }
       evidenceReads += results.size

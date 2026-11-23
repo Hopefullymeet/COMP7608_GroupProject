@@ -20,6 +20,29 @@ const PdfReader = lazy(() => import('./PdfReader'))
 
 type Location = { page: number; rect?: Rect }
 
+function ClaimSources({ ids, sentence, numbers }: { ids: string[]; sentence: number; numbers: Map<string, number> }) {
+  const { tr } = useLanguage()
+  const { state, act } = useStore()
+  const [index, setIndex] = useState(0)
+  const active = ids.indexOf(state.activeEvidence?.id ?? '')
+  const current = active >= 0 ? active : Math.min(index, ids.length - 1)
+  function open(at: number) {
+    setIndex(at)
+    act.openEvidence(ids[at], '', true)
+  }
+  return <span className="claim-sources">
+    <button className="cite" aria-label={tr('Show source {0} for sentence {1}', numbers.get(ids[current])!, sentence)}
+      onClick={() => open(current)}>{numbers.get(ids[current])}</button>
+    {ids.length > 1 && <>
+      <button className="cite" disabled={!current} title={tr('Previous supporting passage')} aria-label={tr('Previous supporting passage')}
+        onClick={() => open(current - 1)}>‹</button>
+      <small aria-live="polite">{current + 1}/{ids.length}</small>
+      <button className="cite" disabled={current === ids.length - 1} title={tr('Next supporting passage')} aria-label={tr('Next supporting passage')}
+        onClick={() => open(current + 1)}>›</button>
+    </>}
+  </span>
+}
+
 function AgentMessage({ m }: { m: ChatMessage }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
@@ -58,9 +81,7 @@ function AgentMessage({ m }: { m: ChatMessage }) {
               </div> : s.readSources ? tr('No sources read.') : s.text}
             </div>
             if (s.evidenceIds?.length) return <AnswerPoint key={i} className="claim">
-              {s.text}{[...new Set(s.evidenceIds)].map((id) => <button key={id} className="cite"
-                aria-label={tr('Show source {0} for sentence {1}', citationNumbers.get(id)!, i + 1)}
-                onClick={() => act.openEvidence(id, '', true)}>{citationNumbers.get(id)}</button>)}
+              {s.text}<ClaimSources ids={[...new Set(s.evidenceIds)]} sentence={i + 1} numbers={citationNumbers} />
             </AnswerPoint>
             if (s.evidenceIds?.length === 0) return <AnswerPoint key={i} className="claim">
               {s.text}<span className="cite" title="No Evidence Found">？</span>
