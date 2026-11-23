@@ -1,5 +1,6 @@
 // Simplified Chinese interface messages, keyed by their English source text.
 export const zhCN: Readonly<Record<string, string>> = {
+  'Searching paper figures…': '正在查找论文插图…',
   'New reading sessions': '新建阅读会话的默认权限',
   'Allow Wiki and memory updates': '允许更新 Wiki 和记忆',
   'Save conversation only': '只保存对话记录',

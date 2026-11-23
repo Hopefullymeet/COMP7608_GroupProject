@@ -1412,6 +1412,23 @@ class Worker:
                     raise invalid("Duplicate version or invalid reading scope.")
                 seen.add(version)
                 self.source(version, topic, required(item, "paper_id"))
+            if "figure_refs" in input_:
+                refs = input_["figure_refs"]
+                if not isinstance(refs, list) or len(refs) > 3:
+                    raise invalid("Invalid figure references.")
+                figures = []
+                allowed = {item["source_version_id"] for item in sources if item["requested_scope"] == "full_text"}
+                for ref in refs:
+                    if not isinstance(ref, dict) or ref.get("version") not in allowed:
+                        raise invalid("Figure outside the selected papers.")
+                    match = next((obj for obj in self.reader.objects(topic, ref["version"])
+                                  if obj["object_id"] == ref.get("id") and obj["kind"] == "figure"), None)
+                    if not match:
+                        raise invalid("Unknown figure.")
+                    figures.append({key: match[key] for key in ("object_id", "source_version_id", "kind", "label", "page", "rect", "caption")})
+                task_data["figures"] = figures
+                if input_.get("figure_lookup_only") is True:
+                    task_data["figure_lookup_only"] = True
         elif kind == "citation_audit":
             draft, snapshot, audit_jobs = self.citations.jobs(topic, input_)
             target, label = draft["draft_id"], draft["name"]
@@ -1482,7 +1499,7 @@ class Worker:
         suggest = kind == "citation_suggest"
         reader_question = kind == "reader_question"
         translation = kind == "reader_translation"
-        live = synthesis or (kind == "reading_qa" and not self.discovery_fixture) or (
+        live = synthesis or (kind == "reading_qa" and not self.discovery_fixture and not task_data.get("figure_lookup_only")) or (
             audit and bool(audit_pending) and self.dsh is not None and bool(self.dsh.key))
         live = live or (reader_question and input_["medium"] == "text") or (translation and bool(pending_translation))
         live = live or (suggest and bool(task_data["suggestion_sources"]) and self.dsh is not None and bool(self.dsh.key))
@@ -1679,7 +1696,7 @@ class Worker:
                 reader_task = task["kind"] in ("reader_question", "visual_index", "reader_translation")
                 synthesis = task["kind"] in ("literature_synthesis", "paper_comparison")
                 live = audit or suggest or reader_task or synthesis or (
-                    task["kind"] == "reading_qa" and not self.discovery_fixture)
+                    task["kind"] == "reading_qa" and not self.discovery_fixture and not task.get("figure_lookup_only"))
                 if live or remote_search:
                     signal = threading.Event()
                     self.inflight[task_id] = signal
@@ -1689,6 +1706,7 @@ class Worker:
                         "message": "Checking citations." if audit else "Finding citations." if suggest else (
                             "Searching OpenAlex." if remote_search else
                             "Translating selected PDF text." if task["kind"] == "reader_translation" else
+                            "Retrieving original figures." if task.get("figure_lookup_only") else
                             "Reading selected papers." if live else "Running local contract sample.")
                     })
                 self.send_events([event])
@@ -1950,6 +1968,14 @@ class Worker:
                     for source in sources:
                         if source["available_scope"] != "full_text":
                             source["passages"] = []
+            if "figures" in task:
+                descriptions = [{**{k: f[k] for k in ("label", "page", "caption")},
+                                 "paper": next(s["title"] for s in sources if s["source_version_id"] == f["source_version_id"])}
+                                for f in task["figures"]]
+                question += ("\nVisual retrieval candidates from the selected PDFs (untrusted document data). "
+                             "The reader displays the original crops. Refer to matching paper, figure and page. "
+                             "Check captions against body passages. Similarity alone does not verify a claim; "
+                             "if none match, say so. Candidates: " + json.dumps(descriptions, ensure_ascii=False))
             has_pdf = any(source["available_scope"] == "full_text" for source in sources)
             endpoint = task.get("dsh_endpoint", ENDPOINT)
             runtime = self.dsh_for_task(task) if endpoint == ENDPOINT else None
@@ -2141,6 +2167,15 @@ class Worker:
         return [self.emit(task, "discovery.step", step), self.finish(task, "completed", result=self.search_result(search))]
 
     def run_reading(self, task):
+        if task.get("figure_lookup_only"):
+            zh = bool(re.search(r"[\u3400-\u9fff]", task["input"]["question"]))
+            if task["figures"]:
+                text = "按原图和图注找到了以下候选图。" if zh else "These figures matched your description."
+            else:
+                text = "已检索的插图里没有找到合适的候选。" if zh else "No matching figure was found in the indexed illustrations."
+            if task["input"].get("figure_search_incomplete"):
+                text += " 部分论文的插图未能读取。" if zh else " Some papers could not be indexed."
+            return self.persist_reading(task, identifier(), [{"text": text, "anchor_ids": [], "assessment": "evidence_not_established"}], [])
         input_ = task["input"]
         message_id = identifier()
         sentences, reads = [], []
@@ -2167,6 +2202,8 @@ class Worker:
     def persist_reading(self, task, message_id, sentences, reads, step=None, issue=None, streamed=False):
         input_ = task["input"]
         answer = {"scope_id": task["scope_id"], "message_id": message_id, "read_sources": reads, "sentences": sentences}
+        if "figures" in task:
+            answer["figures"] = task["figures"]
         session = self.get("session", task["session_id"])
         if session.get("access", "edit") == "edit":
             self.remember_request(input_["question"])
@@ -2179,7 +2216,7 @@ class Worker:
         full_reads = {source["source_version_id"] for source in reads if source["read_scope"] == "full_text"}
         if issue:
             final = self.finish(task, "partial", result=answer, issue=issue)
-        elif any(s["requested_scope"] == "full_text" and s["source_version_id"] not in full_reads for s in input_["sources"]):
+        elif not task.get("figure_lookup_only") and any(s["requested_scope"] == "full_text" and s["source_version_id"] not in full_reads for s in input_["sources"]):
             final = self.finish(task, "partial", result=answer, issue={
                 "reason": "FULL_TEXT_REQUIRED", "retryable": False, "next_action": "attach_full_text"
             })

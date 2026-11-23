@@ -9,6 +9,9 @@ from math import log
 import os
 import re
 import sys
+from pathlib import Path
+import tempfile
+import zipfile
 from textwrap import wrap
 
 from dsh import ENDPOINT
@@ -32,6 +35,11 @@ CONCEPTS = {
     "blue": ("blue marks", "blue regions", "蓝色", "蓝线", "蓝框"),
     "green": ("green marks", "green regions", "绿色", "绿线", "绿框"),
     "grid": ("grid", "matrix", "heatmap", "网格", "矩阵", "热图"),
+    "correspondence": ("correspondence", "feature match", "matches sparse features", "匹配线", "特征匹配", "对应点"),
+    "architecture": ("architecture", "decoder", "encoder", "解码器", "编码器", "网络结构", "架构"),
+    "training": ("training", "supervision", "训练", "自监督"),
+    "ghosting": ("ghosting", "ghosts", "鬼影", "重影"),
+    "seam": ("seam", "接缝", "拼缝"),
     "benchmark": ("datasets", "benchmark", "数据集", "基准"),
     "comparison": ("comparison", "compares", "versus", "比较", "对比"),
     "formula": ("equation", "formula", "公式", "方程"),
@@ -58,6 +66,22 @@ def region(value):
 
 
 def pdf_engine():
+    runtime = Path(__file__).parent
+    wheel = runtime / "pdf-engine.whl"
+    if wheel.is_file():
+        package = runtime / "pdf-engine"
+        if not package.exists():
+            with tempfile.TemporaryDirectory(dir=runtime) as temporary:
+                stage = Path(temporary) / "contents"
+                with zipfile.ZipFile(wheel) as archive:
+                    archive.extractall(stage)
+                try:
+                    stage.rename(package)
+                except OSError:
+                    if not package.is_dir():
+                        raise
+        if str(package) not in sys.path:
+            sys.path.insert(0, str(package))
     try:
         import pymupdf
         return pymupdf

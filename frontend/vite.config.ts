@@ -1,3 +1,4 @@
+import { figureAssets } from './scripts/figure-assets.mjs'
 import { defineConfig, type Plugin } from 'vite'
 import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
@@ -29,7 +30,8 @@ function bundleOcrModels(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), bundleOcrModels()],
+  plugins: [react(), bundleOcrModels(), figureAssets()],
+  worker: { format: "es" },
   resolve: { dedupe: ['react', 'react-dom'] },
   server: {
     port: 5174, strictPort: true,

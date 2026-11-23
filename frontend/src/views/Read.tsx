@@ -10,6 +10,7 @@ import { useAnswerScroll } from '../components/useAnswerScroll'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { createPortal } from 'react-dom'
 import { Dialog, HeaderActions } from '../components/PageHead'
+import { FigurePreview } from '../components/FigurePreview'
 import { FigureSearch } from '../components/FigureSearch'
 import { PublicationDetails } from '../components/PublicationDetails'
 import { AnswerText } from '../components/AnswerText'
@@ -88,7 +89,7 @@ function WorkSteps({ run, done }: { run: AgentRun; done: boolean }) {
   </details>
 }
 
-function AgentMessage({ m }: { m: ChatMessage }) {
+function AgentMessage({ m, onSource }: { m: ChatMessage; onSource?: (source: Pick<ReaderAnswer, 'source_version_id' | 'page' | 'rect'>) => void }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
   const runId = m.runId ?? m.wikiTask
@@ -110,9 +111,12 @@ function AgentMessage({ m }: { m: ChatMessage }) {
       {!m.done && <div className="msg-who"><span className="working"><Spinner /> {tr(lastStep?.title ?? 'Planning…')}</span></div>}
       {m.wikiTask && state.topics.find(t=>t.id===currentTopic(state))?.wikiTurns?.includes(m.wikiTask) && <small className="wiki-update"><Icon name="wiki" size={13}/>{tr('Wiki updated')}</small>}
       {run && run.steps.length > 0 && <WorkSteps run={run} done={m.done} />}
+      {m.figures?.map(f => <FigurePreview key={f.object_id} topic={currentTopic(state)} item={f}
+        title={paperFor(state, f.source_version_id).short} open={onSource && (() => onSource(f))} />)}
       {m.segments.length > 0 && (
         <div className="answer">
           {m.segments.map((s, i) => {
+            if (s.tone === 'scope' && !s.readSources?.length && m.figures) return null
             if (s.tone === 'scope') return <div key={i} className="scope-note">
               <Icon name="eye" size={13} />
               {s.readSources?.length ? <div>
@@ -179,7 +183,7 @@ type AskRegion = (annotation: Annotation, question: string) => Promise<boolean>
 
 function Chat({ controls, selections = [], onSource, annotations, askRegion, blocked }: {
   annotations: Annotations; askRegion?: AskRegion; blocked?: string
-  controls: ReactNode; selections?: ReaderAnswer[]; onSource?: (answer: ReaderAnswer) => void
+  controls: ReactNode; selections?: ReaderAnswer[]; onSource?: (answer: Pick<ReaderAnswer, 'source_version_id' | 'page' | 'rect'>) => void
 }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
@@ -187,6 +191,7 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
   const prefs = usePreferences()
   const [queued,setQueued] = useState<{session:string;question:string}>()
   const [text, setText] = useState('')
+  const [findingFigures, setFindingFigures] = useState(false)
   const session = state.sessions.find((s) => s.id === state.activeSessionId)
   const messages = state.messages.filter((m) => m.sessionId === session?.id)
   const asked = new Set(messages.filter((m) => m.role === 'user').map((m) => m.segments[0]?.text))
@@ -243,7 +248,11 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
       if (!await askRegion(region, question)) return
     } else {
       const first = attached.find(a => a.passage)
-      if (!await act.ask(question, first && { source_version_id: first.version, passage_id: first.passage!, quote: first.quote })) return
+      const { requestsFigure } = await import('../visual/retrieve')
+      setFindingFigures(requestsFigure(question))
+      try {
+        if (!await act.ask(question, first && { source_version_id: first.version, passage_id: first.passage!, quote: first.quote })) return
+      } finally { setFindingFigures(false) }
     }
     annotations.remove(attached)
     if (fromComposer) setText((current) => current === t ? '' : current)
@@ -293,8 +302,8 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
           m.role === 'user'
             ? <div key={m.id} data-turn-id={m.id} className="msg user"><p>{m.segments[0]?.text}</p></div>
             : prefs.collapse === 'finished' && prefs.replies === 'latest' && m.done && messages.slice(messages.indexOf(m)+1).some(next=>next.role==='agent' && next.done)
-              ? <details key={m.id}><summary>{tr('Earlier answer')}</summary><AgentMessage m={m}/></details>
-              : <AgentMessage key={m.id} m={m} />,
+              ? <details key={m.id}><summary>{tr('Earlier answer')}</summary><AgentMessage m={m} onSource={onSource}/></details>
+              : <AgentMessage key={m.id} m={m} onSource={onSource} />,
         )}
         {selections.map((answer) => <div key={answer.id}>
           <div data-turn-id={'selection:' + answer.id} className="msg user"><p>{answer.question}</p></div>
@@ -336,6 +345,7 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
             </div>
           </div>}
           {queued && <p role="status">{tr('Queued question')} · {queued.question} <button onClick={()=>setQueued(undefined)}>{tr('Cancel')}</button></p>}
+          {findingFigures && <div role="status" className="working"><Spinner /> {tr('Searching paper figures…')}</div>}
           {blocked && <p className="fine">{blocked}</p>}
           <textarea ref={annotations.input} value={text} rows={2} placeholder={messages.length ? tr('Ask a follow-up…') : tr('Ask about these papers…')} aria-label={tr('Ask a follow-up')}
             onChange={(e) => setText(e.target.value)}
@@ -648,7 +658,7 @@ function Reader({ pdf }: { pdf?: PdfActions }) {
 function ReadingSplit({ selections, onSource, reader, annotations, askRegion, blocked }: {
   annotations: Annotations; askRegion?: AskRegion; blocked?: string
   selections?: ReaderAnswer[]
-  onSource?: (answer: ReaderAnswer) => void
+  onSource?: (answer: Pick<ReaderAnswer, 'source_version_id' | 'page' | 'rect'>) => void
   reader: ReactNode
 }) {
   const { tr } = useLanguage()

@@ -126,6 +126,7 @@ export interface AnswerSegment {
 }
 
 export interface ChatMessage {
+  figures?: import('../api/reader').PdfObject[]
   wikiTask?: string
   id: string
   sessionId: string

@@ -23,6 +23,7 @@ const READER: &[u8] = include_bytes!("../../../backend/reader.py");
 const DSH: &[u8] = include_bytes!("../../../backend/dsh.py");
 const CREDENTIALS: &[u8] = include_bytes!("../../../backend/credentials.py");
 const BIBLIOGRAPHY: &[u8] = include_bytes!("../../../backend/bibliography.py");
+const PDF_ENGINE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/pdf-engine.whl"));
 const ICORE_CATALOG: &[u8] = include_bytes!("../../../backend/icore-public.csv");
 const CCF_CATALOG: &[u8] = include_bytes!("../../../backend/ccf-public.csv");
 const VENUE_RANKS: &[u8] = include_bytes!("../../../backend/venue_ranks.py");
@@ -61,6 +62,7 @@ impl Worker {
         WIKI.hash(&mut hash);
         RESEARCH_TOOLS.hash(&mut hash);
         BIBLIOGRAPHY.hash(&mut hash);
+        PDF_ENGINE.hash(&mut hash);
         ICORE_CATALOG.hash(&mut hash);
         CCF_CATALOG.hash(&mut hash);
         VENUE_RANKS.hash(&mut hash);
@@ -76,6 +78,7 @@ impl Worker {
             (&runtime.join("citations.py"), CITATIONS),
             (&runtime.join("reader.py"), READER),
             (&runtime.join("bibliography.py"), BIBLIOGRAPHY),
+            (&runtime.join("pdf-engine.whl"), PDF_ENGINE),
             (&runtime.join("icore-public.csv"), ICORE_CATALOG),
             (&runtime.join("ccf-public.csv"), CCF_CATALOG),
             (&runtime.join("venue_ranks.py"), VENUE_RANKS),
@@ -235,7 +238,7 @@ impl Host {
             worker.send(&request, id, Pending { response, subscription })?;
             Arc::clone(&worker.routes)
         };
-        let timeout = if matches!(method, "candidate.decide" | "library.preview_pdf") { 90 } else { 20 };
+        let timeout = if matches!(method, "candidate.decide" | "library.preview_pdf" | "visual.objects") { 90 } else { 20 };
         match receiver.recv_timeout(Duration::from_secs(timeout)) {
             Ok(reply) => reply,
             Err(_) => {

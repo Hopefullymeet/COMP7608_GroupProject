@@ -185,6 +185,32 @@ class ReaderTest(unittest.TestCase):
         with self.assertRaises(Exception):
             call(self.worker, "visual.crop", **{**target, "topic_id": outside}, page=1, rect=obj["rect"])
 
+    def test_figure_lookup_turn_returns_original_region_and_rejects_unknown_ids(self):
+        topic = self.topic
+        source = call(self.worker, "library.import_pdf", topic_id=topic, name="Flow.pdf",
+                      content=self.pdf("Figure 1: Retrieval pipeline.", True))
+        version = source["source_version_id"]
+        figure = call(self.worker, "visual.objects", topic_id=topic, source_version_id=version)["items"][0]
+        session = call(self.worker, "session.create", topic_id=topic)["session_id"]
+        params = dict(topic_id=topic, session_id=session, kind="reading_qa", input={
+            "question": "有没有讲检索流程的图？", "figure_lookup_only": True,
+            "figure_refs": [{"version": version, "id": figure["object_id"]}],
+            "sources": [{"source_version_id": version, "paper_id": source["paper_id"], "requested_scope": "full_text"}]})
+        prepared = call(self.worker, "task.prepare", **params)
+        task = call(self.worker, "task.start", confirmation_id=prepared["confirmation_id"], **params)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            with self.worker.lock:
+                turns = self.worker.get("session", session)["turns"]
+            if turns:
+                break
+            time.sleep(.02)
+        self.assertEqual(turns[0]["task_id"], task["task_id"])
+        self.assertEqual(turns[0]["answer"]["figures"][0]["rect"], figure["rect"])
+        params["input"]["figure_refs"][0]["id"] = "unknown"
+        with self.assertRaises(RpcError):
+            call(self.worker, "task.prepare", **params)
+
     def test_figure_mention_without_detected_object_is_page_only(self):
         paper = call(self.worker, "library.import_pdf", topic_id=self.topic, name="Mention.pdf",
                      content=self.pdf("The architecture in Figure 9 explains the checkpoint recovery decisions.", False))

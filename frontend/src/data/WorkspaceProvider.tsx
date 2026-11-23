@@ -89,7 +89,11 @@ export function WorkspaceProvider({
       .then((result) => {
         refresh()
         if (!demo && method === 'library.import_pdf') {
-          const { paper_id } = result as Methods['library.import_pdf'][1]
+          const { paper_id, source_version_id } = result as Methods['library.import_pdf'][1]
+          const { topic_id } = payload as Methods['library.import_pdf'][0]
+          void import('../visual/retrieve').then(m => m.indexFigures(api, topic_id, source_version_id)).catch(() => {
+            // Retry incomplete visual indexing on the next figure query.
+          })
           void api.call('library.recognize_publication', { paper_id }).then(refresh).catch(() => {
             // PDF import is complete. The inspector supports retrying an offline lookup.
           })

@@ -38,7 +38,7 @@ export type Evidence = {
     location: { view: 'abstract'; precision: 'paragraph'; passage_id: Id; text_excerpt: string } }
 }
 export type Reading = {
-  scope_id: Id; message_id: Id; read_sources: { source_version_id: Id; read_scope: 'none' | Scope }[]
+  figures?: import('./reader').PdfObject[]; scope_id: Id; message_id: Id; read_sources: { source_version_id: Id; read_scope: 'none' | Scope }[]
   sentences: NonEmpty<{ text: string } & (
     { assessment: 'supported'; anchor_ids: NonEmpty<Id> } |
     { assessment: 'evidence_not_established'; anchor_ids: [] }
@@ -47,7 +47,7 @@ export type Reading = {
 export type Turn = { task_id: Id; question: string; answer: Reading }
 export type MainTask = { topic_id: Id } & (
   { kind: 'discovery'; input: { query: string; filters?: { year_from?: number; year_to?: number; venue?:string } } | { previous_search_id: Id } } |
-  { kind: 'reading_qa'; session_id: Id; input: { question: string; selection?: { source_version_id: Id; passage_id: Id; quote:string }; sources: NonEmpty<Source> } }
+  { kind: 'reading_qa'; session_id: Id; input: { figure_lookup_only?: boolean; figure_search_incomplete?: boolean; figure_refs?: {version: string; id: string}[]; question: string; selection?: { source_version_id: Id; passage_id: Id; quote:string }; sources: NonEmpty<Source> } }
 )
 export type WorkspaceTask = ResumeTask | ImportTask | ResearchTask | CitationTask | SynthesisTask | ReaderTask
 export type TaskInput = MainTask | WorkspaceTask

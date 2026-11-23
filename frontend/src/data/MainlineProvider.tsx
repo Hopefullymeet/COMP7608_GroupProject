@@ -60,14 +60,14 @@ function answerMessages(session: string, { task_id, question, answer }: Turn): [
   return [
     { id: `user:${task_id}`, sessionId: session, role: 'user', done: true, segments: [{ text: question }] },
     {
-      id: `answer:${answer.message_id}`, wikiTask:task_id,
+      id: `answer:${answer.message_id}`, wikiTask:task_id, figures: answer.figures,
       sessionId: session,
       role: 'agent',
       done: true,
       segments: [
         ...answer.sentences.map((sentence) => ({
           text: sentence.text,
-          evidenceIds: sentence.anchor_ids.map((anchor) => evidenceId(answer.message_id, anchor)),
+          evidenceIds: answer.figures && !answer.read_sources.length ? undefined : sentence.anchor_ids.map((anchor) => evidenceId(answer.message_id, anchor)),
         })),
         {
           text: '',
@@ -726,12 +726,26 @@ export function MainlineProvider({
       )
       const [first, ...rest] = sources
       if (!first) throw new Error(tr('No readable papers in this topic.'))
+      let incompleteFigureSearch = false
+      let figureRefs
+      const { requestsFigure, retrieveFigures } = await import('../visual/retrieve')
+      if (!workspace.demo && requestsFigure(text)) {
+        const versions = sources.filter(s => s.requested_scope === 'full_text').map(s => s.source_version_id)
+        const previous = view.messages.filter(m => m.sessionId === session && m.role === 'user').at(-1)
+        const refersBack = /这个|这种|上述|刚才|前面|上面|对应的图|that|this|above/i.test(text)
+        const query = refersBack && previous ? text + ' ' + previous.segments[0].text : text
+        const result = await retrieveFigures(api, topic, versions, query)
+        incompleteFigureSearch = result.skipped > 0
+        figureRefs = result.items.map(f => ({ version: f.source_version_id, id: f.object_id }))
+      }
       const started = await reading.prepare({
         topic_id: topic,
         session_id: session,
         kind: 'reading_qa',
         input: {
-          question: text,
+          question: text, ...(figureRefs && { figure_refs: figureRefs, figure_search_incomplete: incompleteFigureSearch,
+            figure_lookup_only: !/解释|分析|为什么|怎么做|说明原因|解读|explain|why|analy[sz]e/i.test(text) &&
+              /找|有没有|有无|哪[一张幅个些篇]|展示|给我看|find|show|is there|which/i.test(text) }),
           ...(passage && sources.some((source) => source.source_version_id === passage.source_version_id) &&
             { selection: passage }),
           sources: [first, ...rest],

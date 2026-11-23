@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { PdfObject } from '../api/reader'
 import { useWorkspace } from '../data/WorkspaceProvider'
 import { useLanguage } from '../i18n'
+import { FigurePreview } from './FigurePreview'
 import { Dialog } from './PageHead'
 
 export function FigureSearch({ topic, versions, names, onOpen, onAsk, onClose }: {
@@ -19,7 +20,9 @@ export function FigureSearch({ topic, versions, names, onOpen, onAsk, onClose }:
     if (!figureQuery.trim() || !versions.length) return
     setFinding(true)
     try {
-      const result = await workspace.api.call('visual.search', { topic_id: topic, source_versions: versions,
+      const result = !workspace.demo && !/表格|公式|equation|table/i.test(figureQuery)
+        ? await (await import('../visual/retrieve')).retrieveFigures(workspace.api, topic, versions, figureQuery)
+        : await workspace.api.call('visual.search', { topic_id: topic, source_versions: versions,
         query: figureQuery.trim() })
       setFigures(result.items)
       setSkippedFigures(result.skipped)
@@ -36,7 +39,9 @@ export function FigureSearch({ topic, versions, names, onOpen, onAsk, onClose }:
         {figures?.length === 0 && <p>{tr('No matching regions. Try another description.')}</p>}
         {skippedFigures > 0 && <p className="fine">{tr('{0} selected papers could not be indexed.', skippedFigures)}</p>}
         {figures?.map((figure) => <article className="synthesis-item" key={figure.object_id}>
-          <strong>{names[figure.source_version_id]} · {tr(figure.label)}</strong>
+          {figure.kind === 'figure' && figure.match_kind !== 'page'
+            ? <FigurePreview topic={topic} item={figure} title={names[figure.source_version_id]} />
+            : <strong>{names[figure.source_version_id]} · {tr(figure.label)}</strong>}
           {figure.match_kind && <small className="fine"> · {tr({
             caption: 'Caption match', region: 'Indexed region', page: 'Page mention only',
           }[figure.match_kind])}</small>}
