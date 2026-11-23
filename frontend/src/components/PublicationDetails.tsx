@@ -155,6 +155,7 @@ export function PublicationDetails({ topic, paper }: { topic: string; paper: str
     </div>
   </Disclosure>
   <Disclosure className="publication-details" icon="library" title={tr('Rankings and indexes')} onOpenChange={setRankOpen}>
+    <div className="publication-body">
     {rankOpen && !entry && <p role="status">{tr('Loading…')}</p>}
     {entry && <>
       {(Object.keys(labels) as (keyof typeof labels)[]).map((metric) => {
@@ -163,12 +164,16 @@ export function PublicationDetails({ topic, paper }: { topic: string; paper: str
           <h4>{tr(labels[metric])}</h4><ul>{hits.map((rank) => <Ranking key={rank.scheme} rank={rank} />)}</ul>
         </div>
       })}
-      {unavailable.length > 0 && <Disclosure title={tr('Other catalog results')}>
-        <ul>{unavailable.map((rank) => <li key={rank.scheme}>
-          {rank.label} · {rank.status !== 'matched' && tr(statuses[rank.status as keyof typeof statuses])}
-        </li>)}</ul>
+      {unavailable.some(item => item.status === 'venue_unknown') &&
+        <p>{tr('Add the journal name, conference name or ISSN in Publication details to check rankings.')}</p>}
+      {unavailable.some(item => item.status !== 'venue_unknown') && <Disclosure title={tr('Other catalog results')}>
+        <dl>{(['not_found', 'ambiguous', 'catalog_missing'] as const).map(status => {
+          const names = unavailable.filter(item => item.status === status).map(item => item.label)
+          return names.length > 0 && <Fragment key={status}><dt>{tr(statuses[status])}</dt><dd>{names.join(' · ')}</dd></Fragment>
+        })}</dl>
       </Disclosure>}
       <CatalogImport rankings={rankings} />
     </>}
+    </div>
   </Disclosure></>
 }

@@ -1243,6 +1243,7 @@ export const zhCN: Readonly<Record<string, string>> = {
   'Indexes': '收录',
   'Venue ratings': '期刊与会议等级',
   'Bibliographic source': '书目来源',
+  'Add the journal name, conference name or ISSN in Publication details to check rankings.': '请在「发表信息」中补充期刊名、会议名或 ISSN，以查询分区与收录情况。',
   'Other catalog results': '查看其他目录状态',
   'Catalog not installed': '当前工作区未安装目录',
   'Publication venue is missing': '待补刊名、会议名或 ISSN',
