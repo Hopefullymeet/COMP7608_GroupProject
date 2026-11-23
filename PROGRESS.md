@@ -202,3 +202,4 @@ Reading answers now resolve version IDs to paper aliases or titles and localize 
 - 首页午夜和凌晨轮播加入双语休息问候，已按本地 24 个小时验证显示范围。
 - Wiki 接入共用轨迹按钮。两页主题选择区预留相同滚动条空间，已验证长历史页切换到短列表时标题对齐。
 - 引用定位后显示三点气泡，点击后展开证据。关闭详情保留原文定位。
+- 侧栏会话不再显示日期，最近会话的副标题仅显示所属主题。

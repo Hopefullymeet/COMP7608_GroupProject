@@ -146,7 +146,6 @@ export function Sidebar({ onSettings }: { onSettings: () => void }) {
                       <div key={s.id} className={`session-item ${activeSession === s.id ? 'active' : ''}`}>
                         <button className="session-open" onClick={() => act.openSession(s.id)} title={tr(s.title)}>
                           <span className="grow">{tr(s.title)}</span>
-                          <small>{tr(s.updated)}</small>
                         </button>
                         {renameButton('session', s.topicId, s.id, s.title)}
                         {<button className="side-delete" onClick={() => act.deleteSession(s.id)}
@@ -178,7 +177,7 @@ export function Sidebar({ onSettings }: { onSettings: () => void }) {
               <div key={s.id} className={`side-session ${activeSession === s.id ? 'active' : ''}`}>
                 <button className="recent-open" onClick={() => act.openSession(s.id)} title={tr(s.title)}>
                   <span>{tr(s.title)}</span>
-                  <small>{state.topics.find((t) => t.id === s.topicId)?.title} · {tr(s.updated)}</small>
+                  <small>{state.topics.find((t) => t.id === s.topicId)?.title}</small>
                 </button>
                 {<button className="side-delete" onClick={() => act.deleteSession(s.id)}
                   title={tr('Delete session: {0}', s.title)} aria-label={tr('Delete session: {0}', s.title)}>
