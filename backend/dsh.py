@@ -18,7 +18,7 @@ from credentials import deepseek_api_key
 
 
 ENDPOINT = "https://api.deepseek.com"
-LEGACY_ENDPOINT = "https://api.deepseek.com/anthropic"
+MESSAGES_ENDPOINT = ENDPOINT + "/anthropic"
 MODEL = "deepseek-flash"
 ANSWER_LAYOUT = "When there are several points, put each distinct point in its own concise sentence entry. "
 NPM_CLI = Path("node_modules/@deepseek-ai/dsh/lib/bin.js")
@@ -378,12 +378,14 @@ class Dsh:
                 for pid, version, page, text in rows}
 
     def write_patch(self, patch, root, plugin):
+        # The official Messages API has a different root from Chat Completions.
+        messages_root = MESSAGES_ENDPOINT if self.endpoint.rstrip("/") in (ENDPOINT, ENDPOINT + "/v1") else self.endpoint
         patch.write_text(json.dumps([
             *({"id": item, "disabled": True} for item in (*DISABLED_TOOLS, "session-log-deepseek",
                                                           "plugin-package-inventory-deepseek")),
             {"id": "system-prompt", "config": {"personaPrefix": "You are PaperTrace, a scholarly evidence assistant."}},
             {"id": "sandbox-policy", "config": {"mode": "read-only", "workspaceRoot": str(root)}},
-            {"id": "llm-deepseek", "config": {"apiKeyEnv": "DEEPSEEK_API_KEY", "baseURL": self.endpoint,
+            {"id": "llm-deepseek", "config": {"apiKeyEnv": "DEEPSEEK_API_KEY", "baseURL": messages_root,
                                              "thinking": "disabled",
                                              "retryPolicy": {"mode": "normal", "maxRetries": 0}}},
             *([{"insert": [{"id": "papertrace-paper-tools", "name": str(plugin)}]}] if plugin else []),

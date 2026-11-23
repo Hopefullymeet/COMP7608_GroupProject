@@ -20,7 +20,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
 
 from credentials import deepseek_api_key, system_key, store
-from dsh import ANSWER_LAYOUT, Dsh, DshFailure, ENDPOINT, LEGACY_ENDPOINT, MODEL, read_json_answer
+from dsh import ANSWER_LAYOUT, Dsh, DshFailure, ENDPOINT, MESSAGES_ENDPOINT, MODEL, read_json_answer
 from literature import LiteratureError, MAX_VERSIONS, digest, init_corpus
 from workbench import Workbench
 from citations import CitationWorkspace, init_citations
@@ -89,7 +89,7 @@ def model_endpoint(value):
         port = url.port
         if (url.scheme in ("http", "https") and url.hostname and url.username is None
                 and (port is None or port > 0) and not re.search(r'[\s\x00-\x1f\x7f\\?#<>"`]', endpoint)):
-            return ENDPOINT if endpoint == LEGACY_ENDPOINT else endpoint
+            return ENDPOINT if endpoint == MESSAGES_ENDPOINT else endpoint
     except ValueError:
         pass
     raise invalid("Enter an HTTP(S) base URL without credentials, query parameters or fragments.")
