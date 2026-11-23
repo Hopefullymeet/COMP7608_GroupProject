@@ -67,7 +67,7 @@ export function Sidebar({ onSettings }: { onSettings: () => void }) {
   return (
     <aside className="workspace-sidebar">
       <button className="brand" onClick={() => act.navigate({ view: 'home' })}>
-        <img src={import.meta.env.BASE_URL + 'paper-bird.png'} width="38" height="38" alt="" />
+        <img src={import.meta.env.BASE_URL + 'reading-otter.png'} width="40" height="36" alt="" />
         <strong>PaperTrace</strong>
       </button>
 
