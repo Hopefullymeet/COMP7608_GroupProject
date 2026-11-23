@@ -72,7 +72,7 @@ python validate_data.py
 
 The collector reuses existing PDFs. It records download failures and exits with a failure status when needed. The preparation script regenerates initial drafts and overwrites edits to its generated files. Freeze a copy before review and stop rerunning the preparation script on reviewed materials.
 
-The validator checks file completeness, hashes, excerpt offsets, IDs, and field references. It does not run a model or establish semantic correctness. Results are saved in `review/validation_report.json`. PDFs are excluded from Git by default. Check each paper's license before public distribution. This work is maintained on the `test/data-preparation` branch.
+The validator checks file completeness, hashes, excerpt offsets, IDs, and field references. It does not run a model or establish semantic correctness. Results are saved in `review/validation_report.json`. The complete `corpus/` directory, including all 18 original PDFs, is included in Git. This work is maintained on the `test/data-preparation` branch.
 
 The first review covered 10 tasks and 2 relations. Its findings are retained in `review/SOURCE_REVIEW.md`.
 

@@ -1,4 +1,3 @@
-corpus/*/paper.pdf
 __pycache__/
 # Local review copies with a non-ASCII suffix.
 review/*_[!a-zA-Z0-9]*.md
