@@ -295,11 +295,22 @@
 .library-reader > .pt-reader { flex: 1; }
 
 /* One toolbar for the page, its current document or conversation, and its actions. */
-.app { --topic-header-height: 38px; --header-fade: 14px; }
+.app { --topic-header-height: 38px; }
 .app .page-head, .app .topic .topic-head:has(.pt-topic-actions), .app .topic-head {
   display: flex; flex-wrap: nowrap; align-items: center; height: var(--topic-header-height);
   min-width: 0; gap: 7px; padding: 3px 12px; border-bottom: 0; position: relative; z-index: 2;
-  background: linear-gradient(to bottom, var(--surface) calc(100% - var(--header-fade)), transparent);
+  background: transparent;
+}
+.app :is(.page-head, .topic-head)::before,
+.app--desktop .main:has(> .home) > .desktop-drag-area::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  -webkit-mask-image: linear-gradient(to bottom, black 65%, transparent);
+  mask-image: linear-gradient(to bottom, black 65%, transparent);
+}
+.app--desktop .main:has(> .home) > .desktop-drag-area {
+  z-index: 2; height: var(--topic-header-height);
 }
 .app--desktop .page-head { padding-inline-end: 114px; }
 .app--desktop .main:has(.page) .desktop-drag-area { height: 38px; align-items: center; padding: 3px 8px; z-index: 3; }
@@ -324,19 +335,26 @@
 .header-actions .pt-topic-menu { right: 0; }
 .audit-inspector[hidden] { display: none; }
 .audit-spread:not(.inspecting) { grid-template-columns: minmax(0,1fr); }
-/* The scroller extends behind the last 14px of the toolbar. Its content
-   stays fully opaque until it crosses the toolbar's bottom edge. */
-.page-head + .page-body.scroll,
-.topic-head + .topic-body:has(> .read) { margin-top: calc(-1 * var(--header-fade)); }
-.page-head + .page-body.scroll::before { content: ''; display: block; height: var(--header-fade); flex: none; }
-.topic-body > .read .chat-scroll { padding-top: calc(12px + var(--header-fade)); }
-.topic-body > .read .pt-reader-frame::before { content: ''; display: block; height: var(--header-fade); }
-.topic-body > .read :is(.pt-paper-directory, .pt-pdf-rail) { top: calc(12px + var(--header-fade)); }
+/* Scroll content behind the toolbar, keeping the first line and fixed controls below it at rest. */
+.page-head + :is(.page-body.scroll, .wiki-scroll),
+.library-reader > .pt-reader,
+.topic-head + .topic-body:has(> :is(.read, .discover.scroll, .compare.scroll)) {
+  margin-top: calc(-1 * var(--topic-header-height));
+}
+.page-head + :is(.page-body.scroll, .wiki-scroll)::before,
+.topic-body > :is(.discover.scroll, .compare.scroll)::before,
+:is(.library-reader, .topic-body > .read) .pt-reader-frame::before {
+  content: ''; display: block; height: var(--topic-header-height); flex: none;
+}
+.topic-body > .read .chat-scroll { padding-top: calc(12px + var(--topic-header-height)); }
+:is(.library-reader, .topic-body > .read) :is(.pt-paper-directory, .pt-pdf-rail) {
+  top: calc(12px + var(--topic-header-height));
+}
 .header-context[data-truncated] { text-overflow: clip; mask-image: linear-gradient(to right, black calc(100% - 16px), transparent); }
 
 .wiki-page .page-head:has(.header-context) h1 { margin-inline-end: 0; flex: none; }
 .page-body:has(> .audit-reading) {
-  container-type: inline-size; padding: calc(var(--header-fade) + 8px) 12px 8px;
+  container-type: inline-size; padding: calc(var(--topic-header-height) + 8px) 12px 8px;
   display: flex; flex-direction: column;
 }
 .page-body:has(> .audit-reading)::before { display: none; }
