@@ -1,7 +1,7 @@
 import { usePreferences } from '../data/preferences'
 import { count, useLanguage } from '../i18n'
 import { lazy, Suspense, useContext, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { allEvidence, currentTopic, evidenceFor, paperFor, papersOfTopic, sourceStatus, useStore } from '../data/store'
+import { allEvidence, currentTopic, evidenceFor, hasMessages, paperFor, papersOfTopic, sourceStatus, useStore } from '../data/store'
 import { QUESTIONS } from '../data/scripts'
 import { quoteOffsets } from '../components/quoteRange'
 import { EvidencePopover } from '../components/EvidencePopover'
@@ -574,9 +574,8 @@ function Reader({ pdf }: { pdf?: PdfActions }) {
   )
 }
 
-function ReadingSplit({ live = false, selections, onSource, reader, annotations, askRegion, blocked }: {
+function ReadingSplit({ selections, onSource, reader, annotations, askRegion, blocked }: {
   annotations: Annotations; askRegion?: AskRegion; blocked?: string
-  live?: boolean
   selections?: ReaderAnswer[]
   onSource?: (answer: ReaderAnswer) => void
   reader: ReactNode
@@ -589,14 +588,20 @@ function ReadingSplit({ live = false, selections, onSource, reader, annotations,
   const drag = useRef<{ id: number; offset: number }>()
   const chatId = useId()
   const paperId = useId()
-  const [collapsed, setCollapsed] = useState<'chat' | 'paper'>()
+  const [collapsed, setCollapsed] = useState<'chat' | 'paper' | undefined>(() => {
+    const session = state.sessions.find(s => s.id === state.activeSessionId)
+    return session && (session.hasTurns || hasMessages(state, session.id)) || state.activeEvidence ? undefined : 'paper'
+  })
+  const [readerOpened, setReaderOpened] = useState(collapsed !== 'paper')
+  useEffect(() => {
+    if (collapsed !== 'paper') setReaderOpened(true)
+  }, [collapsed])
   const [dragging, setDragging] = useState(false)
   const [width, setWidth] = useState(0)
   const [preferredShare, setPreferredShare] = useState<number>()
   const minShare = width ? Math.min(240 / width, .4) : .4
   const maxShare = .6
-  const defaultShare = width ? (live ? .28 : 430 / width) : .4
-  const share = Math.max(minShare, Math.min(maxShare, preferredShare ?? defaultShare))
+  const share = Math.max(minShare, Math.min(maxShare, preferredShare ?? .5))
 
   useEffect(() => {
     if (!layout.current) return
@@ -686,7 +691,7 @@ function ReadingSplit({ live = false, selections, onSource, reader, annotations,
         event.preventDefault()
         setPreferredShare(Math.max(minShare, Math.min(maxShare, next)))
       }} />}
-    <div className="read-paper-pane" id={paperId} hidden={collapsed === 'paper'}>{reader}</div>
+    <div className="read-paper-pane" id={paperId} hidden={collapsed === 'paper'}>{(readerOpened || collapsed !== 'paper') && reader}</div>
   </div>
 }
 
@@ -715,7 +720,7 @@ function LiveReading({ topic, session, annotations }: { topic: string; session: 
   }
 
   return <>
-    <ReadingSplit live annotations={annotations}
+    <ReadingSplit annotations={annotations}
       blocked={annotations.items.filter(a => a.selection?.medium === 'image').length > 1 ? tr('Send one image region at a time.') :
         annotations.items.some(a => a.selection?.medium === 'image') && !vision?.vision ? tr('Configure a local vision model to ask about images.') : undefined}
       askRegion={async (a, question) => {
