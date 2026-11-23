@@ -198,6 +198,40 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
   const papers = papersOfTopic(state, currentTopic(state))
   const readable = papers.filter((id) => paperFor(state, id).stored !== 'metadata')
   const canAsk = !state.mainline || readable.length > 0
+  const hasComposer = state.mainline ? readable.length > 0 : papers.length > 0
+  const composerDock = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const field = annotations.input.current
+    if (!field) return
+    function fit() {
+      if (!field || !field.clientWidth) return
+      field.style.height = 'auto'
+      field.style.height = field.scrollHeight + 'px'
+    }
+    fit()
+    let width = field.clientWidth
+    const observer = new ResizeObserver(() => {
+      if (field.clientWidth !== width) {
+        width = field.clientWidth
+        fit()
+      }
+    })
+    observer.observe(field)
+    return () => observer.disconnect()
+  }, [text, hasComposer, annotations.input])
+  useLayoutEffect(() => {
+    const dock = composerDock.current
+    const chat = dock?.parentElement
+    if (!dock || !chat) return
+    const measure = () => chat.style.setProperty('--dock-height', dock.offsetHeight + 'px')
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(dock)
+    return () => {
+      observer.disconnect()
+      chat.style.removeProperty('--dock-height')
+    }
+  }, [hasComposer])
 
   const last = messages[messages.length - 1]
   const agent = last?.role === 'agent' ? last : undefined
@@ -318,7 +352,7 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
       </div>
 
       </div>
-      {(state.mainline ? readable.length > 0 : papers.length > 0) && <div className="chat-bottom">
+      {hasComposer && <div className="chat-bottom" ref={composerDock}>
         {suggestions.length > 0 && (
           <div className="suggest-row">
             {suggestions.map((q) => {
@@ -347,7 +381,7 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
           {queued && <p role="status">{tr('Queued question')} · {queued.question} <button onClick={()=>setQueued(undefined)}>{tr('Cancel')}</button></p>}
           {findingFigures && <div role="status" className="working"><Spinner /> {tr('Searching paper figures…')}</div>}
           {blocked && <p className="fine">{blocked}</p>}
-          <textarea ref={annotations.input} value={text} rows={2} placeholder={messages.length ? tr('Ask a follow-up…') : tr('Ask about these papers…')} aria-label={tr('Ask a follow-up')}
+          <textarea ref={annotations.input} value={text} rows={1} placeholder={messages.length ? tr('Ask a follow-up…') : tr('Ask about these papers…')} aria-label={tr('Ask a follow-up')}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (prefs.send === 'enter' || e.metaKey || e.ctrlKey)) { e.preventDefault(); submit() } }} />
           <div className="composer-bar">
