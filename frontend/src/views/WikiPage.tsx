@@ -328,7 +328,7 @@ export function WikiPage() {
   const topic = state.topics.find(t => t.id === selected)
   return (
     <div className="page wiki-page">
-      <PageHead icon="wiki" title={tr('Wiki')} sub={tr('Long-term memory for the whole topic')}
+      <PageHead trace icon="wiki" title={tr('Wiki')} sub={tr('Long-term memory for the whole topic')}
         onBack={topic ? () => select('') : undefined}>
         {topic && <HeaderContext text={topic.title} />}
       </PageHead>
