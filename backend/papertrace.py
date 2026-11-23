@@ -1887,12 +1887,22 @@ class Worker:
             memory = task.get("topic_memory")
             issue = None
             used_endpoint = runtime is None
+            def record_tool(name, observation):
+                with self.lock:
+                    current = self.get("task", task_id)
+                    if current["status"] != "running":
+                        return
+                    with self.db:
+                        current["steps"].append({"kind": "tool", "title": name, "detail": observation})
+                        event = self.emit(current, "task.progress", {"stage": "tool." + name, "message": observation})
+                    self.send_events([event])
+
             if runtime is not None:
                 try:
                     if has_pdf:
-                        claims, seen, issue = runtime.answer_full_text(question, sources, signal, memory=memory)
+                        claims, seen, issue = runtime.answer_full_text(question, sources, signal, memory=memory, progress=record_tool)
                     else:
-                        claims, seen = runtime.answer(question, sources, signal, memory=memory)
+                        claims, seen = runtime.answer(question, sources, signal, memory=memory, progress=record_tool)
                 except DshFailure as error:
                     if not error.startup:
                         raise
@@ -1947,11 +1957,7 @@ class Worker:
                                 if re.search(r"[\u3400-\u9fff]", question) else
                                 "Only abstracts were available. Add the full papers to verify these claims against the body.")
                         sentences.append({"text": note, "anchor_ids": [], "assessment": "evidence_not_established"})
-                    events = self.persist_reading(task, message_id, sentences, reads, {
-                        "kind": "tool", "title": "Read locally retrieved passages" if used_endpoint else "Read with DeepSeek Harness",
-                        "detail": (f"Sent {len(seen)} approved passage(s) to the configured model." if used_endpoint
-                                   else f"Read {len(seen)} approved passage(s) using paper_read."),
-                    }, issue=issue, streamed=streamed)
+                    events = self.persist_reading(task, message_id, sentences, reads, issue=issue, streamed=streamed)
                 self.send_events(events)
         except DshFailure as error:
             self.fail_dsh(task_id, error.issue, error.seen)
@@ -2084,7 +2090,7 @@ class Worker:
             "kind": "tool", "title": "Read saved abstract", "detail": "Checked the local fixture passage.",
         })
 
-    def persist_reading(self, task, message_id, sentences, reads, step, issue=None, streamed=False):
+    def persist_reading(self, task, message_id, sentences, reads, step=None, issue=None, streamed=False):
         input_ = task["input"]
         answer = {"scope_id": task["scope_id"], "message_id": message_id, "read_sources": reads, "sentences": sentences}
         session = self.get("session", task["session_id"])
@@ -2093,7 +2099,8 @@ class Worker:
         session["turns"].append({"task_id": task["task_id"], "question": input_["question"], "answer": answer})
         session["updated_at"] = now()
         self.put("session", session["session_id"], session)
-        task["steps"] = [step]
+        if step:
+            task["steps"].append(step)
         events = [] if streamed else [self.emit(task, "answer.delta", {"text": " ".join(s["text"] for s in sentences)})]
         full_reads = {source["source_version_id"] for source in reads if source["read_scope"] == "full_text"}
         if issue:

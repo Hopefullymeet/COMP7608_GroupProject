@@ -64,10 +64,8 @@ function AgentMessage({ m }: { m: ChatMessage }) {
 
   return (
     <div className="msg agent" data-answer-id={m.id}>
-      <div className="msg-who">
-        <span className="avatar">P</span> PaperTrace
-        {!m.done && <span className="working"><Spinner /> {tr(lastStep?.title ?? 'Planning…')}</span>}
-      </div>
+      {!m.done && <div className="msg-who"><span className="working"><Spinner /> {tr(lastStep?.title ?? 'Planning…')}</span></div>}
+      {m.wikiTask && state.topics.find(t=>t.id===currentTopic(state))?.wikiTurns?.includes(m.wikiTask) && <small className="wiki-update"><Icon name="wiki" size={13}/>{tr('Wiki updated')}</small>}
       {run && run.steps.length > 0 && <details key={String(m.done) + prefs.collapse} open={!m.done || prefs.collapse === 'never'} className="chat-work-steps">
         <summary>{count(tr,run.steps.length,'step')}</summary>
         <ol>{run.steps.map(step=><li key={step.id}>{tr(step.title)}
@@ -111,12 +109,11 @@ function AgentMessage({ m }: { m: ChatMessage }) {
           })}
         </div>
       )}
-      {m.wikiTask && state.topics.find(t=>t.id===currentTopic(state))?.wikiTurns?.includes(m.wikiTask) && <small className="wiki-update"><Icon name="wiki" size={13}/>{tr('Wiki updated')}</small>}
       {m.done && state.mainline?.saveAnswer && <button className="link-btn" onClick={()=>state.mainline?.saveAnswer?.(m)}>{tr('Save answer as note')}</button>}
       {m.done && run && (
         <div className="msg-foot">
           <span className="run-chip done">{tr('Done')}</span>
-          <span>{count(tr, run.steps.length, 'step')} · {count(tr, tools, 'tool call')}</span>
+          {run.steps.length > 0 && <span>{count(tr, run.steps.length, 'step')} · {count(tr, tools, 'tool call')}</span>}
           <button className="link-btn" onClick={() => act.showTrace(true, run.id)}>{tr('View trace')}</button>
         </div>
       )}
@@ -228,7 +225,6 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
         {selections.map((answer) => <div key={answer.id}>
           <div className="msg user"><p>{answer.question}</p></div>
           <div className="msg agent">
-            <div className="msg-who"><span className="avatar">P</span> PaperTrace</div>
             <AnswerText text={answer.answer} />
             <button className="link-btn" onClick={() => onSource?.(answer)}>
               {paperFor(state, answer.source_version_id)?.short} · {tr('PDF page {0}', answer.page)}

@@ -203,7 +203,12 @@ class DshResearchTest(unittest.TestCase):
                     self.assertTrue(all(tools == expected_tools for tools in provider.observed_tools), provider.observed_tools)
                     version = fixture.versions[0]
                     sources = [{"source_version_id": version, "title": "Alpha", "available_scope": "full_text"}]
-                    full, seen, issue = dsh.answer_full_text("What benchmark does Alpha define?", sources, threading.Event())
+                    steps = []
+                    full, seen, issue = dsh.answer_full_text(
+                        "What benchmark does Alpha define?", sources, threading.Event(),
+                        progress=lambda name, detail: steps.append(name),
+                    )
+                    self.assertEqual(steps, ["paper_search", "paper_read"])
                     self.assertIsNone(issue)
                     self.assertIn(full[0]["references"][0]["passage"]["passage_id"], seen)
                     full, seen, issue = dsh.answer_full_text("Return an invalid response.", sources, threading.Event())

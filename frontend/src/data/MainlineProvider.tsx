@@ -784,9 +784,7 @@ export function MainlineProvider({
         label: view.messages.find((message) => message.id === `user:${reading.task}`)?.segments[0]?.text
           ?? 'Reading abstracts',
         status: 'running',
-        steps: reading.preview.progress
-          ? [{ id: 'reading', kind: 'tool', title: reading.preview.progress }]
-          : [],
+        steps: reading.preview.tools.map((step, i) => ({ ...step, id: String(i) })),
       }
     : undefined
   const labels: Record<HistoryRun['kind'], AgentRun['task']> = {
@@ -807,7 +805,9 @@ export function MainlineProvider({
     label: h.label,
     usage: h.usage,
     status: h.status === 'queued' ? 'running' : h.status === 'completed' ? 'done' : h.status,
-    steps: h.steps.map((s, i) => ({ ...s, id: String(i) })),
+    steps: h.steps.filter(step => h.kind !== 'reading_qa' ||
+      !['Read with DeepSeek Harness', 'Read locally retrieved passages'].includes(step.title))
+      .map((s, i) => ({ ...s, id: String(i) })),
   }))
   const runs = [
     questionRun,
