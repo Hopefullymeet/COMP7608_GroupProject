@@ -51,11 +51,13 @@ type TaskSnapshot<R> = { task_id: Id; run_id: Id; last_event_seq: number } & (
 )
 // Extra 为主线追加的事件类型；stage 取值由主线限定
 type TaskEvent<R, Extra = never> = { task_id: Id; run_id: Id; event_seq: number } & (
-  | { type: 'task.progress'; payload: { stage: string; message: NonEmptyText } }
+  | { type: 'task.progress'; payload: { stage: string; message: NonEmptyText; activity?: ReadingActivity } }
   | { type: 'task.finished'; payload: Finished<R> }
   | Extra
 )
 ```
+
+阅读工具的进度事件与历史步骤可携带同一份 `activity`。其可选字段包括实际查询词 `query`、限定论文版本 `version` 和名称 `paper`，以及阅读工具返回的 `passages`。每个片段包括论文版本、标题、片段 ID 和短原文，可包含从 1 开始的页码和从 0 开始的页内索引序号。历史任务可携带结束时间 `finished_at`；旧记录可省略这些字段。
 
 - 状态为 `queued → running →` 一个终态。启动后直接失败或取消时可从 `queued` 进入终态。
 - `task.finished` 每次运行只发一次，且是该次运行最后一个事件。持久结果须先于结束通知可读，`task.get` 与通知返回同样的结果。流式增量只用于预览，结束后以持久化的 `result` 为准。
