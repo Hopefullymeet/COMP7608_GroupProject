@@ -698,8 +698,6 @@ function ReadingSplit({ selections, onSource, reader, annotations, askRegion, bl
   const { tr } = useLanguage()
   const { state, act } = useStore()
   const layout = useRef<HTMLDivElement>(null)
-  const toggleChat = useRef<HTMLButtonElement>(null)
-  const restoreChat = useRef<HTMLButtonElement>(null)
   const drag = useRef<{ id: number; offset: number }>()
   const chatId = useId()
   const paperId = useId()
@@ -751,12 +749,9 @@ function ReadingSplit({ selections, onSource, reader, annotations, askRegion, bl
         if (collapsed === 'paper') setCollapsed(undefined)
         onSource(answer)
       })} controls={<>
-        {collapsed !== 'paper' && <button ref={toggleChat} className="icon-btn sm" type="button"
-          title={chatLabel} aria-label={chatLabel} aria-controls={chatId} aria-expanded
-          onClick={() => {
-            setCollapsed('chat')
-            requestAnimationFrame(() => restoreChat.current?.focus({ preventScroll: true }))
-          }}>
+        {collapsed !== 'paper' && <button className="icon-btn sm" type="button"
+          title={chatLabel} aria-label={chatLabel} aria-controls={chatId} aria-expanded={collapsed !== 'chat'}
+          onClick={() => setCollapsed(current => current === 'chat' ? undefined : 'chat')}>
           <Icon name="sidebar" size={16} />
         </button>}
         <button className="icon-btn sm" type="button" title={paperLabel} aria-label={paperLabel}
@@ -766,15 +761,6 @@ function ReadingSplit({ selections, onSource, reader, annotations, askRegion, bl
         </button>
       </>} />
     </div>
-    {collapsed === 'chat' && <div className="read-collapsed-chat">
-      <button ref={restoreChat} className="icon-btn" type="button" title={chatLabel} aria-label={chatLabel}
-        aria-controls={chatId} aria-expanded={false} onClick={() => {
-          setCollapsed(undefined)
-          requestAnimationFrame(() => toggleChat.current?.focus({ preventScroll: true }))
-        }}>
-        <Icon name="sidebar" size={16} />
-      </button>
-    </div>}
     {!collapsed && <div className="read-divider" role="separator" tabIndex={0} aria-orientation="vertical"
       aria-label={tr('Resize paper pane')} title={tr('Drag to resize the paper pane')}
       aria-controls={paperId} aria-valuemin={Math.round((1 - maxShare) * 100)}

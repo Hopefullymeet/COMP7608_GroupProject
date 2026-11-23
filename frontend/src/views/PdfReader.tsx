@@ -1,3 +1,4 @@
+import { bindPdfPinch } from './pdfPinch'
 import { usePreferences } from '../data/preferences'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -15,6 +16,10 @@ import { useLanguage } from '../i18n'
 import type { Mark, Point, Rect, Selection } from '../api/reader'
 
 GlobalWorkerOptions.workerSrc = workerUrl
+
+const minZoom = .5
+const maxZoom = 2
+const clampZoom = (scale: number) => Math.max(minZoom, Math.min(maxZoom, scale))
 
 const colors: Record<Mark['color'], string> = { amber: '#f7bc39', rose: '#d45d86', blue: '#5987cd', green: '#4ba583' }
 
@@ -386,7 +391,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
         restoringPosition.current = true
         const restore = { page, target }
         initialJump.current = restore
-        setZoom(Math.min(1.5, Math.max(1, savedPosition.zoom ?? 1)))
+        setZoom(clampZoom(savedPosition.zoom ?? 1))
         requestAnimationFrame(() => {
           if (initialJump.current === restore) jump(Math.min(document.numPages, savedPosition.page!), undefined, savedPosition.offset)
           requestAnimationFrame(() => { restoringPosition.current = false })
@@ -572,18 +577,39 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
     } catch (problem) { workspace.report(problem) }
   }
 
-  function adjustZoom(next: number) {
+  const requestedZoom = useRef(zoom)
+  const anchor = useRef<{ sheet: HTMLElement; x: number; y: number; clientX: number; clientY: number }>()
+  function adjustZoom(value: number, clientX?: number, clientY?: number) {
     const scroller = frame.current
-    const sheet = pageElement(current)
-    if (!scroller || !sheet || next === zoom) return
-    const within = (scroller.scrollTop - sheet.offsetTop) / Math.max(1, sheet.offsetHeight)
+    const next = clampZoom(value)
+    if (!scroller || !Number.isFinite(next) || requestedZoom.current === next) return
+    const bounds = scroller.getBoundingClientRect()
+    const x = clientX ?? bounds.left + scroller.clientWidth / 2
+    const y = clientY ?? bounds.top + scroller.clientHeight / 2
+    const first = pageElement(1)
+    if (!first) return
+    const position = y - first.getBoundingClientRect().top + first.offsetTop
+    const sheet = pageElement(pageAt(position))
+    if (!sheet) return
+    const box = sheet.getBoundingClientRect()
+    if (!box.width || !box.height) return
+    anchor.current = { sheet, x: (x - box.left) / box.width, y: (y - box.top) / box.height, clientX: x, clientY: y }
+    requestedZoom.current = next
     setZoom(next)
-    requestAnimationFrame(() => {
-      const activePage = pageElement(current)
-      if (activePage) scroller.scrollTo({ top: activePage.offsetTop + activePage.offsetHeight * within })
-      queueBookmark(scroller, next)
-    })
   }
+  useLayoutEffect(() => {
+    requestedZoom.current = zoom
+    const point = anchor.current
+    anchor.current = undefined
+    if (!point || !frame.current) return
+    const box = point.sheet.getBoundingClientRect()
+    frame.current.scrollBy(box.left + point.x * box.width - point.clientX, box.top + point.y * box.height - point.clientY)
+    queueBookmark(frame.current, zoom)
+  }, [zoom])
+  useEffect(() => {
+    if (!frame.current || !document) return
+    return bindPdfPinch(frame.current, (factor, x, y) => adjustZoom(requestedZoom.current * factor, x, y))
+  }, [document])
 
   const pageInset = 12
   return <div className="pt-reader">
@@ -597,7 +623,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
           const number = index + 1
           const ratio = ratios[number] ?? aspectRatio
           const pageWidth = Math.max(1, width - 2 * pageInset) * zoom
-          return <div className="pt-pdf-sheet" key={number} style={{ width: pageWidth, aspectRatio: ratio }}>
+          return <div className="pt-pdf-sheet" key={number} style={{ width: pageWidth, height: ratio > 0 ? pageWidth / ratio : undefined }}>
             {(number >= renderRange[0] && number <= renderRange[1]) &&
               <PdfSheet document={document} scope={scope} page={number} width={pageWidth} aspectRatio={ratio}
                 citation={page === number ? citation : undefined} marks={marks.filter((mark) => mark.page === number)} target={highlight?.page === number ? highlight.rect : undefined}
@@ -611,10 +637,10 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
     </div>
     <div className="pt-pdf-rail" aria-label={tr('PDF tools')}>
       <div className="pt-pdf-cluster">
-        <button className="pt-round" disabled={!document || zoom >= 1.5} title={tr('Zoom in')}
-          aria-label={tr('Zoom in')} onClick={() => adjustZoom(Math.min(1.5, zoom + .25))}><Icon name="zoomIn" size={17} /></button>
-        <button className="pt-round" disabled={!document || zoom <= 1} title={tr('Zoom out')}
-          aria-label={tr('Zoom out')} onClick={() => adjustZoom(Math.max(1, zoom - .25))}><Icon name="zoomOut" size={17} /></button>
+        <button className="pt-round" disabled={!document || zoom >= maxZoom} title={tr('Zoom in')}
+          aria-label={tr('Zoom in')} onClick={() => adjustZoom(zoom + .25)}><Icon name="zoomIn" size={17} /></button>
+        <button className="pt-round" disabled={!document || zoom <= minZoom} title={tr('Zoom out')}
+          aria-label={tr('Zoom out')} onClick={() => adjustZoom(zoom - .25)}><Icon name="zoomOut" size={17} /></button>
       </div>
       {tool !== 'select' && <button className="pt-round" onClick={() => setTool('select')}
         title={tr(tool === 'region' ? 'Cancel region selection' : 'Finish drawing')}

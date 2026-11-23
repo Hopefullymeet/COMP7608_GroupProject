@@ -226,7 +226,6 @@
   .app:has(.read) .topic-head .tabs { order: 1; max-width: 100%; overflow: auto; }
   .topic-body > .read { display: block; overflow: auto; }
   .read .read-divider, .read > [hidden] { display: none; }
-  .read-collapsed-chat { border-inline-end: 0; border-bottom: 1px solid var(--line); padding-block: 4px; }
   .read .chat { min-height: 36dvh; max-height: 50dvh; }
   .read .reader { min-height: 56dvh; }
   .reader > .pt-reader .pt-reader-frame { max-height: 68dvh; }
