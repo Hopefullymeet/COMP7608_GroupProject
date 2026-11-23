@@ -57,14 +57,17 @@ export function WikiDirectory({wiki, title, edit, Source, refresh, busy}: {wiki:
     return a && <div className="wiki-excerpt" key={id}><Source id={id} anchor={'wiki-doc-'+id} label={a.title+(a.page?' · p. '+a.page:'')}/><blockquote>{a.quote}</blockquote></div>
   }
   return <section className="wiki-directory">
-    <nav className="wiki-path" aria-label={t('文档路径','Document path')}>
+    {(folder || page) && <nav className="wiki-path" aria-label={t('文档路径','Document path')}>
       <button onClick={()=>navigate({folder:'',page:''})}>{title}</button>
       {trail.map(id=><span key={id}><Icon name="chevronRight" size={12}/><button title={nodes[id].title} onClick={()=>navigate({folder:id,page:''})}>{nodes[id].title}</button></span>)}
       {page && <span><Icon name="chevronRight" size={12}/>{t('文档','Document')}</span>}
-    </nav>
-    <header><h2>{page?pageName(page):nodes[folder]?.title || t('主题目录','Topic contents')}</h2>
+    </nav>}
+    <header><h2>{page?pageName(page):nodes[folder]?.title || title}</h2>
       {!page && <div>{controls(folder)}</div>}</header>
-    {!folder && !page && root!==title && <p className="wiki-intro">{root}</p>}
+    {!folder && !page && <>
+      {root!==title && <p className="wiki-intro">{root}</p>}
+      <small className="fine">{wiki.sources.papers} {t('篇论文','papers')}{wiki.generated_at && <> · {new Date(wiki.generated_at).toLocaleDateString()} · {wiki.generator.kind==='model'?wiki.generator.model:t('本地整理','Local summary')}</>}</small>
+    </>}
     {!folder && !page && <section className="wiki-home-points">
       <header><h3>{t('研究要点','Research findings')}</h3>
         <button className="link-btn" disabled={busy} onClick={refresh}>{busy?t('整理中…','Updating…'):t('重新整理','Refresh findings')}</button></header>

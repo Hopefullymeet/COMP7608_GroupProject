@@ -1172,6 +1172,7 @@ export const zhCN: Readonly<Record<string, string>> = {
   "Update history": "更新记录",
   "Added": "新增",
   "Updated": "更新",
+  "Notes and open questions": "补充记录与待查问题",
   "Topic overview": "主题概述",
   "Wiki": "Wiki",
   "Long-term memory for the whole topic": "整个主题的长期记忆",

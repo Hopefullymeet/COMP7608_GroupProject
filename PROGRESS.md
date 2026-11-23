@@ -185,3 +185,5 @@ Reading answers now resolve version IDs to paper aliases or titles and localize 
 - Wiki 改为逐层文档目录。后端按证据所属论文组织观点，并向 Agent 提供复用条目及跨论文归档规则。桌面 CV 主题的 17 条观点归入 4 篇文档，已点开 LightGlue 并核对第 1、8 页的来源入口。
 
 - Wiki 首页显示带正文引用的研究要点与整理记录。本机 CV 主题经桌面「重新整理」实际调用 deepseek-flash，展示两条模型推荐，并核对 LightGlue 的第 1、8 页来源。既有条目在重新整理前以本地规则选取并标明。
+
+- Wiki 目录首页以主题名称和简介开头。正文细节按论文查看，补充记录、用户笔记和待查问题单独收纳。此次只调整显示层级。

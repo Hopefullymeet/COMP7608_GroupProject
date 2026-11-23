@@ -210,23 +210,30 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
   const issue = wiki.issue && tr(ISSUE_TEXT[wiki.issue.reason] ?? 'The Wiki could not finish. Try again.')
   const generating = wiki.status === 'generating'
   const summarized = !!wiki.revision
-  const groups = KIND_ORDER.map((kind) => [kind, wiki.entries.filter((e) => e.kind === kind)] as const)
-  const { papers, notes, answers, findings } = wiki.sources
+  const directory = Boolean(wiki.map_nodes)
+  const filedAnchors = new Set(Object.values(wiki.map_nodes ?? {}).flatMap(n => n.anchors))
+  const notes = wiki.entries.filter(e => !directory || e.pinned || ['user','chat','note','finding'].includes(e.origin) ||
+    ['preference','open_question'].includes(e.kind) ||
+    (e.kind !== 'focus' && (!e.anchor_ids.length || e.anchor_ids.some(id => !filedAnchors.has(id)))) ||
+    Boolean(wiki.pending_removals?.[e.entry_id]))
+  const groups = KIND_ORDER.map((kind) => [kind, notes.filter((e) => e.kind === kind)] as const)
+  const { papers, notes: noteCount, answers, findings } = wiki.sources
   const plural = (n: number, one: string, many: string) => tr(n === 1 ? one : many, n)
-  const counts = [plural(papers, '{0} paper', '{0} papers'), plural(notes, '{0} note', '{0} notes'),
+  const counts = [plural(papers, '{0} paper', '{0} papers'), plural(noteCount, '{0} note', '{0} notes'),
     plural(answers, '{0} question', '{0} questions'), plural(findings, '{0} finding', '{0} findings')].join(' · ')
 
   return <>
     <div className="wiki-scroll">
       <div className="wiki-column">
         {wiki.map_nodes && <WikiDirectory wiki={wiki} title={title} edit={edit} Source={Source} refresh={()=>void refresh()} busy={busy || working}/>}
+        {directory && issue && <p className="wiki-issue" role="alert">{issue}</p>}
         {wiki.map_nodes && !!Object.keys(wiki.pending_removals ?? {}).length && <p>{tr('Pending deletion')} · {Object.values(wiki.pending_removals!).join(' / ')}</p>}
         {!!wiki.integrity_issues?.length && <details><summary>{tr('Links to review')}</summary><ul>{wiki.integrity_issues.map((label,i)=><li key={i}>{label}</li>)}</ul></details>}
         {!!wiki.history?.length && <details><summary>{tr('Update history')}</summary>{wiki.history.map((event,i)=><section key={i}>
           <time>{new Date(event.created).toLocaleString()}</time><ul>{event.changes.map(c=><li key={c.id}>{tr(c.op==='add'?'Added':c.op==='remove'?'Removed':'Updated')} · {c.title}</li>)}</ul>
         </section>)}</details>}
-        <details open={wiki.map_nodes ? undefined : true}><summary>{tr('Topic overview')}</summary>
-        {generating ? <FlippingBook label={tr('Generating')} />
+        <details open={wiki.map_nodes ? undefined : true}><summary>{tr(directory ? 'Notes and open questions' : 'Topic overview')}</summary>
+        {!directory && (generating ? <FlippingBook label={tr('Generating')} />
           : !summarized ? <section className="wiki-empty">
             <span className="wiki-empty-icon" aria-hidden="true"><Icon name="book" size={30} /></span>
             <h2>{tr(wiki.entries.length ? 'Ready to summarize' : 'Nothing in this Wiki yet')}</h2>
@@ -255,9 +262,9 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
               <p className="fine">{tr('Sends {0} to {1}.', wiki.transfer.data_categories.map((category) => tr(category)).join(', '), wiki.transfer.endpoint)}</p>
             </div>}
             {wiki.generator.kind === 'local' && !wiki.transfer && <p className="fine">{tr('Connect a model in Models & services for a fuller, written summary.')}</p>}
-          </article>}
+          </article>)}
 
-        {!generating && wiki.entries.length > 0 && <div className="wiki-entries">
+        {!generating && notes.length > 0 && <div className="wiki-entries">
           {groups.map(([kind, entries]) => entries.length > 0 && <section key={kind} className="wiki-group">
             <h3>{tr(KIND_LABEL[kind])}</h3>
             <ul>{entries.map((entry) => <EntryRow key={entry.entry_id} entry={entry} onEdit={edit} disabled={working || busy} Source={Source} />)}</ul>
