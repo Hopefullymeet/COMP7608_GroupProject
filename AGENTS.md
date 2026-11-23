@@ -23,4 +23,4 @@ Windows 桌面开发用 `pnpm --dir frontend desktop`，环境与 EXE 打包见[
 
 - 改正式前端时，运行 `pnpm --dir frontend build` 和 `pnpm --dir frontend test`，并按[前端走查样例](frontend/README.md#走查样例)复查受影响的流程。桌面相关改动用 Windows 客户端验证。
 - 改视觉原型时，运行 `pnpm --dir prototype build`，按[原型范围](prototype/AGENTS.md#范围)走查。主线覆盖侧边栏新建会话、检索加入 PubMedQA、排除后细化、两轮问答、点击引用查看证据和论文比较。
-- 界面走查检查浏览器控制台。涉及工作区时，覆盖 Library 回收与重复导入复核、Wiki 草稿采纳、Citation check 改稿后重查，以及 Models & services 的模型切换、连接测试与开关。
+- 界面走查检查浏览器控制台。涉及工作区时，覆盖 Library 回收与重复导入复核、Wiki 的自动累积、整理与对话、Citation check 改稿后重查，以及 Models & services 的模型切换、连接测试与开关。

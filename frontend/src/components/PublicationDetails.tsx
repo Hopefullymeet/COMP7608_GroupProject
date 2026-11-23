@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Disclosure } from './Disclosure'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { useLanguage } from '../i18n'
 import type { PaperMetadata, VenueRankings } from '../api/library'
@@ -32,8 +33,8 @@ export function PublicationDetails({ topic, paper }: { topic: string; paper: str
   const metadata = entry?.metadata
   const rankings = entry?.rankings.items ?? []
   const unavailable = rankings.filter((item) => item.status !== 'matched' && item.status !== 'not_applicable')
-  return <details className="synthesis-item" onToggle={(event) => setOpen(event.currentTarget.open)}>
-    <summary>{tr('Publication details')}</summary>
+  return <Disclosure className="publication-details" icon="book" title={tr('Publication details')} onOpenChange={setOpen}>
+    <div className="publication-body">
     {open && !entry && <p role="status">{tr('Loading…')}</p>}
     {entry && metadata && <>
       <p>{[metadata.venue, metadata.year, metadata.issns?.join(', ')].filter(Boolean).join(' · ')}</p>
@@ -83,12 +84,12 @@ export function PublicationDetails({ topic, paper }: { topic: string; paper: str
           <h4>{tr(labels[metric])}</h4><ul>{hits.map((rank) => <Ranking key={rank.scheme} rank={rank} />)}</ul>
         </div>
       })}
-      {unavailable.length > 0 && <details>
-        <summary>{tr('Other catalog results')}</summary>
+      {unavailable.length > 0 && <Disclosure title={tr('Other catalog results')}>
         <ul>{unavailable.map((rank) => <li key={rank.scheme}>
           {rank.label} · {rank.status !== 'matched' && tr(statuses[rank.status as keyof typeof statuses])}
         </li>)}</ul>
-      </details>}
+      </Disclosure>}
     </>}
-  </details>
+    </div>
+  </Disclosure>
 }

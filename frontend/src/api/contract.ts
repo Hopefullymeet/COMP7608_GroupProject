@@ -3,6 +3,7 @@ import type { SynthesisMethods, SynthesisTask } from './synthesis'
 import type { Budget, ServiceMethods, ResumeTask } from './services'
 import type { CitationTask, CitationMethods } from './citation'
 import type { ResearchTask, ResearchMethods } from './research'
+import type { WikiMethods } from './wiki'
 import type { ImportTask, ImportResult, LibraryMethods, Located } from './library'
 import type { ReadingPosition } from './library'
 export type Id = string
@@ -75,7 +76,7 @@ type InTopic = { topic_id: Id }
 type InSession = InTopic & { session_id: Id }
 type ForTask = { task_id: Id }
 type InSearch = InTopic & { search_id: Id }
-export type Methods = ReaderMethods & SynthesisMethods & LibraryMethods & ResearchMethods & CitationMethods & ServiceMethods & {
+export type Methods = WikiMethods & ReaderMethods & SynthesisMethods & LibraryMethods & ResearchMethods & CitationMethods & ServiceMethods & {
   'protocol.version': [Record<string, never>, { major: number; minor: number }]
   'topic.list': [Record<string, never>, { items: Topic[] }]
   'topic.create': [Write & { title: string }, InTopic]

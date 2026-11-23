@@ -102,7 +102,7 @@ export type RunStatus = 'running' | 'done' | 'partial' | 'failed' | 'cancelled'
 export interface AgentRun {
   id: string
   manuscriptId?: string
-  task: 'Discovery' | 'Question' | 'Comparison' | 'Citation check' | 'Wiki draft' | 'Citation suggestions' | 'Import' | 'Resume' | 'Literature synthesis' | 'Ask about selection' | 'Index figure descriptions'
+  task: 'Discovery' | 'Question' | 'Comparison' | 'Citation check' | 'Citation suggestions' | 'Import' | 'Resume' | 'Literature synthesis' | 'Ask about selection' | 'Index figure descriptions'
   label: string
   status: RunStatus
   steps: AgentStep[]
@@ -159,7 +159,6 @@ export type TaskEvent =
   | { type: 'text'; messageId: string; index: number; chunk: string; evidenceId?: string; tone?: 'scope' }
   | { type: 'row'; row: ComparisonRow }
   | { type: 'finding'; runId: string; finding: Finding }
-  | { type: 'wiki-proposal'; runId: string; proposal: WikiProposal }
   | {
       type: 'done'
       runId: string
@@ -239,50 +238,4 @@ export interface DraftSnapshot {
   findings: Record<string, Finding>
   recheck: string[]
   reviewed: Partial<Record<string, { decision: FindingDecision; finding: Finding }>>
-}
-
-// ---------- Evidence wiki ----------
-
-export interface WikiStatement {
-  id: string
-  text: string
-  evidenceIds: string[]
-  author: 'You' | 'Agent draft' | 'Saved answer'
-  excerpt?: true
-}
-
-export interface WikiRelation {
-  id: string
-  fromPaperId: string
-  type: 'extends' | 'contrasts with' | 'uses' | 'not comparable with'
-  toPaperId: string
-  evidenceIds: string[]
-  status: 'verified' | 'unverified' | 'disputed'
-}
-
-export interface WikiQuestion {
-  id: string
-  kind: 'disagreement' | 'comparison-gap'
-  claim: string
-  sides: { text: string; evidenceId: string }[]
-  question: string
-}
-
-export interface WikiPage {
-  id: string
-  title: string
-  kind: 'Concept' | 'Dataset' | 'Paper'
-  paperId?: string
-  summary: string
-  statements: WikiStatement[]
-  relations: WikiRelation[]
-  questions: WikiQuestion[]
-  revisions: { when: string; who: string; what: string }[]
-}
-
-export interface WikiProposal {
-  page: WikiPage
-  /** Additions the draft also makes to existing pages. */
-  edits: { pageId: string; relations: WikiRelation[] }[]
-  inputs: { noteIds: string[]; comparisonEvidenceIds: string[] }
 }

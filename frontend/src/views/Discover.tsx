@@ -283,14 +283,12 @@ export function Discover() {
             <ul className="in-topic">
               {Array.from(topicPapers.values()).map((paper) => {
                 const id = paper.id
-                const wikiPage = state.wiki.pages.find((p) => p.paperId === id)
                 return <li key={id}>
                   <span>{paper.title}</span>
                   <div className="in-topic-actions">
                     {paper.pdfAvailable || paper.stored !== 'metadata'
                       ? <button className="link-btn" aria-label={tr('Read {0}', paper.title)} onClick={() => { act.openTopic(currentTopic(state), 'read'); act.setReader(id) }}>{tr('Read')}{' '}<Icon name="arrowRight" size={12} /></button>
                       : <small>{tr('Metadata only')}</small>}
-                    {wikiPage && <button className="link-btn quiet" aria-label={tr('Open Wiki page for {0}', paper.title)} onClick={() => act.openWikiPage(wikiPage.id)}>{tr('Wiki')}</button>}
                   </div>
                 </li>
               })}

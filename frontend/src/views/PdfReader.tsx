@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { pdfQuoteRange } from '../components/quoteRange'
 import { Icon } from '../components/Icon'
 import { Dialog } from '../components/PageHead'
 import type { PointerEvent as ReactPointerEvent } from 'react'
@@ -32,12 +33,14 @@ function boxStyle(rect: Rect) {
 
 function clamp(v: number) { return Math.min(1, Math.max(0, v)) }
 
+type CitationTarget = { quote: string; passage?: string; anchor: string; onMissing: () => void }
+
 type Tool = 'select' | 'region' | 'ink'
 
-function PdfSheet({ document, scope, page, width, aspectRatio, marks, target, selection, tool,
+function PdfSheet({ document, scope, page, width, aspectRatio, marks, target, citation, selection, tool,
   onMeasure, setSelection, onRegion, onInk }: {
   document: PDFDocumentProxy; scope: { topic_id: string; source_version_id: string }
-  page: number; width: number; aspectRatio: number; marks: Mark[]; target?: Rect
+  page: number; width: number; aspectRatio: number; marks: Mark[]; target?: Rect; citation?: CitationTarget
   selection?: Selection; tool: Tool; onMeasure: (page: number, ratio: number) => void
   setSelection: (selection?: Selection) => void; onRegion: () => void; onInk: (page: number, points: Point[]) => void
 }) {
@@ -84,6 +87,25 @@ function PdfSheet({ document, scope, page, width, aspectRatio, marks, target, se
     }).catch(() => { if (active) setError('This PDF page could not be rendered.') })
     return () => { active = false; cancelRaster?.(); cancelText?.() }
   }, [document, page, width, onMeasure])
+  const [citationBox, setCitationBox] = useState<Rect>()
+  useLayoutEffect(() => {
+    setCitationBox(undefined)
+    if (!citation) return
+    if (error) { citation.onMissing(); return }
+    if (!ready || !layer.current || !surface.current) return
+    const range = pdfQuoteRange(layer.current, citation.quote, citation.passage)
+    const bounds = range?.getBoundingClientRect()
+    if (!range || !bounds?.width || !bounds.height) { citation.onMissing(); return }
+    const box = surface.current.getBoundingClientRect()
+    setCitationBox([(bounds.left - box.left) / box.width, (bounds.top - box.top) / box.height,
+      (bounds.right - box.left) / box.width, (bounds.bottom - box.top) / box.height])
+    const selected = window.getSelection()
+    selected?.removeAllRanges()
+    selected?.addRange(range)
+    return () => {
+      if (selected?.rangeCount && selected.getRangeAt(0) === range) selected.removeAllRanges()
+    }
+  }, [ready, error, citation])
   function position(event: ReactPointerEvent): Point {
     const box = surface.current!.getBoundingClientRect()
     return [clamp((event.clientX - box.left) / box.width), clamp((event.clientY - box.top) / box.height)]
@@ -148,7 +170,8 @@ function PdfSheet({ document, scope, page, width, aspectRatio, marks, target, se
         <div className="pt-reader-marks" aria-hidden="true">
           {ready && marks.flatMap((m) => m.rects.map((rect, i) =>
             <span key={m.mark_id + i} className={'pt-mark-' + m.kind} style={{ ...boxStyle(rect), color: colors[m.color] }} />))}
-          {ready && target && <span className="pt-target" style={boxStyle(target)} />}
+          {citation && citationBox && <span data-ev-anchor={citation.anchor} style={boxStyle(citationBox)} />}
+          {ready && !citation && target && <span className="pt-target" style={boxStyle(target)} />}
           {selection?.medium === 'image' && <span className="pt-target" style={boxStyle(selection.rect)} />}
           {tool === 'region' && drawing.length > 1 && <span className="pt-target" style={boxStyle(bounds(drawing[0], drawing[1]))} />}
           <svg viewBox="0 0 1000 1000" preserveAspectRatio="none">
@@ -187,8 +210,8 @@ async function readOutline(pdf: PDFDocumentProxy) {
   return result
 }
 
-export default function PdfReader({ topic, version, page, target, onAsk, onFind, onWiki, onPaperInfo, session, resume }: {
-  topic: string; version: string; page?: number; target?: Rect
+export default function PdfReader({ topic, version, page, target, citation, onAsk, onFind, onWiki, onPaperInfo, session, resume }: {
+  topic: string; version: string; page?: number; target?: Rect; citation?: CitationTarget
   session?: string; resume?: boolean
   onAsk?: (selection: Selection) => void; onFind?: () => void; onWiki?: () => void; onPaperInfo?: (mode: 'scan' | 'analysis') => void
 }) {
@@ -229,7 +252,7 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
       .catch(() => { if (live) setSavedPosition({}) })
     return () => { live = false }
   }, [api, topic, version, session, resume, restored])
-  const initialJump = useRef<{ page?: number; target?: Rect }>()
+  const initialJump = useRef<{ page?: number; target?: Rect; citation?: CitationTarget }>()
   const more = useRef<HTMLDetailsElement>(null)
   const pageList = useRef<HTMLDivElement>(null)
   const [tool, setTool] = useState<Tool>('select')
@@ -277,6 +300,9 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
     }).catch(() => { if (live) setError('The PDF could not be opened.') })
     return () => { live = false; void loading?.destroy().catch(() => undefined) }
   }, [api, topic, version])
+  useEffect(() => {
+    if (error && citation) citation.onMissing()
+  }, [error, citation])
   const measure = useCallback((number: number, ratio: number) => {
     setRatios((previous) => previous[number] === ratio ? previous : { ...previous, [number]: ratio })
   }, [])
@@ -319,8 +345,8 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
     if (!document || !width || !frame.current) return
     const anchor = resizeAnchor.current
     resizeAnchor.current = undefined
-    if (page !== undefined && (initialJump.current?.page !== page || initialJump.current?.target !== target)) {
-      initialJump.current = { page, target }
+    if (page !== undefined && (initialJump.current?.page !== page || initialJump.current?.target !== target || initialJump.current?.citation !== citation)) {
+      initialJump.current = { page, target, citation }
       jump(Math.max(1, Math.min(document.numPages, page)), target)
       if (session) setRestored(true)
       return
@@ -349,7 +375,7 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
       if (sheet) frame.current.scrollTop = sheet.offsetTop + anchor.offset * sheet.offsetHeight
     }
     syncPageWindow(frame.current)
-  }, [document, page, target, width, session, resume, restored, savedPosition])
+  }, [document, page, target, citation, width, session, resume, restored, savedPosition])
 
   useLayoutEffect(() => {
     if (frame.current) syncPageWindow(frame.current)
@@ -548,7 +574,7 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
           return <div className="pt-pdf-sheet" key={number} style={{ width: pageWidth, aspectRatio: ratio }}>
             {(number >= renderRange[0] && number <= renderRange[1]) &&
               <PdfSheet document={document} scope={scope} page={number} width={pageWidth} aspectRatio={ratio}
-                marks={marks.filter((mark) => mark.page === number)} target={highlight?.page === number ? highlight.rect : undefined}
+                citation={page === number ? citation : undefined} marks={marks.filter((mark) => mark.page === number)} target={highlight?.page === number ? highlight.rect : undefined}
                 selection={selection?.page === number ? selection : undefined} tool={tool} onMeasure={measure}
                 setSelection={setSelection} onRegion={() => setTool('select')}
                 onInk={(number, points) => void save('ink', [], points, '', '', undefined, number)} />}
@@ -674,7 +700,7 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
           rects: m.rects, quote: m.quote, medium: m.kind === 'region' ? 'image' : 'text' }) }}>{tr('Ask AI')}</button>}
         {onWiki && m.rects.length > 0 && (m.note || m.quote) && <button className="link-btn" disabled={workspace.busy}
           onClick={() => void workspace.write('reader.mark_to_wiki', { ...scope, mark_id: m.mark_id }).then(onWiki).catch(workspace.report)}>
-          {tr('Save annotation to Topic Wiki')}
+          {tr('Save annotation to the Wiki')}
         </button>}
       </article>)}
     </Dialog>}

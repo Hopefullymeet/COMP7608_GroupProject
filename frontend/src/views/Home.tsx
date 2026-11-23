@@ -3,8 +3,8 @@ import { useRef, useState } from 'react'
 import { useStore } from '../data/store'
 import { DEFAULT_QUESTION, DEMO_TOPIC } from '../data/fixtures'
 import { Icon } from '../components/Icon'
+import { Logo } from '../components/Logo'
 import { Disclosure } from '../components/Disclosure'
-import { PaperImportDialog, usePdfDrop } from './PaperImportDialog'
 
 export function Home() {
   const { tr } = useLanguage()
@@ -12,37 +12,33 @@ export function Home() {
   const [name, setName] = useState('')
   const [question, setQuestion] = useState('')
   const [over, setOver] = useState(false)
-  const [importing, setImporting] = useState<(File | string)[]>()
-  const desktop = Boolean(state.mainline && !state.mainline.demo)
-  usePdfDrop(desktop && !importing ? setImporting : undefined)
   const fileRef = useRef<HTMLInputElement>(null)
   const canDemo = !state.mainline ? state.topics.some((t) => t.id === DEMO_TOPIC) : state.mainline.demo
 
   const canSubmit = !!name.trim() || !!question.trim() || state.dropped.length > 0
   const submit = () => { if (canSubmit) act.startFromHome(name, question) }
   const addFiles = (files: FileList | null) => {
-    if (desktop && files?.length) { setImporting(Array.from(files)); return }
-    if (state.mainline) { state.mainline.attachFiles?.(Array.from(files??[]));return }
-    const names = Array.from(files ?? []).map((f) => f.name)
-    if (names.length) act.drop(names)
+    if (!files?.length) return
+    if (state.mainline) { state.mainline.attachFiles?.(Array.from(files)); return }
+    act.drop(Array.from(files).map((f) => f.name))
   }
-  const pickFiles = () => desktop ? setImporting([]) : state.mainline ? state.mainline.attachFiles?.() : fileRef.current?.click()
+  const pickFiles = () => state.mainline ? state.mainline.attachFiles?.() : fileRef.current?.click()
+  const removeFile = (index: number) => state.mainline ? state.mainline.detachFile?.(index) : act.undrop(index)
 
   return (
     <div className="home">
       <div className="home-inner">
         <form className="topic-form" onSubmit={(e) => { e.preventDefault(); submit() }}>
           <header className="topic-form-head">
-            <span className="topic-form-icon" aria-hidden="true"><Icon name="library" size={20} /></span>
-            <div>
-              <h1>{tr('New research topic')}</h1>
-              <p>{tr('A topic keeps its papers, sessions, Wiki and citation checks together.')}</p>
-            </div>
+            <h1>
+              <Logo size={40} />
+              <span>{tr('New research topic')}</span>
+            </h1>
           </header>
 
           <label className="topic-field">
             <span>{tr('Topic name')}</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} autoFocus
+            <input value={name} onChange={(e) => setName(e.target.value)} autoFocus maxLength={160}
               placeholder={tr('e.g. Scientific QA datasets')} />
           </label>
 
@@ -61,16 +57,30 @@ export function Home() {
               onDragLeave={() => setOver(false)}
               onDrop={(e) => { e.preventDefault(); setOver(false); addFiles(e.dataTransfer.files) }}>
               <Icon name="paperclip" size={16} />
-              <span>{tr('Drop PDF or .bib files here, or click to choose')}</span>
+              <span>{tr('Drop PDF files here, or click to choose')}</span>
             </button>
             {state.dropped.length > 0 && (
-              <div className="dropped">
-                {state.dropped.map((n, i) => <span key={i} className="chip"><Icon name="file" size={13} />{n}</span>)}
-                <small>{state.mainline?tr('Review the import scope after creating the topic.'):tr('Files are listed but not read in this prototype.')}</small>
-              </div>
+              <ul className="topic-files">
+                {state.dropped.map((name, index) => {
+                  const pdf = state.mainline?.homePdfs?.[index]
+                  return <li key={pdf?.file_id ?? index}>
+                    <Icon name="file" size={14} />
+                    <span className="grow" title={name}>{name}</span>
+                    {pdf && <span className="topic-file-status" role="status" title={pdf.previewError && tr(pdf.previewError)}>
+                      {tr(pdf.previewError ? 'Parsing failed' : pdf.parsed ? 'Parsed' : 'Parsing…')}
+                    </span>}
+                    <button type="button" className="icon-btn sm" aria-label={tr('Remove') + ' ' + name} onClick={() => removeFile(index)}>
+                      <Icon name="x" size={13} />
+                    </button>
+                  </li>
+                })}
+              </ul>
             )}
+            {state.dropped.length > 0 && <small className="topic-field-hint">
+              {state.mainline ? tr('Papers are imported when the topic is created.') : tr('Files are listed but not read in this prototype.')}
+            </small>}
           </div>
-          <input ref={fileRef} type="file" accept=".pdf,.bib" multiple hidden onChange={(e) => addFiles(e.target.files)} />
+          <input ref={fileRef} type="file" accept=".pdf" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
 
           <footer className="topic-form-foot">
             <button type="submit" className="primary" disabled={!canSubmit}>
@@ -78,8 +88,6 @@ export function Home() {
             </button>
           </footer>
         </form>
-        {importing && <PaperImportDialog topics={[]} initialTitle={name.trim() || question.trim()} initialFiles={importing}
-          onClose={() => setImporting(undefined)} onOpenTopic={(id) => act.openTopic(id, 'synthesis')} />}
 
         {(!state.mainline || state.mainline.demo) && <button className="suggestion" disabled={!canDemo} title={canDemo ? undefined : tr('Refresh to restore the demo topic')} onClick={() => act.startDemo()}>
           <Icon name="compass" size={15} />

@@ -23,7 +23,6 @@ function impactOf(s: State, paperId: string) {
     notes: s.noted.filter(uses),
     citations: s.cited.filter(uses),
     comparison: s.comparison.rows.filter((r) => r.cells.some((c) => c.evidenceId && uses(c.evidenceId))),
-    wiki: s.wiki.pages.flatMap((page) => page.statements.filter((st) => st.evidenceIds.some(uses)).map((statement) => ({ page, statement }))),
     draft: MANUSCRIPTS.flatMap(({ id, name, citeKeys }) => s.check.manuscripts[id].sentences.flatMap((sentence, index) =>
       sentence.cites.some((key) => citeKeys[key] === paperId) ? [{ sentence, index, name }] : [])),
   }
@@ -38,7 +37,6 @@ function Impact({ paperId }: { paperId: string }) {
     { label: 'Saved notes', entries: records.notes.map((id) => EVIDENCE[id].quote) },
     { label: 'Picked citations', entries: records.citations.map((id) => EVIDENCE[id].quote) },
     { label: 'Comparison rows', entries: records.comparison.map((r) => r.dimension) },
-    { label: 'Wiki statements', entries: records.wiki.map(({ page, statement }) => page.title + ' · ' + statement.text) },
     { label: 'Draft sentences', entries: records.draft.map(({ sentence, index, name }) => name + ' · ' + (index + 1) + '. ' + sentence.text) },
   ]
   return (
@@ -158,7 +156,6 @@ function Detail({ paperId, onRead, onDelete, onUnlink }: {
       <div className="usage-grid">
         <span>{count(tr, i.notes.length, 'note')}</span>
         <span>{count(tr, i.citations.length, 'picked citation')}</span>
-        <span>{count(tr, i.wiki.length, 'wiki statement')}</span>
         <span>{count(tr, i.comparison.length, 'comparison row')}</span>
         <span>{count(tr, i.draft.length, 'draft sentence')}</span>
       </div>

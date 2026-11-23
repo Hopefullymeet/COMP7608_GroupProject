@@ -43,10 +43,11 @@ function CredentialDialog({ model, onClose, onSaved }: { model: Model; onClose: 
         {confirmRemoval ? <p>{tr('Remove the DeepSeek API key from this device’s credential store?')}</p> : (
           <>
             <p>{tr('Your API key is protected by this device’s operating system.')}</p>
+            {model.credential_stored && <p>{tr('Saved API key {0}', model.credential_preview ?? '••••')}</p>}
             {model.credential_configured && !model.credential_stored &&
               <p>{tr('The API key currently comes from the launch environment.')}</p>}
             <label className="set-field">
-              {tr('DeepSeek API key')}
+              {tr(model.credential_stored ? 'Replacement API key' : 'DeepSeek API key')}
               <input className="text-field" type="password" autoComplete="off" spellCheck={false}
                 disabled={pending} value={key} onChange={(event) => setKey(event.target.value)} />
             </label>
@@ -58,7 +59,7 @@ function CredentialDialog({ model, onClose, onSaved }: { model: Model; onClose: 
             <button type="button" className="ghost-btn" disabled={pending}
               onClick={() => { setFailed(false); setConfirmRemoval(true) }}>{tr('Remove API key')}</button>
           )}
-          <button type="button" className="ghost-btn" disabled={pending} onClick={onClose}>{tr('Cancel')}</button>
+          <button type="button" className="ghost-btn" disabled={pending} onClick={onClose}>{tr(model.credential_stored && !confirmRemoval ? 'Keep saved key' : 'Cancel')}</button>
           <button className={confirmRemoval ? 'danger' : 'primary'} disabled={pending || (!confirmRemoval && !validKey)}>
             {tr(confirmRemoval ? 'Remove API key' : 'Save API key')}
           </button>
@@ -71,11 +72,13 @@ function CredentialDialog({ model, onClose, onSaved }: { model: Model; onClose: 
 function SettingsForm({ config }: { config: Config }) {
   const { tr } = useLanguage()
   const { write, busy, report, demo, refresh } = useWorkspace()
-  const [saved, setSaved] = useState(config),
-    [draft, set] = useState(config),
+  const [saveResult, setSaveResult] = useState<Config>(),
+    [edits, set] = useState<Config>(),
     [saving, setSaving] = useState(false),
     [test, setTest] = useState<{ id: string; result: Message }>(),
     [managingCredentials, setManagingCredentials] = useState(false)
+  const saved = saveResult && saveResult.revision !== config.revision ? saveResult : config
+  const draft = edits ?? saved
   const selected = draft.models.find((m) => m.id === draft.model_id) ?? draft.models[0]
   const credentials = config.models.find((m) => m.id === selected?.id)
   function closeCredentials() {
@@ -112,8 +115,8 @@ function SettingsForm({ config }: { config: Config }) {
     setSaving(true)
     try {
       const result = await write('services.save', { ...fields, base_revision: revision })
-      setSaved(result)
-      set(result)
+      setSaveResult(result)
+      set(undefined)
     } finally {
       setSaving(false)
     }
@@ -149,7 +152,7 @@ function SettingsForm({ config }: { config: Config }) {
                   }}
                 />
                 <span className="radio" aria-hidden="true" />
-                <strong className="grow">{tr(m.label)}</strong>
+                <span className="grow"><strong>{tr(m.label)}</strong><small>{m.model} · {m.endpoint}</small></span>
                 <span className="tag">{m.local ? tr('Local') : tr('Remote')}</span>
               </label>
             ))}
@@ -184,6 +187,10 @@ function SettingsForm({ config }: { config: Config }) {
               </div>
               {!demo && <p className="fine">{tr('Use an OpenAI-compatible base URL. The connection test uses the saved URL, model ID and API key.')}</p>}
               <div className="set-controls">
+                {dirty && (
+                  <button className="primary" disabled={!valid || busy || saving}
+                    onClick={() => void save().catch(report)}>{tr('Save settings')}</button>
+                )}
                 <button
                   className="ghost-btn"
                   disabled={dirty || busy}
@@ -206,8 +213,8 @@ function SettingsForm({ config }: { config: Config }) {
           <p className="fine" role="status">
             {demo
               ? tr('The fixture tests configuration locally.')
-              : tr(credentials?.credential_stored ? 'DeepSeek API key saved on this device.'
-                : credentials?.credential_configured ? 'The API key currently comes from the launch environment.'
+              : credentials?.credential_stored ? tr('Saved API key {0}', credentials.credential_preview ?? '••••')
+              : tr(credentials?.credential_configured ? 'The API key currently comes from the launch environment.'
                 : 'DeepSeek API key not configured.')}
           </p>
           {selected && testStatus(selected.id)}
@@ -310,7 +317,7 @@ function SettingsForm({ config }: { config: Config }) {
           {tr('Save settings')}
         </button>
         {dirty && (
-          <button className="ghost-btn" disabled={saving} onClick={() => set(saved)}>
+          <button className="ghost-btn" disabled={saving} onClick={() => set(undefined)}>
             {tr('Discard edits')}
           </button>
         )}

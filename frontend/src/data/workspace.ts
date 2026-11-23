@@ -1,7 +1,8 @@
-import type { DraftSentence, LibraryMeta, WikiPage } from './types'
-import { DEMO_TOPIC, PAPERS } from './fixtures'
+import type { DraftSentence, LibraryMeta } from './types'
+import type { WikiKind, WikiOrigin } from '../api/wiki'
+import { DEMO_TOPIC } from './fixtures'
 
-// Sample data for the Library, Evidence wiki, Citation check and Models & services
+// Sample data for the Library, Wiki, Citation check and Models & services
 // pages. File names, counts and dates are mock; quotes come from EVIDENCE.
 
 export const LIBRARY_SEED = ['qasper', 'scifact', 'multivers', 'rag-lewis', 'dpr', 's2orc']
@@ -109,47 +110,68 @@ export const MANUSCRIPTS: { id: string; name: string; citeKeys: Record<string, s
   },
 ]
 
-// ---------- Evidence wiki ----------
+// ---------- Wiki ----------
 
-export const WIKI_SEED: WikiPage[] = [
-  {
-    id: 'w-qasper', title: PAPERS.qasper.title, kind: 'Dataset', paperId: 'qasper',
-    summary: 'Information-seeking questions over NLP papers, answered from the full text with supporting evidence.',
-    statements: [
-      { id: 'wq1', text: 'Questions were written by people who read only the title and abstract.', evidenceIds: ['qasper-written'], author: 'You' },
-      { id: 'wq2', text: 'A separate group answered them and provided supporting evidence.', evidenceIds: ['qasper-evidence'], author: 'Saved answer' },
-      { id: 'wq3', text: '5,049 questions over 1,585 NLP papers.', evidenceIds: ['qasper-scale'], author: 'You' },
-    ],
-    relations: [{ id: 'qasper-scifact', fromPaperId: 'qasper', toPaperId: 'scifact', type: 'contrasts with', evidenceIds: ['qasper-evidence', 'scifact-task'], status: 'verified' }],
-    questions: [],
-    revisions: [{ when: '2 hours ago', who: 'You', what: 'Created from 2 saved notes and 1 saved answer' }],
-  },
-  paperWikiPage('scifact', 'Dataset', 'A benchmark for verifying claims against scientific abstracts.', [
-    ['scifact-task', 'The task retrieves abstracts that support or refute a scientific claim and identifies rationales for the decision.'],
-  ]),
-  paperWikiPage('multivers', 'Paper', 'A scientific claim verification method that shares document context across predictions.', [
-    ['multivers-context', 'Fact-checking and rationale selection share an encoding of the claim and full document context.'],
-    ['multivers-datasets', 'The experiments include the dataset introduced in Fact or Fiction: Verifying Scientific Claims.'],
-  ], [{ id: 'multivers-scifact', fromPaperId: 'multivers', toPaperId: 'scifact', type: 'uses', evidenceIds: ['multivers-datasets'], status: 'verified' }]),
-  paperWikiPage('rag-lewis', 'Paper', 'A generator that uses passages retrieved from an external index.', [
-    ['rag-index', 'The external memory is a dense index of Wikipedia.'],
-    ['rag-retriever', 'The authors initialize the retriever with a pretrained encoder from Dense Passage Retrieval for Open-Domain Question Answering.'],
-  ], [{ id: 'rag-dpr', fromPaperId: 'rag-lewis', toPaperId: 'dpr', type: 'uses', evidenceIds: ['rag-retriever'], status: 'verified' }]),
-  paperWikiPage('dpr', 'Paper', 'Dense retrieval for selecting passages that can answer open-domain questions.', [
-    ['dpr-encoders', 'A dual encoder learns dense representations of questions and passages for retrieval.'],
-  ]),
-]
+export const NOTE_SEED = ['qasper-written', 'qasper-scale', 'scifact-task', 'multivers-context', 'rag-retriever', 'dpr-encoders']
 
-export const WIKI_NOTE_SEED = ['qasper-written', 'qasper-scale', 'scifact-task', 'multivers-context', 'rag-retriever', 'dpr-encoders']
-
-function paperWikiPage(paperId: string, kind: WikiPage['kind'], summary: string, statements: [string, string][], relations: WikiPage['relations'] = []): WikiPage {
-  return {
-    id: 'w-' + paperId, paperId, title: PAPERS[paperId].title, kind, summary, relations,
-    statements: statements.map(([id, text]) => ({ id: 'seed-' + id, text, evidenceIds: [id], author: 'You' })),
-    questions: [],
-    revisions: [{ when: 'Nov 6', who: 'You', what: 'Created from saved source excerpts' }],
-  }
+type SampleEntry = [kind: WikiKind, origin: WikiOrigin, text: string, evidenceIds: string[], pinned?: true]
+export type WikiSample = {
+  topicId: string
+  minutesAgo: number
+  headline: string
+  summary: string[]
+  entries: SampleEntry[]
+  thread: { role: 'user' | 'assistant'; text: string; added?: string }[]
 }
+
+/** Topic Wikis that have already accumulated: parsed papers, Q&A turns, notes and a chat-taught preference. */
+export const WIKI_SAMPLES: WikiSample[] = [
+  {
+    topicId: DEMO_TOPIC, minutesAgo: 95,
+    headline: 'Research on how scientific QA datasets tie answers to evidence, across QASPER, SciFact and MultiVerS.',
+    summary: [
+      'This topic compares datasets and methods that ask questions about research papers. QASPER poses information-seeking questions written from titles and abstracts and answered from full text, while SciFact frames the task as verifying claims against abstracts with rationale sentences.',
+      'Across the conversations so far, the recurring theme is that answers must point to supporting evidence. QASPER asks annotators for evidence alongside answers, and MultiVerS shares the full document context between labelling a claim and selecting rationales.',
+      'Still open: whether the reported gaps between models and humans come from retrieval over long papers or from reasoning once the evidence is found.',
+    ],
+    entries: [
+      ['focus', 'summary', 'Which datasets test QA over research papers, and how do they handle evidence?', []],
+      ['paper', 'pdf', 'QASPER: 5,049 questions over 1,585 NLP papers, written by people who read only the title and abstract.', ['qasper-scale', 'qasper-written']],
+      ['paper', 'paper', 'SciFact: decide whether abstracts SUPPORT or REFUTE a scientific claim and identify the rationale sentences.', ['scifact-task']],
+      ['paper', 'pdf', 'MultiVerS: fact-checking and rationale selection share one encoding of the claim and full document context.', ['multivers-context']],
+      ['finding', 'qa', 'QASPER answers come with supporting evidence provided by a separate group of annotators.', ['qasper-evidence']],
+      ['finding', 'qa', 'Models trail humans by at least 27 F1 points when answering QASPER questions from entire papers.', ['qasper-gap']],
+      ['finding', 'note', 'MultiVerS reports experiments on the SciFact dataset from “Fact or Fiction”.', ['multivers-datasets']],
+      ['preference', 'chat', 'Focus on datasets where answers must cite sentences from the paper, not just give a label.', [], true],
+      ['open_question', 'summary', 'Does the human–model gap on QASPER come from finding evidence in long papers or from reasoning once it is found?', []],
+    ],
+    thread: [
+      { role: 'user', text: 'Remember that I care about datasets where answers must cite sentences from the paper.' },
+      { role: 'assistant', text: 'Got it. I added that as a preference for this topic.', added: 'Focus on datasets where answers must cite sentences from the paper, not just give a label.' },
+      { role: 'user', text: 'Which papers in this topic ask for evidence sentences?' },
+      { role: 'assistant', text: `Here is what the Wiki records:
+- QASPER answers come with supporting evidence provided by a separate group of annotators.
+- SciFact asks for the rationale sentences behind each SUPPORTS or REFUTES label.
+- MultiVerS selects rationales from the full document context.` },
+    ],
+  },
+  {
+    topicId: 't-rag', minutesAgo: 60 * 26,
+    headline: 'Research on retrieval-augmented generation for open-domain QA, built around RAG and Dense Passage Retrieval.',
+    summary: [
+      'The topic follows how a generator uses passages from an external index. RAG retrieves from a dense index of Wikipedia, and its retriever starts from the DPR question and passage encoders.',
+      'Sessions so far compared retrieval strategies and chunk sizes; reranking for long PDFs is still being explored.',
+    ],
+    entries: [
+      ['focus', 'summary', 'How does passage retrieval support generation in open-domain question answering?', []],
+      ['paper', 'pdf', 'RAG: the external memory is a dense vector index of Wikipedia.', ['rag-index']],
+      ['paper', 'paper', 'DPR: a dual encoder learns dense representations of questions and passages for retrieval.', ['dpr-encoders']],
+      ['finding', 'note', 'RAG initializes its retriever with the pretrained DPR encoder.', ['rag-retriever']],
+      ['open_question', 'qa', 'How much does chunk size change recall when retrieving from long PDFs?', []],
+    ],
+    thread: [],
+  },
+]
 
 // ---------- Models & services ----------
 

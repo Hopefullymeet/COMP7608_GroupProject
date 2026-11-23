@@ -24,10 +24,10 @@
 - `services.get` 返回一个 DeepSeek 选项。用 `credential_configured` 表示宿主是否提供凭据。连接是否可用以测试结果为准。
 - `services.save` 保存模型 ID、OpenAI 兼容的 HTTP(S) 基础地址、预算与超限询问偏好，响应返回已保存配置。基础地址不含凭据、查询参数和片段。无效地址或预算返回 `INVALID_PARAMS`，修改服务列表返回 `SETTINGS_READ_ONLY`，旧版本返回 `STALE_REVISION`。新任务确认显示实际端点，端点或模型变化后尚未启动的任务需要重新确认。已启动的任务沿用确认时的端点与模型。桌面任务目前按运行时限制执行。
 - `services.test` 使用已保存的端点、模型 ID 和当前凭据直接发送固定的 Chat Completions 请求。测试无需 Harness，也不读取工作区资料。相同 `operation_id` 复用第一次结果。
-- Windows 与 macOS 宿主返回 `credential_store=true`。系统凭据优先，其次使用启动环境中的密钥。凭据操作可安全重复且不写操作日志。平台不支持时返回 `CREDENTIALS_HOST_REQUIRED`，系统存储操作失败时返回 `CREDENTIAL_STORE_FAILED`。Windows 凭据管理器拒绝访问时使用当前用户的 DPAPI 加密存储。保存和移除均在回读确认后返回状态。
+- Windows 与 macOS 宿主返回 `credential_store=true`。已保存的凭据通过 `credential_preview` 显示掩码，长度达到八位时附末四位；未保存时为 null。系统凭据优先，其次使用启动环境中的密钥。凭据操作可安全重复且不写操作日志。平台不支持时返回 `CREDENTIALS_HOST_REQUIRED`，系统存储操作失败时返回 `CREDENTIAL_STORE_FAILED`。Windows 凭据管理器拒绝访问时使用当前用户的 DPAPI 加密存储。保存和移除均在回读确认后返回状态。
 
 ~~~~ts
-type Model={id:Id,label:string,model:string,endpoint:string,local:boolean,credential_configured:boolean,credential_store?:boolean,credential_stored?:boolean}
+type Model={id:Id,label:string,model:string,endpoint:string,local:boolean,credential_configured:boolean,credential_store?:boolean,credential_stored?:boolean,credential_preview?:string|null}
 type Service={id:Id,label:string,kind:'search'|'parser',enabled:boolean,status:string,fields:string[]}
 type Budget={calls:number|null,tokens:number|null,minutes:number|null,cost:number|null} // null 表示不限，四项默认均为 null。金额单位为 USD，数值上限非负，调用和 token 用整数。
 type Config={revision:Id,model_id:Id,models:Model[],services:Service[],budget:Budget,ask_before_overage:boolean}

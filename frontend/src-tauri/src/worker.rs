@@ -15,6 +15,7 @@ use tauri::ipc::Channel;
 const WORKER: &[u8] = include_bytes!("../../../backend/papertrace.py");
 const LITERATURE: &[u8] = include_bytes!("../../../backend/literature.py");
 const WORKBENCH: &[u8] = include_bytes!("../../../backend/workbench.py");
+const WIKI: &[u8] = include_bytes!("../../../backend/wiki.py");
 const RESEARCH_TOOLS: &[u8] = include_bytes!("../../../backend/research-tools.mjs");
 const CITATIONS: &[u8] = include_bytes!("../../../backend/citations.py");
 const READER: &[u8] = include_bytes!("../../../backend/reader.py");
@@ -53,6 +54,7 @@ impl Worker {
         READER.hash(&mut hash);
         LITERATURE.hash(&mut hash);
         WORKBENCH.hash(&mut hash);
+        WIKI.hash(&mut hash);
         RESEARCH_TOOLS.hash(&mut hash);
         BIBLIOGRAPHY.hash(&mut hash);
         VENUE_RANKS.hash(&mut hash);
@@ -63,6 +65,7 @@ impl Worker {
             (&script, WORKER), (&runtime.join("dsh.py"), DSH),
             (&runtime.join("credentials.py"), CREDENTIALS),
             (&runtime.join("literature.py"), LITERATURE), (&runtime.join("workbench.py"), WORKBENCH),
+            (&runtime.join("wiki.py"), WIKI),
             (&runtime.join("research-tools.mjs"), RESEARCH_TOOLS),
             (&runtime.join("citations.py"), CITATIONS),
             (&runtime.join("reader.py"), READER),
@@ -224,7 +227,7 @@ impl Host {
             worker.send(&request, id, Pending { response, subscription })?;
             Arc::clone(&worker.routes)
         };
-        let timeout = if method == "candidate.decide" { 90 } else { 20 };
+        let timeout = if matches!(method, "candidate.decide" | "library.preview_pdf") { 90 } else { 20 };
         match receiver.recv_timeout(Duration::from_secs(timeout)) {
             Ok(reply) => reply,
             Err(_) => {

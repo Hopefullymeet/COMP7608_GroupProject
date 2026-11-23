@@ -61,10 +61,12 @@ export type ReferenceList = {
     target_version_id?: string; target_title?: string; status: 'matched' | 'ambiguous' | 'unmatched';
     mentions: { page: number; quote: string }[] }[]
 }
+type PdfInput = { path: string } | { name: string; content: string }
 export type SynthesisMethods = {
   'literature.refs': [Topic & { source_version_id: string; direction?: 'outgoing' | 'incoming' }, ReferenceList]
+  'library.preview_pdf': [PdfInput, { parsed: true }]
   'library.import_pdf': [
-    Topic & Write & { paper_id?: string } & ({ path: string } | { name: string; content: string }),
+    Topic & Write & { paper_id?: string } & PdfInput,
     Version & { paper_id: string; duplicate: boolean },
   ]
   'source.page': [Topic & { source_version_id: string; page: number }, { page: number; png: string }]

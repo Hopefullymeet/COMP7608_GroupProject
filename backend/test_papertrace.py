@@ -78,6 +78,25 @@ class EvidenceTest(unittest.TestCase):
         self.assertEqual(previews, ["First claim", "Second claim"])
         self.assertEqual(previews, [row["text"] for row in rows])
 
+    def test_reading_context_uses_only_current_topic_and_limits_memory(self):
+        with tempfile.TemporaryDirectory() as directory, closing(Worker(Path(directory), lambda _: None)) as worker:
+            with worker.lock, worker.db:
+                for topic in ("first", "second"):
+                    worker.put("topic", topic, {"title": topic})
+                    wiki = worker.topic_wiki.load(topic)
+                    wiki.update(revision="r1", status="ready")
+                    worker.topic_wiki.store(wiki)
+                    worker.topic_wiki.edit(topic, {"action": "add", "text": topic + " preference"})
+                wiki = worker.topic_wiki.load("first")
+                for i in range(8):
+                    wiki["entries"].append(worker.topic_wiki.entry("finding", "retrieval " + str(i) * 300, [], "qa"))
+                worker.topic_wiki.store(wiki)
+                memory = worker.topic_wiki.reading_context("first", "retrieval")
+                self.assertEqual(memory[0], "first preference")
+                self.assertEqual(len(memory), 5)
+                self.assertTrue(all(len(item) <= 180 for item in memory))
+                self.assertNotIn("second preference", memory)
+
     def test_reading_retries_blank_or_truncated_completions_with_the_same_passages(self):
         def completion(content, finish_reason):
             return BytesIO(json.dumps({"choices": [{"message": {"content": content},
@@ -93,9 +112,11 @@ class EvidenceTest(unittest.TestCase):
                     send = opener.return_value.open
                     send.side_effect = [completion(content, reason), completion(answer, "stop")]
                     claims, seen = worker.answer_with_model_endpoint(
-                        ENDPOINT, "deepseek-flash", "test-key", "What was the result?", sources, threading.Event())
+                        ENDPOINT, "deepseek-flash", "test-key", "What was the result?", sources, threading.Event(),
+                        memory=["Use biomedical examples"])
                     self.assertEqual(claims[0]["references"], [{"passage": seen["p1"], "quote": "a direct result"}])
                     first, retry = [json.loads(call.args[0].data) for call in send.call_args_list]
+                    self.assertIn("Use biomedical examples", first["messages"][1]["content"])
                     self.assertEqual(first["messages"][1], retry["messages"][1])
                     self.assertNotEqual(first["messages"][0], retry["messages"][0])
 
@@ -202,6 +223,57 @@ class CredentialTest(unittest.TestCase):
             finally:
                 worker.close()
 
+    def test_wiki_model_output_keeps_known_anchors_and_reports_failures(self):
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "papertrace.Dsh.configured", return_value=None
+        ), patch("wiki.deepseek_api_key", return_value="test-key"):
+            worker = Worker(Path(directory), lambda _: None)
+            try:
+                worker.discovery_fixture = False
+                with worker.db:
+                    worker.put("topic", "t1", {"topic_id": "t1", "title": "检索增强"})
+                    worker.put("note", "n1", {"topic_id": "t1", "value": {
+                        "note_id": "n1", "revision": "r1", "text": "Dense index", "anchor_ids": ["a1"], "origin": "user",
+                        "history": []}})
+                sent = []
+
+                def model(endpoint, key, payload, seen, parse, timeout=30, preview=None):
+                    sent.append(payload)
+                    return parse(json.dumps({"headline": "关于检索增强", "summary": ["第一段"], "entries": [
+                        {"kind": "finding", "text": "使用稠密索引", "anchor_ids": ["a1", "invented"]},
+                        {"kind": "unknown", "text": "dropped"}]}))
+
+                worker.request_model_json = model
+                wiki = worker.topic_wiki
+                with worker.lock, worker.db, patch.object(wiki, "spawn"):
+                    self.assertEqual(wiki.get("t1")["transfer"]["endpoint"], ENDPOINT)
+                wiki.running.add(("t1", "refresh"))
+                wiki.generate("t1")
+                with worker.lock, worker.db:
+                    ready = wiki.get("t1")
+                self.assertEqual(ready["generator"]["kind"], "model")
+                self.assertEqual([(e["text"], e["anchor_ids"], e["origin"]) for e in ready["entries"]],
+                                 [("使用稠密索引", ["a1"], "summary")])
+                observations = json.loads(sent[0]["messages"][1]["content"])["observations"]
+                self.assertEqual([(o["origin"], o["text"]) for o in observations], [("note", "Dense index")])
+                self.assertEqual(json.loads(sent[0]["messages"][1]["content"])["material"]["title"], "检索增强")
+
+                def broken(*args, **kwargs):
+                    raise DshFailure("SERVICE_RATE_LIMITED", True, "retry")
+
+                worker.request_model_json = broken
+                with worker.lock, worker.db:
+                    wiki.chat("t1", "记住只看中文论文", [])
+                wiki.reply("t1")
+                wiki.running.discard(("t1", "chat"))
+                with worker.lock, worker.db:
+                    failed = wiki.get("t1")
+                self.assertFalse(failed["pending_reply"])
+                self.assertEqual(failed["issue"]["reason"], "SERVICE_RATE_LIMITED")
+                self.assertEqual(failed["entries"], ready["entries"])
+            finally:
+                worker.close()
+
     def test_save_and_remove_credentials_on_supported_platforms_without_recording_key(self):
         for platform in ("win32", "darwin"):
             with self.subTest(platform=platform), tempfile.TemporaryDirectory() as directory, patch.dict(
@@ -229,7 +301,13 @@ class CredentialTest(unittest.TestCase):
                         vault.assert_called_with(platform)
                         vault.return_value.save.assert_called_once_with("test-key")
                         key.return_value = "test-key"
-                        self.assertTrue(worker.services_config()["models"][0]["credential_stored"])
+                        saved_model = worker.services_config()["models"][0]
+                        self.assertTrue(saved_model["credential_stored"])
+                        self.assertEqual(saved_model["credential_preview"], "••••-key")
+                        key.return_value = "abc"
+                        self.assertEqual(worker.services_config()["models"][0]["credential_preview"], "••••")
+                        key.return_value = None
+                        self.assertIsNone(worker.services_config()["models"][0]["credential_preview"])
                         vault.return_value.read.return_value = None
                         worker.process({**request, "params": {"id": model["id"], "action": "delete"}})
                         self.assertEqual(messages[-1]["result"], {"configured": True, "stored": False})
@@ -358,6 +436,15 @@ class ContractTest(unittest.TestCase):
             invalid_endpoint = {**request, "models": [{**request["models"][0], "endpoint": endpoint}]}
             self.assertEqual(self.client.call("services.save", **invalid_endpoint)["error"]["data"]["reason"],
                              "INVALID_PARAMS")
+        # A user-entered provider path must survive even on the default host.
+        specific_endpoint = ENDPOINT + "/anthropic"
+        endpoint_only = {**request, "operation_id": "save-endpoint-only",
+                         "models": [{**request["models"][0], "model": provider, "endpoint": specific_endpoint}]}
+        updated = self.client.result("services.save", **endpoint_only)
+        self.assertEqual(updated["models"][0]["endpoint"], specific_endpoint)
+        self.restart()
+        self.assertEqual(self.client.result("services.get")["models"][0]["endpoint"], specific_endpoint)
+        request["base_revision"] = updated["revision"]
         request["models"][0]["endpoint"] = " https://example.invalid/v1/ "
         saved = self.client.result("services.save", **request)
         self.assertNotEqual(saved["revision"], config["revision"])
@@ -508,6 +595,103 @@ class ContractTest(unittest.TestCase):
         self.assertEqual(self.client.result("evidence.locate", **anchor_args), evidence)
         self.assertEqual(self.client.result("note.list", **topic)["items"], [note])
         self.assertEqual(self.client.result("task.cancel", task_id=reading["task_id"], operation_id="late-cancel")["status"], "completed")
+
+    def wiki_until(self, topic, done):
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            wiki = self.client.result("wiki.get", **topic)
+            if done(wiki):
+                return wiki
+            time.sleep(0.05)
+        self.fail("Topic Wiki did not settle.")
+
+    def test_topic_wiki_captures_activity_consolidates_chats_and_edits(self):
+        topic, session = self.context()
+        empty = self.client.result("wiki.get", **topic)
+        self.assertEqual((empty["status"], empty["revision"], empty["entries"]), ("empty", "", []))
+        self.assertEqual(empty["generator"], {"kind": "local"})
+        self.assertNotIn("transfer", empty)
+
+        search = self.start("wiki-discovery", **topic, kind="discovery", input={"query": "abstract QA datasets"})
+        candidate = self.client.finish(search["task_id"])["result"]
+        paper = self.client.result("candidate.decide", **topic, search_id=candidate["search_id"],
+                                   candidate_id=candidate["candidates"][0]["candidate_id"],
+                                   decision="add", operation_id="wiki-add")
+        captured = self.wiki_until(topic, lambda w: w["status"] == "ready")["entries"]
+        paper_entry = next(e for e in captured if e["kind"] == "paper")
+        self.assertEqual(paper_entry["origin"], "paper")
+        self.assertTrue(paper_entry["text"].startswith("PubMedQA"))
+        located = self.client.result("evidence.open", **topic, anchor_id=paper_entry["anchor_ids"][0])
+        passage = next(p for p in located["source"]["passages"] if p["passage_id"] == located["passage_id"])
+        self.assertIn(located["quote"], passage["text"])
+
+        reading = self.start("wiki-ask", **session, kind="reading_qa", input={
+            "question": "What context does PubMedQA use?",
+            "sources": [{"paper_id": paper["paper_id"], "source_version_id": paper["source_version_id"],
+                         "requested_scope": "abstract"}],
+        })
+        aid = self.client.finish(reading["task_id"])["result"]["sentences"][0]["anchor_ids"][0]
+        # The finished turn is captured by the task trigger, before anyone opens the Wiki.
+        db = sqlite3.connect(self.dir / "workspace.sqlite3")
+        try:
+            stored = json.loads(db.execute("SELECT data FROM records WHERE kind = 'topic_wiki'").fetchone()[0])
+        finally:
+            db.close()
+        qa = next(e for e in stored["entries"] if e["origin"] == "qa")
+        self.assertEqual((qa["kind"], qa["anchor_ids"]), ("finding", [aid]))
+
+        started = self.client.result("wiki.refresh", **topic, operation_id="wiki-refresh")
+        self.assertEqual(started["status"], "generating")
+        ready = self.wiki_until(topic, lambda m: m["status"] == "ready")
+        self.assertFalse(ready["stale"])
+        self.assertEqual(ready["new_since_summary"], 0)
+        self.assertEqual(ready["sources"], {"papers": 1, "notes": 0, "answers": 1, "findings": 0})
+        self.assertIn("Research evidence", ready["headline"])
+        self.assertEqual({e["origin"] for e in ready["entries"]}, {"paper", "qa", "summary"})
+
+        self.client.result("wiki.chat", **topic, operation_id="wiki-remember",
+                           text="Remember that I only study biomedical datasets")
+        busy = self.client.call("wiki.chat", **topic, operation_id="wiki-busy", text="Another")
+        if "error" in busy:
+            self.assertEqual(busy["error"]["data"]["reason"], "TEMPORARILY_UNAVAILABLE")
+        replied = self.wiki_until(topic, lambda m: not m["pending_reply"])
+        change = next(m for m in replied["thread"] if m.get("changes"))["changes"][0]
+        self.assertEqual((change["op"], change["text"]), ("add", "I only study biomedical datasets"))
+        added = next(e for e in replied["entries"] if e["entry_id"] == change["entry_id"])
+        self.assertEqual((added["kind"], added["origin"], added["pinned"]), ("preference", "chat", True))
+        self.client.result("wiki.chat", **topic, operation_id="wiki-ask-chat", text="What about biomedical work?")
+        answered = self.wiki_until(topic, lambda m: not m["pending_reply"])
+        self.assertIn("biomedical datasets", answered["thread"][-1]["text"])
+
+        manual = self.client.result("wiki.edit", **topic, operation_id="wiki-edit-add", action="add",
+                                    kind="open_question", text="Which datasets include full-text context?")
+        manual_entry = manual["entries"][-1]
+        self.assertEqual((manual_entry["origin"], manual_entry["pinned"]), ("user", True))
+        missing_entry = self.client.call("wiki.edit", **topic, operation_id="wiki-edit-missing",
+                                         action="remove", entry_id="nope")
+        self.assertEqual(missing_entry["error"]["data"]["reason"], "NOT_FOUND")
+
+        # Five new notes are enough new activity to consolidate in the background without a click.
+        for index in range(5):
+            self.client.result("note.save", **session, text=f"Observation {index} about PubMedQA.", anchor_ids=[aid],
+                               origin="answer", operation_id=f"wiki-note-{index}")
+        refreshed = self.wiki_until(topic, lambda m: m["status"] == "ready" and m["new_since_summary"] == 0
+                                    and m["sources"]["notes"] == 5)
+        ids = {e["entry_id"] for e in refreshed["entries"]}
+        self.assertTrue({added["entry_id"], manual_entry["entry_id"]} <= ids)
+        self.assertEqual(sum(e["origin"] == "note" for e in refreshed["entries"]), 5)
+        self.assertFalse(refreshed["stale"])
+
+        self.client.result("wiki.chat", **topic, operation_id="wiki-forget", text="Forget biomedical datasets")
+        forgot = self.wiki_until(topic, lambda m: not m["pending_reply"])
+        self.assertNotIn(added["entry_id"], {e["entry_id"] for e in forgot["entries"]})
+
+        self.restart()
+        kept = self.client.result("wiki.get", **topic)
+        self.assertEqual((kept["status"], kept["headline"]), ("ready", forgot["headline"]))
+        self.assertEqual(kept["entries"], forgot["entries"], "Reopening must not capture the same activity twice")
+        cleared = self.client.result("wiki.clear_chat", **topic, operation_id="wiki-clear")
+        self.assertEqual(cleared["thread"], [])
 
     def test_confirmation_scope_and_idempotent_start(self):
         topic, _ = self.context()

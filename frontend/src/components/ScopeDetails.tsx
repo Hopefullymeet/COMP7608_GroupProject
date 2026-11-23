@@ -16,12 +16,7 @@ export function ScopeDetails({
       : 'source_versions' in input.input
         ? input.input.source_versions
         : [])
-  const chosen =
-    'files' in input.input
-      ? input.input.files
-      : 'note_ids' in input.input
-        ? [...input.input.note_ids, ...input.input.relation_ids]
-        : []
+  const chosen = 'files' in input.input ? input.input.files : []
   return (
     <div className="scope-detail">
       {versions.length > 0 && <p>{tr('Source versions ·')}{' '}{versions.join(', ')}</p>}

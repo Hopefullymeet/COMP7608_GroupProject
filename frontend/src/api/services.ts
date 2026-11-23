@@ -8,6 +8,7 @@ export type Model = {
   credential_configured: boolean
   credential_store?: boolean
   credential_stored?: boolean
+  credential_preview?: string | null
 }
 export type Service = {
   id: string

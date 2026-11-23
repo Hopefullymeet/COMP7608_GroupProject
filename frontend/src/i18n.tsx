@@ -7,7 +7,7 @@ export type Translate = (...message: Message) => string
 
 type CountedItem = 'addition' | 'call' | 'comparison row' | 'draft sentence' | 'matching page'
   | 'model call' | 'note' | 'paper' | 'picked citation' | 'proposed addition'
-  | 'relation' | 'statement' | 'step' | 'tool call' | 'topic' | 'wiki statement'
+  | 'relation' | 'statement' | 'step' | 'tool call' | 'topic'
 
 export function count(tr: Translate, value: number, item: CountedItem) {
   return tr(`{0} ${item}${value === 1 ? '' : 's'}`, value)
