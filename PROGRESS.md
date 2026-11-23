@@ -199,3 +199,4 @@ Reading answers now resolve version IDs to paper aliases or titles and localize 
 - 侧栏品牌入口改为阅读水獭与 PaperTrace 单行排列，已在 macOS 客户端核对实际显示。
 - 左侧导航默认宽度 216 像素，可拖动边缘并记住宽度，双击恢复默认。
 - 英文问候逐字显示与擦除提速。Wiki 与引用核查共用主题选择布局，已在宽窄窗口核对位置、宽度及底色。
+- 首页午夜和凌晨轮播加入双语休息问候，已按本地 24 个小时验证显示范围。

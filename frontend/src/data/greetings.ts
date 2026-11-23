@@ -3,6 +3,8 @@ function line(zh: string, en: string, sourceZh?: string, sourceEn?: string): Gre
   return { 'zh-CN': zh, en, ...(sourceZh && sourceEn && { source: { 'zh-CN': sourceZh, en: sourceEn } }) }
 }
 
+const restGreeting = line('夜深了，早点休息。', 'It’s late. Get some rest.')
+
 const periods = {
   morning: [
     line('早上好，今天想研究什么？', 'Good morning. What are you curious about?'),
@@ -29,12 +31,14 @@ const periods = {
     line('把今天的线索连起来看看？', 'How do today’s clues fit together?'),
   ],
   midnight: [
+    restGreeting,
     line('夜深了，有个念头想留下吗？', 'A late thought worth keeping?'),
     line('哪一句话，值得明天再读？', 'Which line would you like to revisit tomorrow?'),
     line('给读到一半的地方留个记号吧。', 'Leave a bookmark where your thoughts paused.'),
     line('如果只留一条笔记，你会写什么？', 'If you kept just one note, what would it say?'),
   ],
   predawn: [
+    restGreeting,
     line('天还未亮，什么问题浮上心头？', 'Before sunrise, what question comes to mind?'),
     line('昨夜江边春水生，艨艟巨舰一毛轻。', 'The spring river rose overnight; a great ship floats light as a feather.', '朱熹《观书有感》其二', 'Zhu Xi · Reflections on Reading II (translation)'),
     line('把灵感写下来，醒来再细看。', 'Jot down the idea. It can wait for daylight.'),
