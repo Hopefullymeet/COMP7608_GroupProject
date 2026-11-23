@@ -6,16 +6,21 @@ import { Icon } from '../components/Icon'
 import type { Located, Note } from '../api/library'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 
-export function EvidenceLink({ id }: { id: string }) {
+export function EvidenceLink({ id, onOpen }: { id: string; onOpen?: (item: Located) => void }) {
   const { tr } = useLanguage()
   const { api, report } = useWorkspace()
   const [item, setItem] = useState<Located>()
   const p = item?.source.passages.find((p) => p.passage_id === item.passage_id)
+  const page = useRead('source.page', {
+    topic_id: item?.topic_id ?? '', source_version_id: item?.source.source_version_id ?? '', page: p?.page ?? 0,
+  }, Boolean(item?.topic_id && p?.page))
+  const crop = useRead('visual.crop', { topic_id: item?.topic_id ?? '', source_version_id: item?.source.source_version_id ?? '',
+    page: item?.region?.page ?? 0, rect: item?.region?.rect ?? [0, 0, 1, 1] }, Boolean(item?.topic_id && item.region))
   return (
     <>
       <button
         className="src-btn"
-        onClick={() => void api.call('evidence.open', { anchor_id: id }).then(setItem).catch(report)}
+        onClick={() => void api.call('evidence.open', { anchor_id: id }).then(onOpen ?? setItem).catch(report)}
       >
         <Icon name="quote" size={13} />{' '}{tr('View source')}
       </button>
@@ -27,7 +32,10 @@ export function EvidenceLink({ id }: { id: string }) {
           </p>
           <blockquote className="evidence-excerpt">{item.quote}</blockquote>
           <p>{p?.text}</p>
-          {p?.page ? (
+          {page && <img className="evidence-pdf-page" src={'data:image/png;base64,' + page.png} alt={'Original PDF page ' + page.page} />}
+          {crop && <img className="evidence-pdf-page" src={'data:image/png;base64,' + crop.image}
+            alt={tr('PDF page {0}', item.region?.page ?? 0)} />}
+          {p?.page && !item.topic_id ? (
             <button
               className="ghost-btn"
               onClick={() =>

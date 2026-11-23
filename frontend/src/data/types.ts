@@ -12,6 +12,8 @@ export interface Passage {
 
 export interface Paper {
   id: string
+  paperId?: string
+  alias?: string
   short: string
   title: string
   authors: string[]
@@ -22,6 +24,7 @@ export interface Paper {
   doi?: string
   /** What the prototype library holds for this paper. */
   stored: 'full-text' | 'abstract' | 'excerpt' | 'metadata'
+  pdfAvailable?: boolean
   passages: Passage[]
 }
 
@@ -97,7 +100,7 @@ export type RunStatus = 'running' | 'done' | 'partial' | 'failed' | 'cancelled'
 export interface AgentRun {
   id: string
   manuscriptId?: string
-  task: 'Discovery' | 'Question' | 'Comparison' | 'Citation check' | 'Wiki draft' | 'Citation suggestions' | 'Import' | 'Resume'
+  task: 'Discovery' | 'Question' | 'Comparison' | 'Citation check' | 'Wiki draft' | 'Citation suggestions' | 'Import' | 'Resume' | 'Literature synthesis' | 'Ask about selection' | 'Index figure descriptions'
   label: string
   status: RunStatus
   steps: AgentStep[]

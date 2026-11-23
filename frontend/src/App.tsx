@@ -12,7 +12,7 @@ import { Wiki } from './views/Wiki'
 import { Check } from './views/Check'
 import { Settings } from './views/Settings'
 
-export function App({ windowControls, pages, comparison }: { windowControls?: ReactNode; pages?: Partial<Record<'library'|'wiki'|'check'|'settings',ReactNode>>; comparison?:ReactNode }) {
+export function App({ windowControls, pages, comparison, liveResearch }: { windowControls?: ReactNode; pages?: Partial<Record<'library'|'wiki'|'check'|'settings',ReactNode>>; comparison?:ReactNode; liveResearch?: boolean }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
   const r = state.route
@@ -25,7 +25,7 @@ export function App({ windowControls, pages, comparison }: { windowControls?: Re
           <div className="desktop-drag-area" data-tauri-drag-region>{windowControls}</div>
         )}
         {r.view === 'home' ? <Home key={state.homeRevision} />
-          : r.view === 'topic' ? <TopicView topicId={r.topicId} tab={r.tab} comparison={comparison} windowControls={windowControls} />
+          : r.view === 'topic' ? <TopicView topicId={r.topicId} tab={r.tab} comparison={comparison} liveResearch={liveResearch} windowControls={windowControls} />
           : pages?.[r.view] ?? (r.view === 'library' ? <Library />
           : r.view === 'wiki' ? <Wiki />
           : r.view === 'check' ? <Check />

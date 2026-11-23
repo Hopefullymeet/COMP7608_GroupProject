@@ -6,6 +6,8 @@ import { useStore } from '../data/store'
 import type { Impact, Picked, Review } from '../api/library'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { Notes } from './Notes'
+import { PaperImportDialog, usePdfDrop } from './PaperImportDialog'
+import { PublicationDetails } from '../components/PublicationDetails'
 
 export function LibraryPage() {
   const { tr } = useLanguage()
@@ -25,6 +27,8 @@ export function LibraryPage() {
   const [review, setReview] = useState<Review>(),
     [files, setFiles] = useState<Picked[]>()
   const [target, setTarget] = useState<string>()
+  const [importing, setImporting] = useState<(File | string)[]>()
+  usePdfDrop(!demo && !importing ? (files) => { setTarget(undefined); setImporting(files) } : undefined)
   const [impact, setImpact] = useState<Impact & { ids: string[]; purge: boolean }>(),
     [clear, setClear] = useState(false)
   const [feedback, setFeedback] = useState('')
@@ -40,6 +44,7 @@ export function LibraryPage() {
   const checked = chosen.filter((id) => rows.some((p) => p.paper_id === id))
   const ids = checked.length ? checked : paper ? [paper.paper_id] : []
   async function pick(paper_id?: string) {
+    if (!demo) { setTarget(paper_id); setImporting([]); return }
     const picked = await api.call('file.pick', { purpose: 'papers' })
     if (picked.files.length) {
       setTarget(paper_id)
@@ -241,6 +246,9 @@ export function LibraryPage() {
                 <aside className="card lib-detail">
                   <h2>{paper.title}</h2>
                   <p className="record-meta">{paper.identity}</p>
+                  {!demo && tab === 'Papers' && paper.topic_ids.length > 0 &&
+                    <PublicationDetails key={paper.paper_id} paper={paper.paper_id}
+                      topic={paper.topic_ids.includes(topic) ? topic : paper.topic_ids[0]} />}
                   <h3>{tr('Files and versions')}</h3>
                   {paper.files.map((f) => (
                     <p key={f.source_version_id}>
@@ -327,15 +335,25 @@ export function LibraryPage() {
           </>
         )}
       </div>
+      {importing && <PaperImportDialog topics={topics.filter((item) => !target ||
+        rows.find((row) => row.paper_id === target)?.topic_ids.includes(item.id))}
+        initialTopic={topic && (!target || rows.find((row) => row.paper_id === target)?.topic_ids.includes(topic)) ? topic : undefined}
+        initialFiles={importing} paperId={target} onClose={() => setImporting(undefined)}
+        onImported={(paper) => setFocus(paper)} onOpenTopic={!target ? (id) => act.openTopic(id, 'synthesis') : undefined} />}
       {files && (
         <Dialog title={tr('Import papers')} onClose={() => setFiles(undefined)}>
           <p>{demo ? tr('Sample material selected for the contract demo.') : tr('Review the selected material.')}</p>
           {files.map((f) => (
             <p key={f.file_id}>{f.name}</p>
           ))}
-          <p>{topics.find((t) => t.id === topic)?.title ?? tr('Personal library')}</p>
+          {demo ? <p>{topics.find((t) => t.id === topic)?.title ?? tr('Personal library')}</p> :
+            <select aria-label={tr('Research topic')} value={topic} onChange={(event) => setTopic(event.currentTarget.value)}>
+              {topics.filter((item) => !target || rows.find((row) => row.paper_id === target)?.topic_ids.includes(item.id))
+                .map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+            </select>}
           <button
             className="primary"
+            disabled={busy}
             onClick={() => {
               void prepare({
                 kind: 'paper_import',
@@ -348,7 +366,7 @@ export function LibraryPage() {
               setFiles(undefined)
             }}
           >
-            {tr('Review import scope')}
+            {tr(demo ? 'Review import scope' : 'Import papers')}
           </button>
         </Dialog>
       )}

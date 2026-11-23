@@ -1,3 +1,4 @@
+import { pickPdfs, pdfInput } from '../api/pdf'
 import { useLanguage } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Dialog } from '../components/PageHead'
@@ -97,12 +98,15 @@ function traceSteps(steps: Step[]): AgentRun['steps'] {
 function paperFromAbstract(source: Abstract | DocumentView, paper?: Paper): Paper {
   return {
     id: source.source_version_id,
+    paperId: source.paper_id,
+    alias: paper?.alias,
     short: paper?.short ?? 'Source abstract',
     title: paper?.title ?? 'Source abstract',
     authors: paper?.authors ?? [],
     venue: paper?.venue ?? '',
     venueSource: paper?.venueSource ?? '',
     year: paper?.year ?? 0,
+    pdfAvailable: paper?.pdfAvailable,
     stored: source.passages.some((p) => 'page' in p && typeof p.page === 'number' && p.page > 0)
       ? 'full-text'
       : 'abstract',
@@ -126,10 +130,8 @@ export function MainlineProvider({
 }) {
   const workspace = useWorkspace()
   const [readVersions, selectVersions] = useState<string[]>([])
-  const [files, setFiles] = useState<Picked[]>([])
-  const config = useRead('services.get', {})
+  const [files, setFiles] = useState<(Picked & { pdf?: File | string })[]>([])
   const { tr } = useLanguage()
-  const activity = useRead('workspace.activity', {})
   const selection = useRef<{ source_version_id: string; passage_id: string; quote: string }>()
   const { act: prototypeActions } = useStore()
   const [view, setView] = useState<State>(defaultView)
@@ -139,7 +141,19 @@ export function MainlineProvider({
   const [savedTrace, setSavedTrace] = useState<{ id: string; steps: Step[] }>()
   const [error, setError] = useState('')
   const [ready, setReady] = useState(false)
+  const availableTopics = useRead('topic.list', {}, ready && !demo)
+  useEffect(() => {
+    if (!availableTopics) return
+    setView((previous) => ({ ...previous, topics: availableTopics.items.map((item) => {
+      const topic = previous.topics.find((candidate) => candidate.id === item.topic_id)
+      return topic ? { ...topic, title: item.title } :
+        { id: item.topic_id, title: item.title, goal: '', scripted: true, paperCount: 0, updated: '' }
+    }) }))
+  }, [availableTopics])
+  const config = useRead('services.get', {}, ready)
+  const activity = useRead('workspace.activity', {}, ready)
   const [initializing, setInitializing] = useState(true)
+  const [connectionError, setConnectionError] = useState(false)
   const [working, setWorking] = useState(false)
   const [draft, setDraft] = useState('')
   const [searchQuestion, setSearchQuestion] = useState('')
@@ -159,7 +173,7 @@ export function MainlineProvider({
   const writeKeys = useRef(new Map<string, string>())
   const topic = view.route.view === 'topic' ? view.route.topicId : ''
   const savedNotes = useRead('note.list', { topic_id: topic }, !!topic)
-  const history = useRead('task.history', topic ? { topic_id: topic } : {})
+  const history = useRead('task.history', topic ? { topic_id: topic } : {}, ready)
   const [position, setPosition] = useState<{ version: string; passage: string }>()
   const session = view.activeSessionId
   const reveal = (cause: unknown) => setError(errorText(cause))
@@ -194,6 +208,12 @@ export function MainlineProvider({
     const listener = getCurrentWebview().onDragDropEvent((e) => {
       if (!valid || e.payload.type !== 'drop') return
       const paths = e.payload.paths
+      if (!demo) {
+        setFiles((old) => [...old, ...paths.filter((path) => path.toLowerCase().endsWith('.pdf')).map((path) => ({
+          file_id: path, name: path.split(/[\\/]/).at(-1) ?? path, pdf: path,
+        }))])
+        return
+      }
       void workspace
         .write('file.stage_drop', { paths })
         .then(({ files }) => {
@@ -201,12 +221,12 @@ export function MainlineProvider({
         })
         .catch(reveal)
     })
-    void listener.catch(reveal)
+    void listener.catch((cause) => console.warn('Native PDF drop is unavailable.', cause))
     return () => {
       valid = false
       void listener.then((stop) => stop()).catch(() => {})
     }
-  }, [api, view.route.view])
+  }, [api, demo, view.route.view])
 
   async function refreshLibrary(topic_id: string) {
     const { items } = await api.call('library.list', { topic_id })
@@ -215,6 +235,8 @@ export function MainlineProvider({
       item.source_versions.map(
         (version): Paper => ({
           id: version.source_version_id,
+          paperId: item.paper_id,
+          alias: item.alias,
           short:
             item.source_versions.length > 1 ? `${item.title} · ${version.source_version_id}` : item.title,
           title: item.title,
@@ -223,6 +245,7 @@ export function MainlineProvider({
           venueSource: '',
           year: 0,
           passages: [],
+          pdfAvailable: version.pdf_available ?? (!demo && version.available_scope === 'full_text'),
           stored: version.available_scope === 'full_text' ? 'full-text' : version.available_scope,
         }),
       ),
@@ -301,8 +324,13 @@ export function MainlineProvider({
   async function initialize() {
     const request = ++connectionRequest.current
     setInitializing(true)
+    setConnectionError(false)
     try {
-      const version = await api.call('protocol.version', {})
+      const version = await api.call('protocol.version', {}).catch(async (cause) => {
+        if (demo || cause instanceof Error) throw cause
+        await new Promise((resolve) => setTimeout(resolve, 250))
+        return api.call('protocol.version', {})
+      })
       if (version.major !== 0)
         throw new Error(`Incompatible host protocol ${version.major}.${version.minor}.`)
       const { items } = await api.call('topic.list', {})
@@ -335,7 +363,10 @@ export function MainlineProvider({
       }))
       setReady(true)
     } catch (cause) {
-      if (request === connectionRequest.current) reveal(cause)
+      if (request === connectionRequest.current) {
+        setConnectionError(true)
+        console.warn('Could not load the local workspace.', cause)
+      }
     } finally {
       if (request === connectionRequest.current) setInitializing(false)
     }
@@ -494,14 +525,19 @@ export function MainlineProvider({
       )
       creation.current = undefined
       rememberSession(topicId, session_id)
-      openTopic(topicId, 'discover', session_id, title)
-      if (files.length) {
-        await workspace.prepare({
-          kind: 'paper_import',
-          input: { topic_id: topicId, files: files.map((f) => f.file_id) },
-        })
-        setFiles([])
+      openTopic(topicId, !demo && files.length ? 'synthesis' : 'discover', session_id, title)
+      if (demo && files.length) {
+        await workspace.prepare({ kind: 'paper_import', input: { topic_id: topicId, files: files.map((f) => f.file_id) } })
+      } else if (files.length) {
+        const errors: string[] = []
+        for (const file of files) {
+          if (!file.pdf) continue
+          try { await workspace.write('library.import_pdf', { topic_id: topicId, ...await pdfInput(file.pdf) }) }
+          catch (error) { errors.push(file.name + ': ' + errorText(error)) }
+        }
+        if (errors.length) setError(errors.join(' '))
       }
+      setFiles([])
     })
   }
 
@@ -523,7 +559,7 @@ export function MainlineProvider({
           setPosition({ version: id, passage: passage_id })
         })
         .catch(reveal)
-    if (!id || papers[id]?.stored === 'metadata' || papers[id]?.passages.length) return
+    if (!id || papers[id]?.pdfAvailable || papers[id]?.stored === 'metadata' || papers[id]?.passages.length) return
     selection.current = undefined
     void (
       papers[id]?.stored === 'full-text'
@@ -591,7 +627,9 @@ export function MainlineProvider({
         setView((state) => ({
           ...state,
           readerPaperId: version,
-          activeEvidence: { id, anchor: 'active-abstract-passage', scroll: true },
+          activeEvidence: { id, anchor: 'active-abstract-passage', scroll: true,
+            pdfPage: located.region?.page ?? source.passages.find((p) => p.passage_id === located.passage_id)?.page,
+            region: located.region?.rect },
         }))
       })
       .catch((cause) => {
@@ -717,7 +755,10 @@ export function MainlineProvider({
     paper_import: 'Import',
     wiki_draft: 'Wiki draft',
     paper_comparison: 'Comparison',
+    literature_synthesis: 'Literature synthesis',
     citation_audit: 'Citation check',
+    reader_question: 'Ask about selection',
+    visual_index: 'Index figure descriptions',
     citation_suggest: 'Citation suggestions',
     resume: 'Resume',
   }
@@ -879,14 +920,22 @@ export function MainlineProvider({
       })),
       attachFiles: (incoming) => {
         void status(async () => {
+          if (!demo) {
+            const picked = incoming?.length ? incoming : await pickPdfs()
+            setFiles((old) => [...old, ...picked.map((file) => ({ file_id: operation(), name: file.name, pdf: file }))])
+            return
+          }
           const selected =
-            demo && incoming?.length
+            incoming?.length
               ? incoming.map((f) => ({ file_id: f.name, name: f.name }))
               : (await api.call('file.pick', { purpose: 'papers' })).files
           setFiles((old) => [...old, ...selected.filter((f) => !old.some((o) => o.file_id === f.file_id))])
         })
       },
-      original: (id) => void api.call('source.original', { source_version_id: id }).catch(reveal),
+      rename: async (kind, topic_id, id, title) => {
+        if (kind === 'topic') await workspace.write('topic.rename', { topic_id, title })
+        else await workspace.write('session.rename', { topic_id, session_id: id, title })
+      },
       bookmark: (id, passage_id) =>
         void keyedWrite(JSON.stringify(['bookmark', session, id, passage_id]), (operation_id) =>
           api.call('reader.bookmark', {
@@ -945,7 +994,7 @@ export function MainlineProvider({
           : c.read_scope === 'full_text'
             ? 'Full text read'
             : 'Abstract read',
-      source: c.venue?.source ?? 'Search',
+      source: c.provider ?? search?.provider ?? c.venue?.source ?? 'Search',
       decision: c.decision === 'hold' ? 'held' : c.decision === 'exclude' ? 'excluded' : c.decision,
       ...(c.decision === 'added' && { note: 'Added to topic' }),
     })),
@@ -1069,11 +1118,6 @@ export function MainlineProvider({
             {tr(notice)}
           </p>
           <div className="dialog-actions">
-            {!ready && !initializing && (
-              <button className="primary" onClick={() => void initialize()}>
-                {tr('Retry connection')}
-              </button>
-            )}
             {activeTask.connectionError && (
               <button
                 className="primary"
@@ -1097,11 +1141,12 @@ export function MainlineProvider({
           </div>
         </Dialog>
       )}
-      {!ready && !initializing && !notice && (
-        <div className="mainline-task-actions">
-          <button className="ghost-btn" onClick={() => void initialize()}>
+      {(!ready || connectionError) && (
+        <div className="mainline-task-actions" role="status">
+          {tr(initializing ? 'Connecting to the local workspace…' : 'The local workspace could not connect.')}
+          {!initializing && <button className="ghost-btn" onClick={() => void initialize()}>
             {tr('Retry connection')}
-          </button>
+          </button>}
         </div>
       )}
     </StoreContext.Provider>

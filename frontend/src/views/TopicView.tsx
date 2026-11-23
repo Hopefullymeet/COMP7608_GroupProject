@@ -6,14 +6,16 @@ import { Icon, Spinner } from '../components/Icon'
 import { Discover } from './Discover'
 import { Read } from './Read'
 import { Compare } from './Compare'
+import { LiteratureWorkbench } from './LiteratureWorkbench'
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'discover', label: 'Discover', icon: 'compass' },
   { id: 'read', label: 'Read & ask', icon: 'book' },
   { id: 'compare', label: 'Compare', icon: 'columns' },
+  { id: 'synthesis', label: 'Synthesize', icon: 'note' },
 ]
 
-export function TopicView({ topicId, tab, windowControls, comparison }: { topicId: string; tab: Tab; windowControls?: ReactNode; comparison?:ReactNode }) {
+export function TopicView({ topicId, tab, windowControls, comparison, liveResearch }: { topicId: string; tab: Tab; windowControls?: ReactNode; comparison?:ReactNode; liveResearch?:boolean }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
   const topic = state.topics.find((t) => t.id === topicId)
@@ -22,6 +24,7 @@ export function TopicView({ topicId, tab, windowControls, comparison }: { topicI
   const session = state.sessions.find((s) => s.id === state.activeSessionId && s.topicId === topicId)
   const request = state.messages.find((m) => m.sessionId === session?.id && m.role === 'user')
   const papers = papersOfTopic(state, topicId)
+  const tabs = TABS.filter((item) => item.id === 'synthesis' ? liveResearch : !state.mainline || (item.id !== 'compare' || !!comparison))
 
   return (
     <div className="topic">
@@ -32,18 +35,41 @@ export function TopicView({ topicId, tab, windowControls, comparison }: { topicI
           <h1 title={windowControls ? topic.title : undefined}>{topic.title}</h1>
           <small>{topic.goal}</small>
         </div>
-        {topic.scripted && (
+        {topic.scripted && (liveResearch ? (
+          <details className="pt-topic-actions" onKeyDown={(event) => {
+            if (event.key !== 'Escape' || !event.currentTarget.open) return
+            event.stopPropagation()
+            event.currentTarget.open = false
+            event.currentTarget.querySelector('summary')?.focus()
+          }}>
+            <summary className="ghost-btn">
+              {tr(tab === 'read' ? 'Research tools' : tabs.find((item) => item.id === tab)?.label ?? 'Research tools')}
+              <Icon name="chevronDown" size={14} />
+            </summary>
+            <nav aria-label={tr('Research tools')} className="pt-topic-menu">
+              {tabs.map((item) => <button key={item.id} aria-current={tab === item.id ? 'page' : undefined}
+                onClick={(event) => {
+                  event.currentTarget.closest('details')!.open = false
+                  act.openTopic(topicId, item.id)
+                }}><Icon name={item.icon} size={15} /> {tr(item.label)}</button>)}
+              <button onClick={(event) => {
+                event.currentTarget.closest('details')!.open = false
+                act.showTrace(!state.trace.open)
+              }}><Icon name="trace" size={15} /> {tr('Agent trace')}</button>
+            </nav>
+          </details>
+        ) : (
           <nav className="tabs" role="tablist">
-            {TABS.filter((t) => !state.mainline || !!comparison || t.id !== 'compare').map((t) => (
-              <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'on' : ''}
-                onClick={() => act.openTopic(topicId, t.id)}>
-                <Icon name={t.icon} size={15} /> {tr(t.label)}
+            {tabs.map((item) => (
+              <button key={item.id} role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'on' : ''}
+                onClick={() => act.openTopic(topicId, item.id)}>
+                <Icon name={item.icon} size={15} /> {tr(item.label)}
               </button>
             ))}
           </nav>
-        )}
-        <div className="head-meta">
-          {topic.scripted && (
+        ))}
+        {(!liveResearch || running || state.trace.open) && <div className="head-meta">
+          {!liveResearch && topic.scripted && (
             <>
               <span title={tr('Papers in this topic')}><Icon name="file" size={14} /> {papers.length}</span>
               {!state.mainline && <>
@@ -55,7 +81,7 @@ export function TopicView({ topicId, tab, windowControls, comparison }: { topicI
           <button className={`trace-btn ${state.trace.open ? 'on' : ''}`} onClick={() => act.showTrace(!state.trace.open)}>
             {running ? <Spinner /> : <Icon name="trace" size={15} />}{' '}{tr('Agent trace')}
           </button>
-        </div>
+        </div>}
         {windowControls}
       </header>
 
@@ -90,7 +116,7 @@ export function TopicView({ topicId, tab, windowControls, comparison }: { topicI
             <p>{tr('The prototype only scripts')}{' '}<strong>{tr('Evidence in scientific QA')}</strong>{tr('. Other topics and their sessions only show how lists behave.')}</p>
             {state.topics.some((t) => t.id === DEMO_TOPIC) && <button className="primary" onClick={() => act.enterTopic(DEMO_TOPIC)}>{tr('Open the scripted topic')}</button>}
           </div>
-        ) : tab === 'discover' ? <Discover /> : tab === 'read' ? <Read /> : (comparison ?? <Compare />)}
+        ) : tab === 'synthesis' && liveResearch ? <LiteratureWorkbench key={topicId} topicId={topicId} /> : tab === 'discover' ? <Discover /> : tab === 'read' ? <Read /> : (comparison ?? <Compare />)}
       </div>
     </div>
   )

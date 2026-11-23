@@ -6,6 +6,7 @@ import { Icon } from '../components/Icon'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import type { Decision, ExportFormat, Finding, Report } from '../api/citation'
 import { EvidenceLink } from './Notes'
+import { PdfAudit } from './PdfAudit'
 import { TopicSelect } from './ResearchPages'
 
 function Manuscripts({ topic }: { topic: string }) {
@@ -425,6 +426,7 @@ function Manuscripts({ topic }: { topic: string }) {
   )
 }
 export function CitationPage() {
+  const { demo } = useWorkspace()
   const { tr } = useLanguage()
   const { state } = useStore(),
     [topic, setTopic] = useState(
@@ -441,7 +443,7 @@ export function CitationPage() {
         <TopicSelect value={topic} onChange={setTopic} />
       </PageHead>
       <div className="page-body scroll">
-        {topic ? <Manuscripts topic={topic} key={topic} /> : <p>{tr('Select a topic to add a manuscript.')}</p>}
+        {topic ? (demo ? <Manuscripts topic={topic} key={topic} /> : <PdfAudit topic={topic} key={topic} />) : <p>{tr('Select a topic to add a manuscript.')}</p>}
       </div>
     </div>
   )

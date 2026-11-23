@@ -1,6 +1,6 @@
 # 发现 → 阅读 → 定位 主线接口契约 v0.4
 
-首版验收「真实检索 → 加入主题 → 摘要问答 → 跳到原摘要」。桌面端用 Tauri 接真实搜索和模型，复用现有 React 界面。浏览器入口保留 mock；接入前更新原型目录的范围说明。用科学问答数据集做真实联调，PubMedQA 用作固定样例。
+验收流程为「检索 → 加入主题 → 摘要问答 → 跳到原摘要」。桌面界面连接检索和模型服务。PubMedQA 用于浏览器和离线样例。
 
 全文阅读沿用本线的版本标识，扩展契约定义[按页与段落定位、返回原 PDF 及会话书签](library-reading.md)。检索可按[启用来源声明的会议筛选能力](services-workspace.md)查询，并报告元数据缺口。通信和重试见[共用协议](protocol.md)。
 
@@ -14,6 +14,8 @@
 | `topic.list` | `{}` | `{ items: { topic_id: Id; title: NonEmptyText }[] }` |
 | `session.create` | `{ operation_id: Id, topic_id: Id }` | `{ topic_id: Id, session_id: Id }` |
 | `session.list` | `{ topic_id: Id }` | `{ items: { session_id: Id; title?: NonEmptyText }[] }` |
+| `topic.rename` | `{ operation_id: Id, topic_id: Id, title: NonEmptyText }` | `{ topic_id: Id, title: NonEmptyText }` |
+| `session.rename` | `{ operation_id: Id, topic_id: Id, session_id: Id, title: NonEmptyText }` | `{ topic_id: Id, session_id: Id, title: NonEmptyText }` |
 | `session.get` | `{ topic_id: Id; session_id: Id }` | `{ turns: ReadingTurn[]; active_task_id?: Id }` |
 | `task.prepare` | `{ operation_id: Id } & TaskInput` | `{ confirmation_id: Id; transfers: Transfer[] }` |
 | `task.start` | `{ operation_id: Id; confirmation_id: Id } & TaskInput` | `StartResult`，阅读问答另返回 `scope_id: Id` |
@@ -24,6 +26,8 @@
 | `source.read_abstract` | `{ topic_id: Id; source_version_id: Id }` | `AbstractView` |
 | `evidence.locate` | `{ topic_id: Id; message_id: Id; anchor_id: Id }` | `{ anchor: AbstractAnchor; source: AbstractView }` |
 | `discovery.steps` | `{ task_id: Id }` | `{ steps: DiscoveryStep[] }` |
+
+改名保留原有标识与内容。名称去除首尾空白后须为 1–160 字符。对象不存在或会话不属于指定主题时，返回未找到错误。手动保存的会话标题优先于首条问题。
 
 `task.subscribe`、`task.get`、`task.cancel` 见[共用协议 §4](protocol.md#4-任务与事件)，其中 `R` 取 `TaskResult`。
 
@@ -125,6 +129,7 @@ type MainlineTaskEvent = TaskEvent<TaskResult,
 - Read & Ask 进度为 `reading`。输入版本不得重复，须属于指定论文及当前主题，拒绝对仅有书目的版本请求摘要。服务在启动时固定阅读范围。近期已保存问答可帮助理解追问，引用只能来自本轮实际读过的版本。
 - `answer.delta` 发送非空增量，前端按序原样拼接，仅用于预览。正式回答逐句标注证据，引句须在对应段落中核实。定位失败的出处不得生成锚点。没有有效支持的句子标为 `evidence_not_established`。
 - 问答的 `completed` 和 `partial` 都保存正式回答，并逐一报告实际阅读范围。请求摘要而证据不足时可完成。请求全文但材料不足时，有可用摘要回答才返回 `partial`，否则 `failed`，两者都报 `FULL_TEXT_REQUIRED`。失败时用 `issue.details.read_sources` 报告已读范围。取消不保存预览为正式产物。
+- 模型中断或返回无效输出且尚无正式回答时，以 `failed` 结束。首次读取前失败时，所选来源的范围均为 `none`。已有有效回答但预算终止时，保存回答并以 `partial` 结束。`issue` 保留失败原因和重试建议，`issue.details.read_sources` 列出本轮实际阅读范围，失败任务仍可按任务 ID 查阅。`full_text` 表示读取过来自全文的片段。
 - `source.read_abstract` 校验当前主题关联，返回该版本全部摘要段落。`evidence.locate` 校验锚点属于指定主题中的该条回答，返回当时的完整摘要和目标段落。论文移出主题后，仍可通过历史回答打开原版本。
 
 ### 1.4 本主线错误
@@ -145,7 +150,11 @@ type MainlineTaskEvent = TaskEvent<TaskResult,
 
 ## 2. 主线联调样例
 
-用 PubMedQA 的题名、书目和一条公开摘要引句构造固定样例。摘要其余文字、端点和运行记录均为联调用数据。真实联调使用已验证的搜索源与模型各一个，服务名留在配置中。搜索源需返回稳定论文标识、发表年和可用摘要，模型需能产生可核查的步骤与出处。 [PubMedQA 发表记录](https://aclanthology.org/D19-1259/)
+用 PubMedQA 的题名、书目和一条公开摘要引句构造固定样例。摘要其余文字、端点和运行记录均为联调用数据。桌面联调使用已验证的搜索源与模型各一个，服务名留在配置中。搜索源需返回稳定论文标识、发表年和可用摘要，模型需能产生可核查的步骤与出处。 [PubMedQA 发表记录](https://aclanthology.org/D19-1259/)
+
+### 桌面端 OpenAlex 检索
+
+沿用发现任务、订阅和候选操作。确认单展示 OpenAlex 目的地与实际查询条件。DiscoveryResult 可附 provider，候选可附 provider 和 source_id。会议筛选只检查关键词结果第一页内明确标为会议的来源，覆盖与缺口写入 coverage。无结果以 completed 返回空列表。SERVICE_TIMEOUT、SERVICE_RATE_LIMITED、SERVICE_NOT_CONFIGURED、SERVICE_UNAVAILABLE 和 SERVICE_INVALID_RESPONSE 以任务失败返回，已取消的任务丢弃迟到结果。桌面样例可通过启动环境显式启用。
 
 ### 2.1 发现论文
 
