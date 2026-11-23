@@ -5,6 +5,7 @@ import type { Decision, Report } from '../api/citation'
 import type { Located } from '../api/library'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { useStore } from '../data/store'
+import { ManuscriptReader } from './ManuscriptReader'
 import { EvidenceLink } from './Notes'
 
 const originLabel = { original: 'Original study evidence', secondary: 'Reported from another study', unclear: 'Evidence origin unclear' }
@@ -22,6 +23,7 @@ export function PdfAudit({ topic }: { topic: string }) {
   const papers = useRead('library.list', scope)?.items ?? []
   const { state } = useStore()
   const [active, setActive] = useState(state.route.view === 'check' && state.route.topicId === topic ? state.route.draftId ?? '' : '')
+  const [toolsOpen, showTools] = useState(false)
   const [question, setQuestion] = useState('')
   const [versionId, selectVersion] = useState('')
   const [reportId, selectReport] = useState('')
@@ -45,7 +47,7 @@ export function PdfAudit({ topic }: { topic: string }) {
   const approved = papers.flatMap((paper) => selectedPapers.includes(paper.paper_id)
     && paper.source_versions[0].available_scope === 'full_text' ? [paper.source_versions[0].source_version_id] : [])
   const target = { ...scope, draft_id: doc?.draft_id ?? '', version_id: version?.version_id ?? '' }
-  const image = useRead('draft.page', { ...target, page }, Boolean(!source && page && version))
+  const image = useRead('draft.page', { ...target, page }, Boolean(toolsOpen && !source && page && version))
   const sourcePage = source?.source.passages.find((p) => p.passage_id === source.passage_id)?.page
   const original = useRead('source.page', { topic_id: topic, source_version_id: source?.source.source_version_id ?? '',
     page: sourcePage ?? 0 }, Boolean(sourcePage))
@@ -65,7 +67,7 @@ export function PdfAudit({ topic }: { topic: string }) {
     citationCount += count
   }
 
-  function reset() { setQuestion(''); selectVersion(''); selectReport(''); select([]); setPage(1); setExported([]); setSource(undefined); setLimit(40) }
+  function reset() { showTools(false); setQuestion(''); selectVersion(''); selectReport(''); select([]); setPage(1); setExported([]); setSource(undefined); setLimit(40) }
 
   async function importPdf(newVersion = false, sourceVersion?: string, dropped?: File) {
     try {
@@ -145,8 +147,12 @@ export function PdfAudit({ topic }: { topic: string }) {
       <div className="audit-options">{items.map(item => <button key={item.draft_id} className="audit-option"
         onClick={() => { reset(); setActive(item.draft_id) }}><span>{item.name}</span><span aria-hidden="true">›</span></button>)}</div></>}
   </section>
+  if (version && !toolsOpen) return <ManuscriptReader key={version.version_id} topic={topic} draft={doc.draft_id}
+    name={doc.name} version={version} report={version.reports.find(r => r.kind === 'citation_audit' && r.whole_document) ?? version.reports.find(r => r.kind === 'citation_audit')}
+    onTools={() => showTools(true)} onChoose={() => { reset(); setActive('') }}/>
   return <div className="synthesis-workbench">
     <section className="synthesis-main">
+      <button className="ghost-btn" onClick={() => showTools(false)}>{tr('Back to manuscript')}</button>
       <div className="lib-tools">
         <button className="ghost-btn" disabled={workspace.busy} onClick={() => { reset(); setActive('') }}>{tr('Choose your paper')}</button>
         <button className="ghost-btn" disabled={workspace.busy} onClick={() => void importPdf(true)}>{tr('Add version')}</button>

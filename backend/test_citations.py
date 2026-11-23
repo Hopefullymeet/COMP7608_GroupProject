@@ -243,6 +243,21 @@ class TestCitationWorkflow(unittest.TestCase):
         self.assertFalse(report()["findings"][0]["needs_review"])
         self.assertFalse(call(worker, "draft.list", topic_id=self.other)["items"])
 
+    def test_page_marks_keep_parallel_and_repeated_citations_at_their_own_locations(self):
+        content = (Path(__file__).resolve().parents[1] / "docs/examples/CV-Citation-Check.pdf").read_bytes()
+        draft = call(self.worker, "draft.import", topic_id=self.topic, name="CV.pdf",
+                     content=base64.b64encode(content).decode())
+        version = draft["versions"][0]
+        page = call(self.worker, "draft.page", topic_id=self.topic, draft_id=draft["draft_id"],
+                    version_id=version["version_id"], page=1)
+        marks = page["marks"]
+        self.assertEqual([m["label"] for m in marks], ["[1]", "[2]", "[3]", "[4]", "[1, 2]", "[2]", "[1]"])
+        self.assertEqual(marks[4]["keys"], ["1", "2"])
+        self.assertEqual(len(marks[4]["boxes"]), 1)
+        self.assertEqual(len({m["sentence_id"] for m in marks}), 7)
+        self.assertTrue(all(0 <= x < r <= 1 and 0 <= y < b <= 1
+                            for m in marks for x, y, r, b in m["boxes"]))
+
     def test_offline_bidirectional_navigation_and_migration(self):
         citing = self.import_pdf("Citing", *self.draft_text)
         info = {"topic_id": self.topic, "source_version_id": citing["source_version_id"]}

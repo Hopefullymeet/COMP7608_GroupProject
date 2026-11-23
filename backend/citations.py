@@ -6,11 +6,12 @@ import http.client
 import json
 import os
 import re
+import subprocess
 import xml.etree.ElementTree as ET
 from urllib.parse import quote
 from uuid import uuid4
 from dsh import DshFailure, MODEL
-from literature import LiteratureError, digest, extract_pdf, pdf_content, render_pdf_page
+from literature import LiteratureError, digest, extract_pdf, pdf_content, poppler, render_pdf_page
 from venue_ranks import pdf_venue
 
 
@@ -270,6 +271,76 @@ def reference_link(ref):
     if ref.get("title"):
         return "https://search.crossref.org/?q=" + quote(ref["title"], safe="")
     return None
+
+
+def page_marks(content, page, draft):
+    """Locate manuscript markers using their surrounding prose on the same PDF page."""
+    sentences = [s for s in draft["sentences"] if s.get("page") == page]
+    if not sentences:
+        return []
+    try:
+        xml = subprocess.run([poppler("pdftotext"), "-f", str(page), "-l", str(page),
+                              "-bbox-layout", "-", "-"], input=content, capture_output=True,
+                             check=True, timeout=10).stdout
+        sheet = ET.fromstring(xml).find(".//{*}page")
+    except (OSError, subprocess.SubprocessError, ET.ParseError):
+        return []
+    if sheet is None:
+        return []
+    width, height = float(sheet.get("width")), float(sheet.get("height"))
+    letters, positions = [], []
+    for line_no, line in enumerate(sheet.iterfind(".//{*}line")):
+        for word in line.iterfind("{*}word"):
+            text = word.text or ""
+            x0, y0, x1, y1 = (float(word.get(k)) for k in ("xMin", "yMin", "xMax", "yMax"))
+            for i, ch in enumerate(text):
+                if ch.isspace():
+                    continue
+                letters.append(ch)
+                positions.append((line_no, (x0+(x1-x0)*i/len(text))/width, y0/height,
+                                  (x0+(x1-x0)*(i+1)/len(text))/width, y1/height))
+    body = "".join(letters)
+    marks = []
+    for sentence in sentences:
+        raw = sentence["text"]
+        for match in sorted([*NUM_CALL.finditer(raw), *AUTHOR_CALL.finditer(raw)], key=lambda m: m.start()):
+            label = match[0]
+            if match.re is NUM_CALL:
+                keys = []
+                for part in re.split("[,;]", match[1]):
+                    ends = re.split("[-–]", part)
+                    if int(ends[-1])-int(ends[0]) <= 20:
+                        keys.extend(str(n) for n in range(int(ends[0]), int(ends[-1])+1))
+                keys = [k for k in keys if k in sentence["cites"] + sentence["unresolved"]]
+            else:
+                keys = [r["key"] for r in draft["references"] if r["key"] in sentence["cites"]
+                        and norm(r.get("surname", "")) == norm(match["author"])
+                        and r.get("year", "").lower() == match["year"].lower()]
+                if not keys and label in sentence["unresolved"]:
+                    keys = [label]
+            if not keys:
+                continue
+            before = "".join(raw[:match.start()].split())
+            after = "".join(raw[match.end():].split())
+            token = "".join(label.split())
+            for window in (48, 24, 12):
+                prefix = before[-window:]
+                needle = prefix + token + after[:window]
+                start = body.find(needle)
+                if start >= 0 and body.find(needle, start+1) < 0:
+                    offset = start + len(prefix)
+                    boxes = []
+                    last = None
+                    for line, x0, y0, x1, y1 in positions[offset:offset+len(token)]:
+                        if line != last:
+                            boxes.append([x0, y0, x1, y1])
+                            last = line
+                        else:
+                            b = boxes[-1]
+                            b[1], b[2], b[3] = min(b[1], y0), max(b[2], x1), max(b[3], y1)
+                    marks.append({"sentence_id": sentence["id"], "label": label, "keys": keys, "boxes": boxes})
+                    break
+    return marks
 
 
 def stable_key(*fields):
@@ -538,7 +609,7 @@ class CitationWorkspace:
         if type(page) is not int or not 1 <= page <= draft["page_count"]:
             raise LiteratureError("INVALID_PARAMS", "Invalid manuscript page.")
         row = self.host.db.execute("SELECT content FROM pdf_files WHERE version_id = ?", (draft["version_id"],)).fetchone()
-        return {"page": page, "png": render_pdf_page(row[0], page)}
+        return {"page": page, "png": render_pdf_page(row[0], page), "marks": page_marks(row[0], page, draft)}
 
     def jobs(self, topic, params):
         doc, v = self.snapshot(topic, params)

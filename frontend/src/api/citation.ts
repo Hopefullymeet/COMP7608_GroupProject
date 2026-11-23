@@ -34,7 +34,9 @@ export type Manuscript = {
   write_mode: 'copy' | 'patch' | 'positions'
   versions: Snapshot[]
 }
+export type CitationMark = { sentence_id: string; label: string; keys: string[]; boxes: [number, number, number, number][] }
 export type Snapshot = {
+  page_count?: number
   stale_sentence_ids?: string[]
   stale_suggestion_sentence_ids?: string[]
   version_id: string
@@ -60,7 +62,7 @@ export type CitationTask = T & {
 }
 export type CitationMethods = {
   'draft.import': [Write & T & ({ file_id: string } | { source_version_id: string } | { name: string; text: string } | { name: string; content: string; draft_id?: string }), Manuscript]
-  'draft.page': [T & V & { page: number }, { page: number; png: string }]
+  'draft.page': [T & V & { page: number }, { page: number; png: string; marks?: CitationMark[] }]
   'draft.prose': [T & V, { sentences: Snapshot['sentences'] }]
   'draft.resolve_reference': [Write & T & V & { ref_key: string; paper_id: string | null }, Manuscript]
   'draft.list': [T, { items: Manuscript[] }]

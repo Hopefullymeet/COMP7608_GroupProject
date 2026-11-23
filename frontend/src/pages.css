@@ -415,3 +415,27 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .audit-option { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; text-align: left; background: var(--paper, #fffdf9); border: 1px solid var(--line, #ddd4c8); border-radius: 9px; color: inherit; font: inherit; cursor: pointer; }
 .audit-option span:first-of-type { flex: 1; overflow-wrap: anywhere; }
 .audit-option:hover, .audit-option:focus-visible { border-color: var(--accent, #a34027); }
+
+.audit-reading { max-width: 1440px; margin: auto; padding: 0 clamp(4px, 2vw, 22px) 20px; }
+.audit-reader-tools, .audit-turn, .audit-inspector header { display:flex; align-items:center; gap:12px; }
+.audit-reader-tools { margin-bottom:18px; }
+.audit-reader-tools strong { flex:1; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; text-align:center; }
+.audit-spread { position:relative; display:grid; justify-content:center; align-items:start; grid-template-columns:minmax(0,850px); }
+.audit-spread.inspecting { grid-template-columns:minmax(0,850px) minmax(250px,32%); gap:22px; }
+.audit-sheet { position:relative; background:white; box-shadow:0 1px 7px #33261825; }
+.audit-sheet img { width:100%; display:block; }
+.audit-pin { position:absolute; border:0; background:transparent; padding:0; cursor:pointer; border-radius:0; z-index:2; }
+.audit-pin::after { content:''; position:absolute; bottom:-1px; left:0; right:0; height:4px; border:solid #b35546; border-width:0 1.5px 1.5px; border-radius:0 0 5px 5px; }
+.audit-pin.current::after,.audit-pin:hover::after { border-color:#a02617; border-width:0 2px 2px; }
+.audit-pin:focus-visible { outline:2px solid #a02617; outline-offset:2px; }
+.audit-inspector { background:#fffdf9; border:1px solid #dfd6cc; border-radius:10px; padding:16px; overflow-wrap:anywhere; font-size:14px; }
+.audit-inspector header { justify-content:space-between; }
+.audit-inspector h3,.audit-inspector h4 { margin:0; }
+.audit-inspector section { border-top:1px solid #e8dfd5; padding-top:14px; margin-top:16px; }
+.audit-inspector h4 { margin-bottom:8px; }
+.audit-inspector p,.audit-inspector blockquote { line-height:1.6; }
+.audit-sentence,.audit-quote blockquote { font:italic 14px/1.6 Georgia,serif; }
+.audit-quote blockquote { border-left:2px solid #c8afa0; padding-left:10px; margin:10px 0 5px; }
+.audit-wire { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; fill:none; stroke:#ad5448; stroke-width:1; stroke-dasharray:4 4; }
+.audit-turn { justify-content:center; margin:14px 0; }
+@media(max-width:800px) { .audit-spread.inspecting {grid-template-columns:minmax(0,1fr)} .audit-wire {display:none} }
