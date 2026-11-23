@@ -8,6 +8,7 @@ import type { Assessment, OutlinePoint, PaperRelation } from '../api/synthesis'
 import { FigureSearch } from '../components/FigureSearch'
 import { Dialog } from '../components/PageHead'
 import { Icon } from '../components/Icon'
+import { AnswerText } from '../components/AnswerText'
 import { PaperImportDialog, usePdfDrop } from './PaperImportDialog'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { useStore } from '../data/store'
@@ -201,7 +202,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
         </form>}
         {answers.slice(0, 8).map((answer) => <article className="synthesis-item pt-reader-answer" key={answer.id}>
           <h4>{answer.question}</h4>
-          <p>{answer.answer}</p>
+          <AnswerText text={answer.answer} />
           <button className="link-btn" onClick={() => openPage(answer.source_version_id, answer.page, answer.rect)}>
             {names[answer.source_version_id]} · {tr('PDF page {0}', answer.page)}
           </button>

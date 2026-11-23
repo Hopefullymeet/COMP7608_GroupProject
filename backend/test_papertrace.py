@@ -1,6 +1,7 @@
 import base64
+from contextlib import closing
 import importlib.util
-from io import BytesIO
+from io import BytesIO, StringIO
 import json
 import os
 from pathlib import Path
@@ -12,13 +13,13 @@ import tempfile
 import threading
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 from uuid import uuid4
 
 from papertrace import Worker
 from credentials import WindowsStore
-from dsh import Dsh, ENDPOINT, read_json_answer
+from dsh import Dsh, DshFailure, ENDPOINT, read_json_answer
 from bibliography import PublicServiceError, bibliography_records
 from literature import LiteratureError
 from test_literature import sample_pdf
@@ -41,8 +42,79 @@ class EvidenceTest(unittest.TestCase):
         ])
         self.assertEqual(rows[1]["references"], [])
 
+    def test_malformed_citations_do_not_discard_valid_claims(self):
+        seen = {"p1": {"text": "The passage states a direct result."}}
+        response = {"sentences": [None, {"text": "A claim without evidence."}, {
+            "text": "A direct result.", "evidence": [None, {"id": []}, {"id": "missing", "quote": "result"},
+                                                    {"id": "p1"}, {"id": "p1", "quote": "a direct result"}],
+        }]}
+        self.assertEqual(read_json_answer(json.dumps(response), seen), [
+            {"text": "A claim without evidence.", "references": []},
+            {"text": "A direct result.", "references": [{"passage": seen["p1"], "quote": "a direct result"}]},
+        ])
+
+    def test_reading_retries_blank_or_truncated_completions_with_the_same_passages(self):
+        def completion(content, finish_reason):
+            return BytesIO(json.dumps({"choices": [{"message": {"content": content},
+                                                    "finish_reason": finish_reason}]}).encode())
+
+        answer = json.dumps({"sentences": [{"text": "A direct result.",
+                                           "evidence": [{"id": "p1", "quote": "a direct result"}]}]})
+        sources = [{"source_version_id": "v1", "paper_id": "p", "title": "Evidence", "available_scope": "abstract",
+                    "passages": [{"passage_id": "p1", "text": "The passage states a direct result."}]}]
+        with tempfile.TemporaryDirectory() as directory, closing(Worker(Path(directory), lambda _: None)) as worker:
+            for content, reason in (("   ", "stop"), (answer[:35], "length")):
+                with self.subTest(reason=reason), patch("papertrace.build_opener") as opener:
+                    send = opener.return_value.open
+                    send.side_effect = [completion(content, reason), completion(answer, "stop")]
+                    claims, seen = worker.answer_with_model_endpoint(
+                        ENDPOINT, "deepseek-flash", "test-key", "What was the result?", sources, threading.Event())
+                    self.assertEqual(claims[0]["references"], [{"passage": seen["p1"], "quote": "a direct result"}])
+                    first, retry = [json.loads(call.args[0].data) for call in send.call_args_list]
+                    self.assertEqual(first["messages"][1], retry["messages"][1])
+                    self.assertNotEqual(first["messages"][0], retry["messages"][0])
+
 
 class CredentialTest(unittest.TestCase):
+    def test_synthesis_collects_session_events_until_turn_end(self):
+        def event(kind, data, session="reading"):
+            return {"method": "session.event", "params": {"sessionId": session,
+                    "event": {"type": kind, "data": data}}}
+
+        passage = {"passage_id": "p1", "text": "The observed evidence."}
+        result = {"points": [{"title": "Observed findings"}]}
+        events = [{"id": 1, "result": {}},
+                  event("turn/end", {"reason": {"kind": "failed"}}, "other"),
+                  {"id": 2, "result": {"messageId": "m"}},
+                  event("tool/call", {"name": "paper_read", "arguments": "{}", "callId": "c"}),
+                  event("tool/result", {"message": {"toolCallId": "c", "content": [
+                      {"type": "text", "text": json.dumps([passage])}]}}),
+                  event("assistant/message", {"message": {"content": [{"type": "text", "text": json.dumps(result)}]}}),
+                  event("turn/end", {"reason": {"kind": "completed"}})]
+        process = Mock(stdout=StringIO("".join(json.dumps(e) + "\n" for e in events)))
+        with tempfile.TemporaryDirectory() as directory, patch("dsh.subprocess.Popen", return_value=process):
+            root = Path(directory)
+            raw, seen, _, _, issue = Dsh("node", __file__, "test", root).run(
+                root, root / "patch.yml", {}, "question", threading.Event(), research=True)
+        self.assertEqual((raw, seen, issue), (result, {"p1": passage}, None))
+        self.assertEqual([json.loads(c.args[0])["method"] for c in process.stdin.write.call_args_list],
+                         ["initialize", "session/prompt"])
+
+    def test_harness_prompt_startup_failure_survives_closed_stdin(self):
+        process = Mock()
+        process.stdout = StringIO(
+            '{"id":1,"result":{}}\n'
+            '{"id":2,"error":{"code":-32601,"message":"Prompt unavailable"}}\n'
+        )
+        process.stdin.close.side_effect = BrokenPipeError()
+        with tempfile.TemporaryDirectory() as directory, patch("dsh.subprocess.Popen", return_value=process):
+            root = Path(directory)
+            runtime = Dsh("node", __file__, "test-key", root)
+            with self.assertRaises(DshFailure) as error:
+                runtime.run(root, root / "patch.yml", {}, "Test question", threading.Event())
+            self.assertTrue(error.exception.startup)
+            process.wait.assert_called_once()
+
     @unittest.skipUnless(sys.platform == "win32", "Windows npm layout is required")
     def test_desktop_finds_installed_harness_without_environment_override(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"APPDATA": directory}), patch(

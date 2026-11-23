@@ -270,6 +270,7 @@ class Workbench:
             mode = "agent" if dimensions else task["input"].get("mode", "wiki")
             raw, seen, trace, usage, issue = runtime.synthesize(
                 task["input"]["question"], sources, wiki, cancelled, progress, mode=mode, dimensions=dimensions,
+                endpoint_completion=host.request_synthesis,
             )
             with host.lock:
                 current = host.get("task", task_id)

@@ -66,7 +66,7 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="sidebar">
+    <aside className="workspace-sidebar">
       <button className="brand" onClick={() => act.navigate({ view: 'home' })}>
         <Logo />
         <span>

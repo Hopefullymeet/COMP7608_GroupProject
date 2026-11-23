@@ -154,7 +154,7 @@ export function Discover() {
           <div className="status-line">
             {d.status === 'idle' && <span>{tr('The agent has not searched yet.')}</span>}
             {d.status === 'running' && <><Spinner /> <span>{tr(lastStep?.title ?? 'Planning…')}</span></>}
-            {d.status === 'done' && <><Icon name={latest?.status === 'partial' ? 'alert' : 'check'} size={15} /> <span>{state.mainline
+            {d.status === 'done' && <><Icon name="check" size={15} /> <span>{state.mainline
               ? tr('{0} visible candidates', state.candidates.length)
               : d.summary}</span></>}
             {latest && <button className="link-btn" onClick={() => act.showTrace(true, latest.id)}>{latest.steps.length}{' '}{tr('steps · view trace')}</button>}

@@ -2,7 +2,7 @@ import { pickPdfs, pdfInput } from '../api/pdf'
 import { useLanguage } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Dialog } from '../components/PageHead'
-import { baseState, StoreContext, useStore } from './store'
+import { baseState, hasMessages, StoreContext, useStore } from './store'
 import type { Route, State, Tab } from './store'
 import type {
   AgentRun,
@@ -50,8 +50,8 @@ const defaultView = {
   wiki: { ...baseState.wiki, pages: [] },
 }
 
-function answers(session: string, turns: Turn[]): ChatMessage[] {
-  return turns.flatMap(({ task_id, question, answer }) => [
+function answerMessages(session: string, { task_id, question, answer }: Turn): [ChatMessage, ChatMessage] {
+  return [
     { id: `user:${task_id}`, sessionId: session, role: 'user', done: true, segments: [{ text: question }] },
     {
       id: `answer:${answer.message_id}`,
@@ -60,25 +60,32 @@ function answers(session: string, turns: Turn[]): ChatMessage[] {
       done: true,
       segments: [
         ...answer.sentences.map((sentence) => ({
-          text: sentence.text + ' ',
-          ...(sentence.assessment === 'supported'
-            ? {
-                evidenceIds: sentence.anchor_ids.map((anchor) => evidenceId(answer.message_id, anchor)),
-              }
-            : { text: sentence.text + ' · Evidence not established. ' }),
+          text: sentence.text,
+          evidenceIds: sentence.anchor_ids.map((anchor) => evidenceId(answer.message_id, anchor)),
         })),
         {
-          text: answer.read_sources.length
-            ? 'Read: ' +
-              answer.read_sources
-                .map((source) => `${source.source_version_id} (${source.read_scope.replace('_', ' ')})`)
-                .join(', ')
-            : 'No sources read.',
+          text: '',
+          readSources: answer.read_sources,
           tone: 'scope',
         },
       ],
     },
-  ])
+  ]
+}
+
+function mergeAnswers(messages: ChatMessage[], session: string, turns: Turn[]): ChatMessage[] {
+  const turnsByQuestion = new Map(turns.map((turn) => {
+    const pair = answerMessages(session, turn)
+    return [pair[0].id, pair] as const
+  }))
+  const existing = new Set(messages.map((message) => message.id))
+  const merged = messages.flatMap((message) => {
+    const pair = turnsByQuestion.get(message.id)
+    if (!pair) return [message]
+    turnsByQuestion.delete(message.id)
+    return existing.has(pair[1].id) ? [message] : pair
+  })
+  return [...merged, ...Array.from(turnsByQuestion.values()).flat()]
 }
 
 function traceSteps(steps: Step[]): AgentRun['steps'] {
@@ -153,7 +160,6 @@ export function MainlineProvider({
   const [initializing, setInitializing] = useState(true)
   const [connectionError, setConnectionError] = useState(false)
   const [working, setWorking] = useState(false)
-  const [draft, setDraft] = useState('')
   const [searchQuestion, setSearchQuestion] = useState('')
   const [round, setRound] = useState(0)
   const [loadingSearch, setLoadingSearch] = useState(false)
@@ -183,7 +189,7 @@ export function MainlineProvider({
     lock.current = true
     setWorking(true)
     try {
-      await work()
+      return await work()
     } catch (cause) {
       reveal(cause)
     } finally {
@@ -274,17 +280,18 @@ export function MainlineProvider({
   }
 
   async function refreshSession(wanted: typeof selected.current, resume = true) {
-    if (!wanted.session) return
+    const sessionId = wanted.session
+    if (!sessionId) return
     const { turns, active_task_id, reader } = await api.call('session.get', {
       topic_id: wanted.topic,
-      session_id: wanted.session,
+      session_id: sessionId,
     })
     if (!current(wanted)) return
     setView((state) => ({
       ...state,
-      messages: answers(wanted.session!, turns),
+      messages: mergeAnswers(state.messages, sessionId, turns),
       sessions: state.sessions.map((s) =>
-        s.id === wanted.session ? { ...s, hasTurns: turns.length > 0 } : s,
+        s.id === sessionId ? { ...s, hasTurns: turns.length > 0 } : s,
       ),
       ...(resume && reader && !state.readerPaperId && { readerPaperId: reader.source_version_id }),
     }))
@@ -309,11 +316,20 @@ export function MainlineProvider({
   }
 
   const discovering = useTask(api, finishDiscovery)
-  const reading = useTask(api, (_id, finished) => {
-    setDraft('')
+  const reading = useTask(api, (id, finished) => {
     workspace.refresh()
-    if (finished.status === 'completed' || finished.status === 'partial')
-      void refreshSession(selected.current, false).catch(reveal)
+    if ((finished.status === 'completed' || finished.status === 'partial') && 'message_id' in finished.result) {
+      const answer = finished.result
+      setView((state) => {
+        const question = state.messages.find((message) => message.id === `user:${id}`)
+        if (!question) return state
+        return { ...state, messages: mergeAnswers(state.messages, question.sessionId, [
+          { task_id: id, question: question.segments[0].text, answer },
+        ]) }
+      })
+      const wanted = selected.current
+      void refreshSession(wanted, false).catch((cause) => { if (current(wanted)) reveal(cause) })
+    }
   })
   const confirmation = discovering.confirmation ? discovering : null
   const activeTask = view.route.view === 'topic' && view.route.tab === 'discover' ? discovering : reading
@@ -433,7 +449,6 @@ export function MainlineProvider({
       readerRequest.current++
       reading.detach()
       selection.current = undefined
-      setDraft('')
       setLoadingSession(Boolean(nextSession))
     }
     if (changedTopic) {
@@ -452,7 +467,7 @@ export function MainlineProvider({
       route: { view: 'topic', topicId, tab },
       activeSessionId: nextSession,
       ...(previous.session !== nextSession || changedTopic
-        ? { messages: [], activeEvidence: null, readerPaperId: '' }
+        ? { activeEvidence: null, readerPaperId: '' }
         : {}),
       ...(switchingToDiscover && { activeEvidence: null }),
       ...(changedTopic ? { library: [], readerPaperId: '', trace: emptyTrace } : {}),
@@ -471,7 +486,6 @@ export function MainlineProvider({
       route: { view: 'home' },
       activeSessionId: null,
       activeEvidence: null,
-      messages: [],
       trace: emptyTrace,
       homeRevision: state.homeRevision + Number(reset),
     }))
@@ -669,10 +683,10 @@ export function MainlineProvider({
     })
   }
 
-  function ask(text: string): false | undefined {
+  async function ask(text: string): Promise<boolean> {
     if (busy || loadingSession || !session || reading.task) return false
     const passage = selection.current
-    void status(async () => {
+    return (await status(async () => {
       const { items } = await api.call('library.list', { topic_id: topic })
       const sources = items.flatMap((paper) =>
         paper.source_versions
@@ -685,8 +699,7 @@ export function MainlineProvider({
       )
       const [first, ...rest] = sources
       if (!first) throw new Error(tr('No readable papers in this topic.'))
-      setDraft(text)
-      await reading.prepare({
+      const started = await reading.prepare({
         topic_id: topic,
         session_id: session,
         kind: 'reading_qa',
@@ -697,7 +710,15 @@ export function MainlineProvider({
           sources: [first, ...rest],
         },
       }, { startImmediately: true })
-    })
+      if (!started) return false
+      setView((state) => {
+        const id = `user:${started.task_id}`
+        if (state.messages.some((message) => message.id === id)) return state
+        const question: ChatMessage = { id, sessionId: session, role: 'user', done: true, segments: [{ text }] }
+        return { ...state, messages: [...state.messages, question] }
+      })
+      return true
+    })) ?? false
   }
 
   const candidates = [...(search?.candidates ?? []), ...(search?.excluded ?? [])]
@@ -733,7 +754,8 @@ export function MainlineProvider({
     ? {
         id: reading.task,
         task: 'Question',
-        label: draft || 'Reading abstracts',
+        label: view.messages.find((message) => message.id === `user:${reading.task}`)?.segments[0]?.text
+          ?? 'Reading abstracts',
         status: 'running',
         steps: reading.preview.progress
           ? [{ id: 'reading', kind: 'tool', title: reading.preview.progress }]
@@ -790,17 +812,6 @@ export function MainlineProvider({
     reading.task && session
       ? [
           ...view.messages,
-          ...(draft
-            ? [
-                {
-                  id: 'pending-user',
-                  sessionId: session,
-                  role: 'user' as const,
-                  done: true,
-                  segments: [{ text: draft }],
-                },
-              ]
-            : []),
           {
             id: 'pending-answer',
             sessionId: session,
@@ -943,8 +954,8 @@ export function MainlineProvider({
           await saveNote(
             m.segments
               .filter((s) => s.tone !== 'scope')
-              .map((s) => s.text)
-              .join('')
+              .map((s) => s.evidenceIds?.length === 0 ? s.text + ' · Evidence not established.' : s.text)
+              .join('\n\n')
               .trim(),
             m.segments.flatMap((s) => (s.evidenceIds ?? []).map((id) => (JSON.parse(id) as string[])[1])),
             'answer',
@@ -1020,7 +1031,7 @@ export function MainlineProvider({
     newSession: (topicId: string) => {
       if (!busy)
         void status(async () => {
-          const empty = view.sessions.find((s) => s.topicId === topicId && s.hasTurns === false)
+          const empty = view.sessions.find((s) => s.topicId === topicId && s.hasTurns === false && !hasMessages(view, s.id))
           if (empty) {
             openTopic(topicId, 'read', empty.id)
             return
@@ -1051,8 +1062,11 @@ export function MainlineProvider({
       setView((state) => ({ ...state, trace: { open, focus: focus ?? null } })),
   }
   const taskError = activeTask.error || activeTask.connectionError || activeTask.status
-  const [dismissed, dismiss] = useState('')
-  const notice = error || (taskError !== dismissed ? taskError : '')
+  const notice = error || taskError
+  const closeNotice = () => {
+    setError('')
+    activeTask.clearNotice()
+  }
   return (
     <StoreContext.Provider value={{ state, act }}>
       {children}
@@ -1093,10 +1107,7 @@ export function MainlineProvider({
       {!confirmation && notice && (
         <Dialog
           title={tr('Workspace notice')}
-          onClose={() => {
-            setError('')
-            dismiss(taskError)
-          }}
+          onClose={closeNotice}
         >
           <p className="dialog-text" role="status">
             {tr(notice)}
@@ -1105,20 +1116,14 @@ export function MainlineProvider({
             {activeTask.connectionError && (
               <button
                 className="primary"
-                onClick={() => {
-                  dismiss(taskError)
-                  activeTask.reconnect()
-                }}
+                onClick={activeTask.reconnect}
               >
                 {tr('Reconnect')}
               </button>
             )}
             <button
               className="ghost-btn"
-              onClick={() => {
-                setError('')
-                dismiss(taskError)
-              }}
+              onClick={closeNotice}
             >
               {tr('Close')}
             </button>

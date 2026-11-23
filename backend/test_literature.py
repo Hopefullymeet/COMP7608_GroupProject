@@ -1,6 +1,7 @@
 """Regression tests for evidence gating and persistent Wiki revision handling."""
 
 import base64
+import json
 from pathlib import Path
 import shutil
 import sqlite3
@@ -42,7 +43,7 @@ class ScriptedSynthesis:
         self.database = Path(workspace) / "workspace.sqlite3"
         self.leads = []
 
-    def synthesize(self, question, sources, wiki, cancelled, progress, mode, dimensions=None):
+    def synthesize(self, question, sources, wiki, cancelled, progress, mode, dimensions=None, endpoint_completion=None):
         self.leads = wiki
         seen = {}
         refs = []
@@ -126,6 +127,28 @@ class LiteratureTest(unittest.TestCase):
                 return snapshot
             time.sleep(.03)
         self.fail("Synthesis did not finish.")
+
+    def test_outline_uses_confirmed_endpoint_when_sdk_cannot_start(self):
+        from io import BytesIO
+        self.worker.dsh = Dsh("node", "missing-sdk", "test", self.workspace.name)
+
+        def complete(request, timeout):
+            messages = json.loads(request.data)["messages"]
+            passages = json.loads(messages[1]["content"])["passages"]
+            self.assertEqual({p["source_version_id"] for p in passages}, set(self.versions))
+            p = passages[0]
+            result = {"points": [{"title": "Benchmark", "claims": [{"text": "Benchmark evidence",
+                      "assessment": "supported", "contributions": [{"version": p["source_version_id"],
+                      "role": "Definition", "assessment": "supported",
+                      "evidence": [{"id": p["passage_id"], "quote": p["text"]}]}]}]}]}
+            return BytesIO(json.dumps({"choices": [{"message": {"content": json.dumps(result)}}]}).encode())
+
+        with patch("papertrace.build_opener") as opener:
+            opener.return_value.open.side_effect = complete
+            self.run_task(self.versions)
+        outline = self.call("synthesis.list", topic_id=self.topic)["items"][0]
+        self.assertEqual(outline["points"][0]["title"], "Benchmark")
+        self.assertTrue(outline["points"][0]["claims"][0]["contributions"][0]["anchor_ids"])
 
     def test_pdf_round_trip_and_topic_boundaries(self):
         duplicate = self.save_pdf("Alpha duplicated", "Alpha proposes the benchmark for evidence attribution.")
@@ -233,6 +256,54 @@ class LiteratureTest(unittest.TestCase):
         self.assertEqual(snapshot["status"], "partial")
         self.assertEqual(snapshot["issue"]["reason"], budget["reason"])
         self.assertTrue(snapshot["result"]["sentences"][0]["anchor_ids"])
+
+    def test_reading_uses_configured_endpoint_when_harness_cannot_start(self):
+        self.worker.dsh = Dsh("node", Path(self.workspace.name) / "missing-cli.js", "fixture", self.workspace.name)
+        self.check_reading_uses_configured_endpoint()
+
+    def test_live_reading_uses_configured_endpoint_without_harness_installed(self):
+        self.worker.dsh = None
+        self.worker.discovery_fixture = False
+        with patch("papertrace.deepseek_api_key", return_value="fixture"):
+            self.check_reading_uses_configured_endpoint()
+
+    def check_reading_uses_configured_endpoint(self):
+        session = self.call("session.create", topic_id=self.topic)["session_id"]
+        version = self.versions[0]
+        passage = self.call("source.read", topic_id=self.topic, source_version_id=version)["passages"][0]
+        endpoint = self.worker.services_config()["models"][0]["endpoint"]
+        args = {"kind": "reading_qa", "topic_id": self.topic, "session_id": session, "input": {
+            "question": "这些论文有什么和benchmark相关的信息？",
+            "sources": [{"paper_id": self.a["paper_id"], "source_version_id": version,
+                         "requested_scope": "full_text"}],
+        }}
+        answer = {"sentences": [{"text": "Alpha 提出了基准。", "evidence": [
+            {"id": passage["passage_id"], "quote": passage["text"]},
+            {"id": passage["passage_id"], "quote": "An invented excerpt."},
+        ]}]}
+        prepared = self.call("task.prepare", **args)
+        self.assertEqual(prepared["transfers"][0]["endpoint"], endpoint)
+        with patch("papertrace.build_opener") as opener:
+            response = opener.return_value.open.return_value.__enter__.return_value
+            response.read.return_value = json.dumps({
+                "choices": [{"message": {"content": json.dumps(answer)}}],
+            }).encode()
+            task_id = self.call("task.start", confirmation_id=prepared["confirmation_id"], **args)["task_id"]
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                snapshot = self.call("task.get", task_id=task_id)
+                if snapshot["status"] not in ("queued", "running"):
+                    break
+                time.sleep(.03)
+            request = opener.return_value.open.call_args.args[0]
+            self.assertEqual(request.full_url, endpoint + "/chat/completions")
+            sent = json.loads(json.loads(request.data)["messages"][1]["content"])
+            self.assertEqual([row["id"] for row in sent["passages"]], [passage["passage_id"]])
+        self.assertEqual(snapshot["status"], "completed")
+        anchors = snapshot["result"]["sentences"][0]["anchor_ids"]
+        self.assertEqual(len(anchors), 1)
+        self.assertEqual(self.call("evidence.open", topic_id=self.topic, anchor_id=anchors[0])["quote"],
+                         passage["text"])
 
     def test_source_gaps_exact_anchors_and_wiki_recheck(self):
         snapshot = self.run_task(self.versions)
