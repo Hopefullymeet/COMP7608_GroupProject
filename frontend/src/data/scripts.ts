@@ -36,7 +36,7 @@ export const ANGLES = {
 function initialDiscovery(runId: string, question: string): ScriptItem[] {
   const { fulltext, evidence, claims } = ANGLES
   return [
-    at(0, { type: 'run', run: { id: runId, task: 'Discovery', label: question, status: 'running', steps: [] } }),
+    at(0, { type: 'run', run: { id: runId, task: 'Discovery', label: question, status: 'running' } }),
     at(600, step(runId, 'plan', 'Split the question into three search angles', {
       detail: 'The question mixes three needs: QA over whole papers, answers that carry evidence, and nearby scientific tasks to compare against. Each angle gets its own query so a missing one stays visible.',
       tokens: 640, ms: 1800,
@@ -92,7 +92,7 @@ function refineDiscovery(runId: string, feedback: string[]): ScriptItem[] {
   const { fulltext, evidence, claims } = ANGLES
   const named = feedback.length ? feedback.join(' and ') : 'some candidates'
   return [
-    at(0, { type: 'run', run: { id: runId, task: 'Discovery', label: 'Refine with your feedback', status: 'running', steps: [] } }),
+    at(0, { type: 'run', run: { id: runId, task: 'Discovery', label: 'Refine with your feedback', status: 'running' } }),
     at(500, step(runId, 'plan', 'Use your feedback to adjust the search', {
       detail: `You marked ${named} as not a fit. I'll keep to datasets built on scientific text and retry the claim-verification angle with different wording. Papers you already added stay in the topic.`,
       tokens: 520, ms: 1400,
@@ -196,7 +196,7 @@ export const QUESTIONS: ScriptedQuestion[] = [
 
 export function questionScript(questionId: string, question: string, runId: string, messageId: string, sessionId: string): ScriptItem[] {
   const head: ScriptItem[] = [
-    at(0, { type: 'run', run: { id: runId, task: 'Question', label: question, status: 'running', steps: [] } }),
+    at(0, { type: 'run', run: { id: runId, task: 'Question', label: question, status: 'running' } }),
     at(0, { type: 'message', message: { id: messageId, sessionId, role: 'agent', segments: [], runId, done: false } }),
   ]
 
@@ -283,7 +283,7 @@ export function questionScript(questionId: string, question: string, runId: stri
 
 export function compareScript(runId: string): ScriptItem[] {
   return [
-    at(0, { type: 'run', run: { id: runId, task: 'Comparison', label: 'QASPER vs PubMedQA', status: 'running', steps: [] } }),
+    at(0, { type: 'run', run: { id: runId, task: 'Comparison', label: 'QASPER vs PubMedQA', status: 'running' } }),
     at(500, step(runId, 'plan', 'Pick dimensions for a dataset comparison', {
       detail: 'Task, input, scale, evidence, headline result and data split. A result only counts as comparable if metric and input match.', tokens: 560, ms: 1300,
     })),

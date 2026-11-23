@@ -90,7 +90,7 @@ function ExternalAccess() {
         <ul className="dialog-list">{paperIds?.map((id) => <li key={id}>{PAPERS[id].title}</li>)}</ul>
         <p className="fine">{tr('Access expires when the task ends. This demo sends nothing outside the app.')}</p>
         {grant ? <div className="set-controls">
-          <span role="status" className="tag accent">{grant.status === 'pending' ? tr('Waiting for simulated reply') : tr('Simulated reply in Agent trace')}</span>
+          <span role="status" className="tag accent">{grant.status === 'pending' ? tr('Waiting for simulated reply') : tr('Simulated reply received')}</span>
           <button className="ghost-btn sm" onClick={() => act.revokeExternal()}>{tr('Revoke access')}</button>
         </div> : <div className="set-controls"><button className="ghost-btn sm accent" onClick={() => act.grantExternal(run.id)}>{tr('Grant read-only access')}</button></div>}
       </>}
@@ -112,7 +112,7 @@ export function Settings() {
 
   return (
     <div className="page">
-      <PageHead icon="settings" title={tr('Models & services')} sub={tr('Configure the model, search sources and limits for new demo tasks.')} trace />
+      <PageHead icon="settings" title={tr('Models & services')} sub={tr('Configure the model, search sources and limits for new demo tasks.')} />
       <div className="page-body scroll settings">
         <section className="set-section">
           <div className="set-intro">

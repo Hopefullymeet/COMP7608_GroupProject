@@ -72,7 +72,7 @@ export interface SearchAngle {
 export type Decision = 'pending' | 'added' | 'held' | 'excluded'
 
 export interface Candidate {
-  pdf?: 'available' | 'saved' | 'unavailable' | 'missing'
+  accessUrl?: string
   change?:'new'|'updated'
   id: string
   paperId: string
@@ -105,10 +105,8 @@ export interface AgentRun {
   task: 'Discovery' | 'Question' | 'Comparison' | 'Citation check' | 'Citation suggestions' | 'Import' | 'Resume' | 'Literature synthesis' | 'Ask about selection' | 'Index figure descriptions'
   label: string
   status: RunStatus
-  steps: AgentStep[]
   summary?: string
   configuration?: RunConfiguration
-  estimate?: Usage
   usage?: Usage
   limit?: string
 }

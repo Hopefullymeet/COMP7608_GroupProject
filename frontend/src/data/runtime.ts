@@ -34,10 +34,6 @@ function eventUsage(item: ScriptItem, local: boolean): Usage {
   }
 }
 
-export function estimateRun(items: ScriptItem[], local: boolean) {
-  return items.reduce((total, item) => addUsage(total, eventUsage(item, local)), emptyUsage)
-}
-
 export function runTask(
   taskId: string, items: ScriptItem[], config: RunConfiguration,
   notify: (notification: TaskNotification, usage: Usage) => void,
@@ -53,7 +49,7 @@ export function runTask(
   function next() {
     const item = items[index]
     if (!item || cancelled) return
-    // Publish the run before checking limits so it has a trace even at zero budget.
+    // Publish the run before checking limits so zero-budget runs can be handled by the store.
     const projected = item.event.type === 'done' ? usage : addUsage(usage, eventUsage(item, config.local))
     const limit = budgetLimit(projected, config.budget)
     if (item.event.type !== 'run' && item.event.type !== 'done' && limit && !approved) {

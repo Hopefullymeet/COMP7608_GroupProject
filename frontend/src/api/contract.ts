@@ -16,7 +16,7 @@ export type LibraryItem = { paper_id: Id; title: string; alias?: string; topic_i
 export type Action = 'pending' | 'hold' | 'exclude' | 'add'
 export type Decision = Exclude<Action, 'add'> | 'added'
 export type Candidate = {
-  pdf_urls?: string[]; pdf_status?: 'saved' | 'unavailable'
+  pdf_urls?: string[]; pdf_status?: 'saved' | 'unavailable'; pdf_issue?: string
   candidate_id: Id; title: string; authors: string[]; doi?: string; year?: number
   provider?: string; source_id?: string
   venue?: { name: string; source: string }; metadata_url: string; abstract?: string
@@ -90,7 +90,7 @@ export type Methods = WikiMethods & ReaderMethods & SynthesisMethods & LibraryMe
   'discovery.steps': [ForTask, { steps: Step[] }]
   'candidate.decide': [Write & InSearch & { candidate_id: Id; decision: Action }, { candidate_id: Id } & (
     { decision: Exclude<Decision, 'added'> } |
-    (Version & { decision: 'added'; paper_id: Id; link_status: 'linked' | 'already_linked' })
+    (Version & { decision: 'added'; paper_id: Id; link_status: 'linked' | 'already_linked'; pdf_status?: 'saved' | 'unavailable' })
   )]
   'library.list': [{ topic_id?: Id }, { items: LibraryItem[] }]
   'source.read_abstract': [InTopic & { source_version_id: Id }, Abstract]

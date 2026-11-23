@@ -3,13 +3,14 @@
 import ipaddress
 import json
 import time
-from http.client import HTTPException
+from http.client import HTTPException, IncompleteRead
 from html.parser import HTMLParser
 import re
 import socket
+import ssl
 import xml.etree.ElementTree as ET
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, unquote, urlencode, urlsplit
+from urllib.parse import quote, unquote, urlencode, urljoin, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from literature import LiteratureError, MAX_PDF
@@ -21,6 +22,8 @@ ARXIV = "https://export.arxiv.org/api/query"
 PROVIDERS = {"OpenAlex": "https://api.openalex.org", "Crossref": CROSSREF, "arXiv": ARXIV}
 ATOM = {"a": "http://www.w3.org/2005/Atom", "x": "http://arxiv.org/schemas/atom"}
 ARXIV_ID = r"(?:\d{4}\.\d{4,5}|[a-z][a-z.\-]*/\d{7})(?:v[1-9]\d*)?"
+PROXY_FAKE_IP_RANGE = ipaddress.ip_network("198.18.0.0/15")
+PUBLIC_PDF_ARCHIVES = {"aclanthology.org", "arxiv.org", "export.arxiv.org", "pmc.ncbi.nlm.nih.gov"}
 
 
 class PublicServiceError(LiteratureError):
@@ -195,9 +198,13 @@ def normalize_venue(value):
 
 def open_pdf_urls(row):
     urls = []
+    pages = []
     for location in [row.get("best_oa_location"), row.get("primary_location"), *(row.get("locations") or [])]:
         if not isinstance(location, dict) or not location.get("is_oa"):
             continue
+        landing = location.get("landing_page_url") or ""
+        if landing.startswith("https://"):
+            pages.append(landing)
         url = location.get("pdf_url")
         if not url:
             landing = location.get("landing_page_url") or ""
@@ -205,7 +212,18 @@ def open_pdf_urls(row):
                 url = "https://arxiv.org/pdf/" + identifier
         if isinstance(url, str) and url.startswith("https://") and url not in urls:
             urls.append(url)
-    return urls[:3]
+    return list(dict.fromkeys([*urls, *pages]))
+
+
+def publicly_resolved(host):
+    if not re.fullmatch(r"(?=.{1,253}$)(?:[a-z0-9-]+\.)+[a-z]{2,63}", host):
+        return False
+    try:
+        answer = json_response("https://dns.google/resolve?" + urlencode({"name": host, "type": "A"}))
+        addresses = [ipaddress.ip_address(rr["data"]) for rr in answer.get("Answer", []) if rr.get("type") == 1]
+        return bool(addresses) and all(ip.is_global for ip in addresses)
+    except (PublicServiceError, ValueError, KeyError):
+        return False
 
 
 def public_pdf_url(url):
@@ -213,36 +231,123 @@ def public_pdf_url(url):
     if parts.scheme != "https" or not parts.hostname or parts.username or parts.password or parts.port not in (None, 443):
         raise ValueError("Invalid PDF address")
     addresses = socket.getaddrinfo(parts.hostname, 443, type=socket.SOCK_STREAM)
-    if not addresses or any(not ipaddress.ip_address(item[4][0]).is_global for item in addresses):
+    if not addresses:
+        raise ValueError("Invalid PDF host")
+    for item in addresses:
+        address = ipaddress.ip_address(item[4][0])
+        # Some desktop DNS proxies map public names into the benchmarking range.
+        if address.is_global or (address in PROXY_FAKE_IP_RANGE and
+                                 (parts.hostname in PUBLIC_PDF_ARCHIVES or publicly_resolved(parts.hostname))):
+            continue
         raise ValueError("Invalid PDF host")
     return url
 
 
 class PdfRedirect(HTTPRedirectHandler):
+    last_url = None
+
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return super().redirect_request(req, fp, code, msg, headers, public_pdf_url(newurl))
+        self.last_url = public_pdf_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, self.last_url)
+
+
+class PaperLinks(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.pdf = []
+        self.anchors = []
+        self.href = ""
+        self.label = []
+
+    def handle_starttag(self, tag, attrs):
+        fields = dict(attrs)
+        if tag == "a":
+            self.href, self.label = fields.get("href") or "", []
+        if tag == "meta" and (fields.get("name") or "").lower() == "citation_pdf_url":
+            self.pdf.append(fields.get("content") or "")
+        if tag in ("link", "a") and fields.get("type") == "application/pdf":
+            self.pdf.append(fields.get("href") or "")
+
+    def handle_data(self, data):
+        if self.href:
+            self.label.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "a" and self.href:
+            self.anchors.append((self.href, "".join(self.label)))
+            self.href = ""
+
+
+def archive_copies(candidate):
+    authors = candidate.get("authors") or []
+    for author in dict.fromkeys(authors[:2]):
+        slug = re.sub(r"[^a-z0-9]+", "-", author.lower()).strip("-")
+        if not slug:
+            continue
+        try:
+            links = PaperLinks()
+            links.feed(fetch(f"https://aclanthology.org/people/{slug}/").decode("utf-8", "replace"))
+        except PublicServiceError:
+            continue
+        for href, label in links.anchors:
+            if (re.fullmatch(r"/[A-Za-z0-9.-]+/", href)
+                    and normalize_venue(label) == normalize_venue(candidate["title"])):
+                yield "https://aclanthology.org" + href.rstrip("/") + ".pdf"
+                break
 
 
 def download_open_pdf(urls):
-    deadline = time.monotonic() + 28
-    for url in urls:
+    deadline = time.monotonic() + 85
+    pending = list(urls)
+    seen = set()
+    retries = {}
+    while pending and time.monotonic() < deadline:
+        url = pending.pop(0)
+        if url in seen:
+            continue
+        seen.add(url)
+        redirects = PdfRedirect()
         try:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
             request = Request(public_pdf_url(url), headers={"User-Agent": "PaperTrace/0.4", "Accept": "application/pdf"})
-            with build_opener(PdfRedirect()).open(request, timeout=min(8, remaining)) as response:
+            with build_opener(redirects).open(request, timeout=min(18, remaining)) as response:
+                length = getattr(response, "headers", {}).get("Content-Length")
+                expected = int(length) if length and length.isdecimal() else None
+                if expected is not None and expected > MAX_PDF:
+                    continue
                 body = bytearray()
                 while len(body) <= MAX_PDF and time.monotonic() < deadline:
                     chunk = response.read1(65536)
                     if not chunk:
+                        if expected is not None and len(body) < expected:
+                            raise IncompleteRead(b"", expected - len(body))
                         if body.startswith(b"%PDF-"):
                             return bytes(body)
                         break
                     body.extend(chunk)
                     if len(body) >= 5 and not body.startswith(b"%PDF-"):
+                        if b"<" in body[:512] and len(body) <= 512_000:
+                            body.extend(response.read(512_000 - len(body)))
+                            page = PaperLinks()
+                            page.feed(body.decode("utf-8", "replace"))
+                            base = getattr(response, "url", url)
+                            pending[:0] = [urljoin(base, href) for href in page.pdf if href]
                         break
-        except (OSError, HTTPException, ValueError):
+        except (OSError, HTTPException) as error:
+            if isinstance(error, HTTPError) and error.code not in (408, 502, 503, 504):
+                continue
+            if isinstance(getattr(error, "reason", error), ssl.SSLCertVerificationError):
+                continue
+            attempt = retries.get(url, 0) + 1
+            target = redirects.last_url or url
+            if attempt <= 2 and time.monotonic() + attempt < deadline:
+                retries[target] = max(attempt, retries.get(target, 0))
+                seen.discard(target)
+                pending.append(target)
+                time.sleep(attempt)
+        except ValueError:
             continue
     return None
 

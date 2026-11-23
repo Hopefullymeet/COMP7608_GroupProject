@@ -12,7 +12,7 @@ export function pickPdfs(multiple = true) {
 
 export async function pdfInput(file: File | string): Promise<{ path: string } | { name: string; content: string }> {
   if (typeof file === 'string') return { path: file }
-  if (file.size > 16 * 1024 * 1024) throw new Error('Choose a readable PDF up to 16 MB.')
+  if (file.size > 50 * 1024 * 1024) throw new Error('Choose a readable PDF up to 50 MB.')
   const content = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result).split(',')[1])

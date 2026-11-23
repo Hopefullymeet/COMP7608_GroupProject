@@ -6,6 +6,8 @@ from contextlib import nullcontext
 import datetime
 from http.client import HTTPException
 import json
+import logging
+from logging.handlers import RotatingFileHandler
 import math
 import os
 from pathlib import Path
@@ -27,11 +29,11 @@ from citations import CitationWorkspace, init_citations
 from reader import Reader
 from wiki import CAPTURE_TASKS, CAPTURE_WRITES, TopicWiki
 from bibliography import (OPENALEX, PROVIDERS, PublicServiceError, arxiv_id, bibliography_records, doi, export_bibliography, identity_keys, imported_metadata,
-                          download_open_pdf, lookup_target, metadata_from_provider, normalize_venue, openalex_search, selected_metadata)
+                          lookup_target, metadata_from_provider, normalize_venue, openalex_search, selected_metadata)
 from venue_ranks import init_venue_ranks, issns, lookup_rankings
 
 
-BACKGROUND_RPC_METHODS = ("services.test", "library.preview_identifier", "library.preview_pdf", "candidate.decide")
+BACKGROUND_RPC_METHODS = ("services.test", "library.preview_identifier", "library.preview_pdf")
 
 
 def encode(value):
@@ -155,7 +157,16 @@ class Worker:
 
     def __init__(self, directory, send):
         directory.mkdir(parents=True, exist_ok=True)
+        self.log_path = directory / "worker-errors.log"
+        self.error_log = logging.Logger("papertrace.worker")
+        handler = RotatingFileHandler(self.log_path, maxBytes=512_000, backupCount=1,
+                                      encoding="utf-8", delay=True)
+        handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+        self.error_log.addHandler(handler)
         self.db = sqlite3.connect(directory / "workspace.sqlite3", check_same_thread=False)
+        # Desktop launches can have an unusable Windows temp directory. The database
+        # and WAL stay on disk, while indexing does not depend on a temp file.
+        self.db.execute("PRAGMA temp_store=MEMORY")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.executescript("""
             CREATE TABLE IF NOT EXISTS records (
@@ -266,8 +277,6 @@ class Worker:
                     raise invalid("params must be an object.")
                 if method == "services.test":
                     response["result"] = self.test_service(params)
-                elif method == "candidate.decide":
-                    response["result"] = self.decide_operation(params)
                 elif method == "library.preview_identifier":
                     response["result"] = self.preview_identifier(params)
                 elif method == "library.preview_pdf":
@@ -285,11 +294,17 @@ class Worker:
                 response["error"] = {"code": failure.code, "message": str(failure), "data": failure.issue}
             except Exception as failure:
                 after.clear()
-                print(f"PaperTrace worker: {type(failure).__name__}", file=sys.stderr)
-                response["error"] = {"code": -32603, "message": "The local worker failed."}
+                reference = self.record_error(method)
+                response["error"] = {"code": -32603, "message":
+                    f"{method}: {type(failure).__name__} [{reference}]. {self.log_path}"}
             self.send(response)
             for action in after:
                 action()
+
+    def record_error(self, stage):
+        reference = identifier()[:12]
+        self.error_log.exception("%s [%s]", stage, reference)
+        return reference
 
     def saved_operation(self, method, operation, fingerprint):
         row = self.db.execute(
@@ -1431,33 +1446,11 @@ class Worker:
         after.append(lambda: self.jobs.put(tid))
         return {key: task[key] for key in ("task_id", "run_id", "status", "scope_id") if key in task}
 
-    def decide_operation(self, params):
-        operation = required(params, "operation_id")
-        fingerprint = encode(params)
-        method = "candidate.decide"
-        with self.lock:
-            if (saved := self.saved_operation(method, operation, fingerprint)) is not None:
-                return saved
-            search = self.search(params)
-            candidate = next((c for c in search["candidates"] if c["candidate_id"] == params.get("candidate_id")), {})
-            urls = candidate.get("pdf_urls", []) if params.get("decision") == "add" else []
-            paper = self.find_bibliographic_paper(candidate) if urls else None
-            if paper and self.has_pdf(paper):
-                urls = []
-        content = download_open_pdf(urls) if urls else None
-        with self.lock, self.db:
-            if (saved := self.saved_operation(method, operation, fingerprint)) is not None:
-                return saved
-            result = self.decide(params, content)
-            self.topic_wiki.capture_safely(params["topic_id"])
-            self.save_operation(method, operation, fingerprint, result)
-            return result
-
     def has_pdf(self, paper):
         return any(self.db.execute("SELECT 1 FROM pdf_files WHERE version_id = ?", (v["source_version_id"],)).fetchone()
                    for v in paper["source_versions"])
 
-    def decide(self, params, content=None):
+    def decide(self, params):
         saved = self.search(params)
         cid, action = required(params, "candidate_id"), required(params, "decision")
         candidate = next((c for c in saved["candidates"] if c["candidate_id"] == cid), None)
@@ -1470,18 +1463,6 @@ class Worker:
         result = {"candidate_id": cid, "decision": action}
         if action == "add":
             paper, linked = self.add_bibliographic_paper(saved["topic_id"], candidate)
-            if candidate.get("pdf_urls"):
-                if content and not self.has_pdf(paper):
-                    self.db.execute("SAVEPOINT candidate_pdf")
-                    try:
-                        self.research.import_pdf(saved["topic_id"], {"paper_id": paper["paper_id"],
-                            "name": paper["title"] + ".pdf", "content": base64.b64encode(content).decode("ascii")})
-                    except LiteratureError:
-                        self.db.execute("ROLLBACK TO candidate_pdf")
-                    finally:
-                        self.db.execute("RELEASE candidate_pdf")
-                    paper = self.get("paper", paper["paper_id"])
-                candidate["pdf_status"] = "saved" if self.has_pdf(paper) else "unavailable"
             result.update(decision="added", paper_id=paper["paper_id"], **paper["source_versions"][0],
                           link_status="already_linked" if linked else "linked")
         candidate["decision"] = result["decision"]
@@ -1959,6 +1940,8 @@ class Worker:
         self.runner.join()
         with self.lock:
             self.db.close()
+        for handler in self.error_log.handlers:
+            handler.close()
 
 
 def main():

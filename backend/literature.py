@@ -12,7 +12,7 @@ import subprocess
 import sys
 
 
-MAX_PDF = 16 * 1024 * 1024
+MAX_PDF = 50 * 1024 * 1024
 MAX_VERSIONS = 12
 RELATION_KINDS = {"background", "uses_method", "uses_data", "uses_benchmark", "extends",
                   "compares", "complements", "agrees", "conflicts"}
@@ -77,7 +77,7 @@ def pdf_content(params):
         if not content.startswith(b"%PDF-") or len(content) > MAX_PDF:
             raise ValueError
     except (KeyError, ValueError, TypeError, OSError, binascii.Error):
-        raise LiteratureError("INVALID_PDF", "Choose a readable PDF up to 16 MB.") from None
+        raise LiteratureError("INVALID_PDF", "Choose a readable PDF up to 50 MB.") from None
     return filename, content
 
 

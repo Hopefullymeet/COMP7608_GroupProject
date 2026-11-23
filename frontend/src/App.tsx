@@ -2,7 +2,6 @@ import { useLanguage } from './i18n'
 import type { ReactNode } from 'react'
 import { useStore } from './data/store'
 import { Sidebar } from './components/Sidebar'
-import { TraceDrawer } from './components/TraceDrawer'
 import { EvidencePopover } from './components/EvidencePopover'
 import { Dialog } from './components/PageHead'
 import { Home } from './views/Home'
@@ -32,7 +31,6 @@ export function App({ windowControls, pages, comparison, liveResearch }: { windo
           : r.view === 'check' ? <Check />
           : <Settings />)}
       </main>
-      <TraceDrawer />
       {!(r.view === 'topic' && r.tab === 'read') && <EvidencePopover />}
       {waiting ? <Dialog key={waiting.id} title={tr('Task budget reached')} onClose={() => act.resolveBudget(waiting.id, false)}>
         <p className="dialog-text">{tr('{0} is paused. The next step would exceed the limit for {1}.', tr(waiting.task), waiting.limit?.split(', ').map((limit) => tr(limit)).join(', '))}</p>

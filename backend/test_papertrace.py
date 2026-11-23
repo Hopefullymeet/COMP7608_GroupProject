@@ -20,7 +20,7 @@ from uuid import uuid4
 from papertrace import Worker
 from credentials import WindowsStore
 from dsh import Dsh, DshFailure, ENDPOINT, read_json_answer
-from bibliography import PublicServiceError, bibliography_records, download_open_pdf
+from bibliography import PublicServiceError, bibliography_records, download_open_pdf, public_pdf_url
 from literature import LiteratureError
 from test_literature import sample_pdf
 
@@ -735,7 +735,7 @@ class ContractTest(unittest.TestCase):
         self.restart()
         self.assertEqual(self.client.result("task.get", task_id=task)["status"], "cancelled")
         self.assertEqual(self.client.result("task.get", task_id=stranded)["issue"]["reason"], "PROCESS_INTERRUPTED")
-        with sqlite3.connect(self.dir / "workspace.sqlite3") as db:
+        with closing(sqlite3.connect(self.dir / "workspace.sqlite3")) as db:
             self.assertEqual(db.execute("SELECT count(*) FROM records WHERE kind = 'search'").fetchone()[0], 0)
 
 
@@ -1077,6 +1077,20 @@ ER  -"""
             self.assertEqual(task["result"]["candidates"], [])
             self.assertEqual(task["status"], "completed")
 
+    def test_pdf_archive_with_desktop_proxy_dns(self):
+        with patch("bibliography.socket.getaddrinfo") as resolve:
+            resolve.return_value = [(2, 1, 6, "", ("198.18.0.186", 443))]
+            for host in ("arxiv.org", "aclanthology.org"):
+                url = f"https://{host}/paper.pdf"
+                self.assertEqual(public_pdf_url(url), url)
+            with patch("bibliography.json_response", return_value={"Answer": [{"type": 1, "data": "93.184.216.34"}]}):
+                self.assertEqual(public_pdf_url("https://example.org/file.pdf"), "https://example.org/file.pdf")
+            with patch("bibliography.json_response", return_value={}), self.assertRaises(ValueError):
+                public_pdf_url("https://example.org/file.pdf")
+            resolve.return_value = [(2, 1, 6, "", ("127.0.0.1", 443))]
+            with self.assertRaises(ValueError):
+                public_pdf_url("https://arxiv.org/file.pdf")
+
     def test_pdf_download_skips_html_and_keeps_original_bytes(self):
         pdf = sample_pdf("A result from page one.")
         address = [(2, 1, 6, "", ("93.184.216.34", 443))]
@@ -1084,8 +1098,22 @@ ER  -"""
             opener.return_value.open.side_effect = [BytesIO(b"<html>Publisher login</html>"), BytesIO(pdf)]
             self.assertEqual(download_open_pdf(["https://example.org/publisher", "https://example.org/archive"]), pdf)
             self.assertEqual(opener.return_value.open.call_count, 2)
+            opener.return_value.open.side_effect = [
+                BytesIO(b'<meta name="citation_pdf_url" content="/full.pdf">'), BytesIO(pdf)]
+            self.assertEqual(download_open_pdf(["https://example.org/article"]), pdf)
+            self.assertEqual(opener.return_value.open.call_args.args[0].full_url, "https://example.org/full.pdf")
 
-    def test_discovery_download_retries_and_opens_original_pdf(self):
+    def test_pdf_download_retries_disconnect_and_discards_partial_body(self):
+        pdf = sample_pdf("Complete file after transient failures.")
+        partial = BytesIO(pdf[:20])
+        partial.headers = {"Content-Length": str(len(pdf))}
+        with patch("bibliography.public_pdf_url", side_effect=lambda url: url), \
+             patch("bibliography.build_opener") as opener, patch("bibliography.time.sleep"):
+            opener.return_value.open.side_effect = [ConnectionResetError(), partial, BytesIO(pdf)]
+            self.assertEqual(download_open_pdf(["https://example.org/full.pdf"]), pdf)
+            self.assertEqual(opener.return_value.open.call_count, 3)
+
+    def test_discovery_add_keeps_access_link_without_downloading(self):
         url = "https://example.org/paper.pdf"
         record = {"id": "https://openalex.org/W1234", "display_name": "HRI",
                   "abstract_inverted_index": {"Abstract": [0]},
@@ -1095,17 +1123,16 @@ ER  -"""
         candidate = result["candidates"][0]
         self.assertEqual(candidate["pdf_urls"], [url])
         params = {**self.topic, "search_id": result["search_id"], "candidate_id": candidate["candidate_id"], "decision": "add"}
-        pdf = sample_pdf("Evidence from the complete paper.")
-        with patch("papertrace.download_open_pdf", side_effect=[None, pdf]) as download:
-            abstract = self.call("candidate.decide", **params)
-            self.assertEqual(abstract["available_scope"], "abstract")
-            saved = self.call("candidate.decide", **params)
-            self.assertEqual(saved["available_scope"], "full_text")
-            self.assertEqual(saved["paper_id"], abstract["paper_id"])
-            self.assertEqual(self.call("candidate.decide", **params)["source_version_id"], saved["source_version_id"])
-            self.assertEqual(download.call_count, 2)
-        document = self.call("reader.pdf", **self.topic, source_version_id=saved["source_version_id"])
-        self.assertEqual(base64.b64decode(document["content"]), pdf)
+        with patch("bibliography.build_opener") as opener:
+            added = self.call("candidate.decide", **params)
+            repeated = self.call("candidate.decide", **params)
+            opener.assert_not_called()
+        self.assertEqual(added["available_scope"], "abstract")
+        self.assertEqual(repeated["source_version_id"], added["source_version_id"])
+        restored = self.call("discovery.get", **self.topic, search_id=result["search_id"])["candidates"][0]
+        self.assertEqual(restored["pdf_urls"], [url])
+        self.assertEqual(restored["decision"], "added")
+        self.assertNotIn("pdf_status", restored)
 
     def test_discovery_failure_and_cancellation_do_not_save_candidates(self):
         with patch("bibliography.fetch", side_effect=PublicServiceError("SERVICE_RATE_LIMITED", "Rate limited.")):

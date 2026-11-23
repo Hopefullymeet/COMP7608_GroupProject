@@ -469,7 +469,6 @@ export function ServicesPage() {
   return (
     <div className="page">
       <PageHead
-        trace
         title={tr('Models & services')}
         icon="settings"
         sub={tr('Model destinations, tools and workspace access')}

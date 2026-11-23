@@ -70,7 +70,7 @@ pnpm --dir frontend test
 
 ## 用一组论文搭提纲
 
-安装 Poppler，确保 `pdftotext` 与 `pdftoppm` 可调用。启动桌面 RPC 模式并配置文本模型后，创建主题，进入 **Synthesize**，拖入 PDF 或点 **Add PDFs**。可选择 2–12 篇论文；单个 PDF 上限 16 MB、150 页。当前从 PDF 提取已有文字，扫描版需要先做 OCR。
+安装 Poppler，确保 `pdftotext` 与 `pdftoppm` 可调用。启动桌面 RPC 模式并配置文本模型后，创建主题，进入 **Synthesize**，拖入 PDF 或点 **Add PDFs**。可选择 2–12 篇论文；单个 PDF 上限 50 MB、150 页。当前从 PDF 提取已有文字，扫描版需要先做 OCR。
 
 如果 `pdftotext` 缺失或运行失败，文字提取会回退到 pypdf。可在运行 worker 的 Python 环境中执行 `python -m pip install pypdf`。PDF 页面的后端图片渲染继续使用 `pdftoppm`。
 

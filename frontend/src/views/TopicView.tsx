@@ -1,8 +1,8 @@
 import { useLanguage } from '../i18n'
 import type { ReactNode } from 'react'
-import { useStore, anyRunning, papersOfTopic, type Tab } from '../data/store'
+import { useStore, papersOfTopic, type Tab } from '../data/store'
 import { DEMO_TOPIC, PAPERS } from '../data/fixtures'
-import { Icon, Spinner } from '../components/Icon'
+import { Icon } from '../components/Icon'
 import { Discover } from './Discover'
 import { Read } from './Read'
 import { Compare } from './Compare'
@@ -19,7 +19,6 @@ export function TopicView({ topicId, tab, windowControls, comparison, liveResear
   const { state, act } = useStore()
   const topic = state.topics.find((t) => t.id === topicId)
   if (!topic) return null
-  const running = anyRunning(state)
   const session = state.sessions.find((s) => s.id === state.activeSessionId && s.topicId === topicId)
   const request = state.messages.find((m) => m.sessionId === session?.id && m.role === 'user')
   const papers = papersOfTopic(state, topicId)
@@ -35,52 +34,26 @@ export function TopicView({ topicId, tab, windowControls, comparison, liveResear
           <h1 data-tauri-drag-region={dragRegion} title={windowControls ? topic.title : undefined}>{topic.title}</h1>
           <small data-tauri-drag-region={dragRegion}>{topic.goal}</small>
         </div>
-        {topic.scripted && (liveResearch ? (
-          <details className="pt-topic-actions" onKeyDown={(event) => {
-            if (event.key !== 'Escape' || !event.currentTarget.open) return
-            event.stopPropagation()
-            event.currentTarget.open = false
-            event.currentTarget.querySelector('summary')?.focus()
-          }}>
-            <summary className="ghost-btn">
-              {tr(tab === 'read' ? 'Research tools' : tabs.find((item) => item.id === tab)?.label ?? 'Research tools')}
-              <Icon name="chevronDown" size={14} />
-            </summary>
-            <nav aria-label={tr('Research tools')} className="pt-topic-menu">
-              {tabs.map((item) => <button key={item.id} aria-current={tab === item.id ? 'page' : undefined}
-                onClick={(event) => {
-                  event.currentTarget.closest('details')!.open = false
-                  act.openTopic(topicId, item.id)
-                }}><Icon name={item.icon} size={15} /> {tr(item.label)}</button>)}
-              <button onClick={(event) => {
-                event.currentTarget.closest('details')!.open = false
-                act.showTrace(!state.trace.open)
-              }}><Icon name="trace" size={15} /> {tr('Agent trace')}</button>
-            </nav>
-          </details>
-        ) : (
-          <nav className="tabs" role="tablist">
+        {topic.scripted && (
+          <nav className={liveResearch ? 'tabs pt-topic-actions' : 'tabs'}
+            role={liveResearch ? undefined : 'tablist'} aria-label={tr('Research tools')}>
             {tabs.map((item) => (
-              <button key={item.id} role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'on' : ''}
+              <button key={item.id} role={liveResearch ? undefined : 'tab'}
+                aria-current={liveResearch && tab === item.id ? 'page' : undefined}
+                aria-selected={!liveResearch ? tab === item.id : undefined}
+                className={tab === item.id ? 'on' : ''}
                 onClick={() => act.openTopic(topicId, item.id)}>
                 <Icon name={item.icon} size={15} /> {tr(item.label)}
               </button>
             ))}
           </nav>
-        ))}
-        {(!liveResearch || running || state.trace.open) && <div className="head-meta">
-          {!liveResearch && topic.scripted && (
-            <>
-              <span title={tr('Papers in this topic')}><Icon name="file" size={14} /> {papers.length}</span>
-              {!state.mainline && <>
-                <span title={tr('Saved notes')}><Icon name="note" size={14} /> {state.noted.length}</span>
-                <span title={tr('Citations picked')}><Icon name="quote" size={14} /> {state.cited.length}</span>
-              </>}
-            </>
-          )}
-          <button className={`trace-btn ${state.trace.open ? 'on' : ''}`} onClick={() => act.showTrace(!state.trace.open)}>
-            {running ? <Spinner /> : <Icon name="trace" size={15} />}{' '}{tr('Agent trace')}
-          </button>
+        )}
+        {!liveResearch && topic.scripted && <div className="head-meta">
+          <span title={tr('Papers in this topic')}><Icon name="file" size={14} /> {papers.length}</span>
+          {!state.mainline && <>
+            <span title={tr('Saved notes')}><Icon name="note" size={14} /> {state.noted.length}</span>
+            <span title={tr('Citations picked')}><Icon name="quote" size={14} /> {state.cited.length}</span>
+          </>}
         </div>}
         {windowControls}
       </header>

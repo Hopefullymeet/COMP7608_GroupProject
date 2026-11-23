@@ -1,20 +1,34 @@
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { useLanguage } from '../i18n'
 import { useEffect, useId, useRef, useState } from 'react'
 import { currentTopic, paperFor, papersOfTopic, sourceStatus, useStore } from '../data/store'
 import { enabledSources, SOURCE_NAMES } from '../data/serviceSettings'
 import { Icon, Spinner } from '../components/Icon'
-import type { AngleStatus, Candidate, Decision } from '../data/types'
+import type { Candidate, Decision } from '../data/types'
 
-const ANGLE_LABEL: Record<AngleStatus, string> = { queued: 'Queued', searching: 'Searching', covered: 'Covered', gap: 'Gap' }
 const DECISION_LABEL: Record<Exclude<Decision, 'pending'>, string> = { added: 'Added to topic', held: 'On hold', excluded: 'Not relevant' }
 
 function CandidateCard({ c, disabled }: { c: Candidate; disabled?: boolean }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
   const p = paperFor(state, c.paperId)
+  const [openingBrowser, setOpeningBrowser] = useState(false)
+  const accessUrl = c.accessUrl ?? (p.doi ? `https://doi.org/${p.doi}` : p.externalId?.startsWith('arXiv:') ? `https://arxiv.org/abs/${p.externalId.slice(6)}` : undefined)
   const availability = sourceStatus(state, c.paperId)
   const latest = state.runOrder.map((id) => state.runs[id]).find((run) => run.task === 'Discovery')
   const previousSource = latest?.configuration && !latest.configuration.sources.some((id) => SOURCE_NAMES[id] === c.source)
+
+  async function openInBrowser(url: string) {
+    setOpeningBrowser(true)
+    try {
+      await invoke('open_paper_url', { url })
+    } catch (error) {
+      console.error('Could not open the browser.', error)
+    } finally {
+      setOpeningBrowser(false)
+    }
+  }
+
   return (
     <article className={`cand ${c.decision}`} data-testid={`cand-${c.paperId}`}>
       <div className="cand-main">
@@ -23,7 +37,6 @@ function CandidateCard({ c, disabled }: { c: Candidate; disabled?: boolean }) {
           {!state.mainline && c.round > 1 && <span className="tag accent">{tr('New in round')}{' '}{c.round}</span>}
           <span className="tag">{tr(c.readLevel)}</span>
           <span className="tag quiet">{tr('via')}{' '}{c.source}</span>
-          {c.pdf && <span className="tag">{tr(({ available: 'Open PDF available', saved: 'PDF saved', unavailable: 'PDF download failed', missing: 'No open PDF listed' })[c.pdf])}</span>}
           {previousSource && <span className="tag quiet">{tr('Earlier search')}</span>}
         </div>
         <h3>{p.title}</h3>
@@ -36,15 +49,11 @@ function CandidateCard({ c, disabled }: { c: Candidate; disabled?: boolean }) {
         {availability === 'deleted' ? (
           <span className="decided">{tr('Deleted from library')}</span>
         ) : c.note && c.decision === 'added' ? (
-          <>
-            <span className="decided added"><Icon name="check" size={14} /> {tr(c.note)}</span>
-            {(c.pdf === 'available' || c.pdf === 'unavailable') &&
-              <button className="ghost-btn sm" disabled={disabled} onClick={() => act.decide(c.id, 'added')}>{tr('Download PDF')}</button>}
-          </>
+          <span className="decided added"><Icon name="check" size={14} /> {tr(c.note)}</span>
         ) : c.decision === 'pending' ? (
           <>
             <button className="ghost-btn sm accent" disabled={disabled} onClick={() => act.decide(c.id, 'added')}>
-              <Icon name={availability === 'in trash' ? 'undo' : 'plus'} size={14} /> {availability === 'in trash' ? tr('Restore and add to topic') : c.pdf === 'available' ? tr('Add with PDF') : tr('Add to topic')}
+              <Icon name={availability === 'in trash' ? 'undo' : 'plus'} size={14} /> {availability === 'in trash' ? tr('Restore and add to topic') : tr('Add to topic')}
             </button>
             <button className="ghost-btn sm" disabled={disabled} onClick={() => act.decide(c.id, 'held')}><Icon name="clock" size={14} />{' '}{tr('Hold')}</button>
             <button className="ghost-btn sm" disabled={disabled} onClick={() => act.decide(c.id, 'excluded')}><Icon name="x" size={14} />{' '}{tr('Not relevant')}</button>
@@ -57,6 +66,12 @@ function CandidateCard({ c, disabled }: { c: Candidate; disabled?: boolean }) {
             <button className="link-btn" disabled={disabled} onClick={() => act.decide(c.id, 'pending')}><Icon name="undo" size={13} />{' '}{tr('Undo')}</button>
           </>
         )}
+        {accessUrl && (isTauri()
+          ? <button type="button" className="ghost-btn sm" disabled={openingBrowser}
+              onClick={() => void openInBrowser(accessUrl)}>{tr('Access to Download PDF')}</button>
+          : <a className="ghost-btn sm" href={accessUrl} target="_blank" rel="noopener noreferrer">
+              {tr('Access to Download PDF')}
+            </a>)}
       </div>
     </article>
   )
@@ -148,9 +163,7 @@ export function Discover() {
     if (!current || (!current.pdfAvailable && paper.pdfAvailable)) topicPapers.set(key, paper)
   }
   const d = state.discovery
-  const discoveryRuns = state.runOrder.map((id) => state.runs[id]).filter((r) => r.task === 'Discovery')
-  const latest = discoveryRuns[0]
-  const lastStep = latest?.steps[latest.steps.length - 1]
+  const latest = state.runOrder.map((id) => state.runs[id]).find((run) => run.task === 'Discovery')
   const feedback = state.candidates.filter((c) => c.decision === 'excluded').length
   const sourceChanged = !state.mainline && latest?.configuration?.sources.join(',') !== enabledSources(state.settings).join(',')
   const canRefine = d.status === 'done' && (state.mainline || d.round < 2) && !d.interrupted && !sourceChanged
@@ -163,11 +176,10 @@ export function Discover() {
           <p className="question">{d.question}</p>
           <div className="status-line">
             {d.status === 'idle' && <span>{tr('The agent has not searched yet.')}</span>}
-            {d.status === 'running' && <><Spinner /> <span>{tr(lastStep?.title ?? 'Planning…')}</span></>}
+            {d.status === 'running' && <><Spinner /> <span>{tr('Searching for papers…')}</span></>}
             {d.status === 'done' && <><Icon name="check" size={15} /> <span>{state.mainline
               ? tr('{0} visible candidates', state.candidates.length)
               : d.summary}</span></>}
-            {latest && <button className="link-btn" onClick={() => act.showTrace(true, latest.id)}>{latest.steps.length}{' '}{tr('steps · view trace')}</button>}
           </div>
         </div>
         <div className="disc-actions">
@@ -189,52 +201,18 @@ export function Discover() {
 
       <div className="disc-grid">
         <section className="cand-list" aria-label={tr('Candidates')}>
-          {state.angles.length === 0 && d.status !== 'running' && (
+          {state.candidates.length === 0 && d.status !== 'running' && (
             <div className="placeholder">
               <Icon name="compass" size={22} />
-              <p>{tr('Candidates will appear here, grouped by search angle, each with why it was suggested and how much of it was read.')}</p>
+              <p>{tr(d.status === 'idle' ? 'Candidate papers will appear here.' : 'No candidate papers found.')}</p>
             </div>
           )}
-          {state.angles.map((a) => {
-            const items = state.candidates.filter((c) => c.angleId === a.id)
-            if (state.mainline && a.status === 'covered' && a.id !== 'results' && items.length === 0) return null
-            return (
-              <div key={a.id} className="angle-group">
-                <div className="angle-head">
-                  <h2>{tr(a.label)}</h2>
-                  {(!state.mainline || a.status !== 'covered') && <span className={`status ${a.status}`}>{a.status === 'searching' && <Spinner />}{tr(ANGLE_LABEL[a.status])}</span>}
-                </div>
-                {items.map((c) => (
-                  <CandidateCard key={c.id} c={c} disabled={state.mainline && (state.mainline.searchBusy || d.status === 'running')} />
-                ))}
-                {a.status === 'gap' && (
-                  <div className="gap-note"><Icon name="alert" size={15} /> {tr(a.gapReason ?? 'No candidate passed screening for this angle.')}</div>
-                )}
-                {(a.status === 'queued' || (state.mainline && a.status === 'searching')) && <div className="skeleton" />}
-              </div>
-            )
-          })}
+          {state.candidates.map((c) => (
+            <CandidateCard key={c.id} c={c} disabled={state.mainline && (state.mainline.searchBusy || d.status === 'running')} />
+          ))}
         </section>
 
         <aside className="disc-side">
-          <div className="card">
-            <h3>{tr('Search plan')}</h3>
-            {state.angles.length === 0 ? <p className="muted-text">{tr('Waiting for the agent to split the question.')}</p> : (
-              <ol className="plan">
-                {state.angles.map((a) => (
-                  <li key={a.id} className={a.status}>
-                    <span className="plan-dot" />
-                    <div>
-                      <strong>{tr(a.label)}</strong>
-                      <code>{a.query}</code>
-                      <small>{a.status === 'covered' || a.status === 'gap' ? tr('{0} kept', a.found) : tr(ANGLE_LABEL[a.status])}</small>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </div>
-
           {d.coverage && (
             <div className="card">
               <h3>{tr('Coverage')}</h3>

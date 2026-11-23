@@ -1,6 +1,7 @@
 """Regression tests for evidence gating and persistent Wiki revision handling."""
 
 import base64
+from contextlib import closing
 import json
 from pathlib import Path
 import shutil
@@ -47,7 +48,7 @@ class ScriptedSynthesis:
         self.leads = wiki
         seen = {}
         refs = []
-        with sqlite3.connect(self.database) as reader:
+        with closing(sqlite3.connect(self.database)) as reader:
             for source in sources:
                 version = source["source_version_id"]
                 pid, page, body = reader.execute(
@@ -308,6 +309,7 @@ class LiteratureTest(unittest.TestCase):
         self.assertEqual(prepared["transfers"][0]["endpoint"], endpoint)
         with patch("papertrace.build_opener") as opener:
             response = opener.return_value.open.return_value.__enter__.return_value
+            response.headers = {"Content-Type": "application/json"}
             response.read.return_value = json.dumps({
                 "choices": [{"message": {"content": json.dumps(answer)}}],
             }).encode()

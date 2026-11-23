@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import threading
 import unittest
+from unittest.mock import patch
 
 from dsh import Dsh, DshFailure
 import test_literature
@@ -20,6 +21,18 @@ class ScriptedProvider(BaseHTTPRequestHandler):
     def do_POST(self):
         request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         messages = request["messages"]
+        self.chat = self.path.endswith("/chat/completions")
+        self.stream = request.get("stream", False)
+        if self.chat:
+            request["tools"] = [entry["function"] for entry in request.get("tools", [])]
+            for message in messages:
+                content = message.get("content")
+                if message["role"] == "tool":
+                    message["content"] = [{"type": "tool_result", "content": content}]
+                elif not isinstance(content, list):
+                    message["content"] = [{"type": "text", "text": content or ""}]
+                message["content"].extend({"type": "tool_use", "name": tool["function"]["name"]}
+                                          for tool in message.get("tool_calls", []))
         prompt = next(block["text"] for m in messages if m["role"] == "user"
                       for block in m["content"] if isinstance(block, dict) and block["type"] == "text")
         if "\nTranslation request: " in prompt:
@@ -103,6 +116,25 @@ class ScriptedProvider(BaseHTTPRequestHandler):
         self.respond(block)
 
     def respond(self, block):
+        if self.chat:
+            tool = block["type"] == "tool_use"
+            delta = ({"tool_calls": [{"index": 0, "type": "function", "id": block["id"],
+                                      "function": {"name": block["name"], "arguments": json.dumps(block["input"])}}]}
+                     if tool else {"content": block["text"]})
+            finish = "tool_calls" if tool else "stop"
+            if self.stream:
+                frames = [{"choices": [{"index": 0, "delta": delta}]},
+                          {"choices": [{"index": 0, "delta": {}, "finish_reason": finish}],
+                           "usage": {"prompt_tokens": 7, "completion_tokens": 3}}]
+                body = ("".join("data: " + json.dumps(frame) + "\n\n" for frame in frames) + "data: [DONE]\n\n").encode()
+            else:
+                body = json.dumps({"choices": [{"message": delta, "finish_reason": finish}]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream" if self.stream else "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         stop = "tool_use" if block["type"] == "tool_use" else "end_turn"
         events = [("message_start", {"message": {"id": "msg_loopback", "type": "message",
                                                "role": "assistant", "model": "loopback", "content": [],
@@ -161,14 +193,16 @@ class DshResearchTest(unittest.TestCase):
                     config = fixture.call("services.get")
                     revision = config.pop("revision")
                     config["models"][0]["model"] = "deepseek-pro"
+                    config["models"][0]["endpoint"] = dsh.endpoint
                     fixture.call("services.save", base_revision=revision, **config)
                     fixture.call("task.start", confirmation_id=prepared["confirmation_id"],
                                  error="CONFIRMATION_REQUIRED", **task)
-                    for _ in range(2):
-                        self.assertTrue(worker.test_service({
-                            "id": config["model_id"], "operation_id": "probe-1",
-                        })["ok"])
-                    self.assertEqual(provider.probes, [("deepseek-pro", 32, [])])
+                    with patch("papertrace.deepseek_api_key", return_value="loopback-fixture"):
+                        for _ in range(2):
+                            self.assertTrue(worker.test_service({
+                                "id": config["model_id"], "operation_id": "probe-1",
+                            })["ok"])
+                    self.assertEqual(provider.probes, [("deepseek-pro", 16, [])])
                     self.assertEqual(dsh.model, "deepseek-flash")
                     fixture.run_task(fixture.versions)
                     self.assertTrue(provider.research_models)

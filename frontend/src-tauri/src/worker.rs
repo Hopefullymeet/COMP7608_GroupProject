@@ -227,7 +227,11 @@ impl Host {
             worker.send(&request, id, Pending { response, subscription })?;
             Arc::clone(&worker.routes)
         };
-        let timeout = if matches!(method, "candidate.decide" | "library.preview_pdf") { 90 } else { 20 };
+        let timeout = match method {
+            "candidate.decide" => 240,
+            "library.preview_pdf" | "reader.pdf" => 90,
+            _ => 20,
+        };
         match receiver.recv_timeout(Duration::from_secs(timeout)) {
             Ok(reply) => reply,
             Err(_) => {

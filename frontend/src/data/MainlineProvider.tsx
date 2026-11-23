@@ -5,12 +5,10 @@ import { Dialog } from '../components/PageHead'
 import { baseState, hasMessages, StoreContext, useStore } from './store'
 import type { Route, State, Tab } from './store'
 import type {
-  AgentRun,
   ChatMessage,
   Decision,
   EvidenceAnchor,
   Paper,
-  SearchAngle,
   Session,
 } from './types'
 import { errorText } from '../api/contract'
@@ -18,8 +16,6 @@ import type {
   Client,
   Discovery,
   Finished,
-  HistoryRun,
-  Step,
   Turn,
   Abstract,
 } from '../api/contract'
@@ -38,8 +34,10 @@ type HomeFile = Picked & {
   previewError?: string
 }
 const evidenceId = (message: string, anchor: string) => JSON.stringify([message, anchor])
-const discoveryKey = (topic: string, search: string) => `papertrace-discovery-task/${topic}/${search}`
-const emptyTrace = { open: false, focus: null }
+const verifiedPdfByDoi = new Map([
+  // Cornell's copy matches the DOI and supports inline browser preview.
+  ['10.1109/tsmcc.2004.826268', 'https://arl.human.cornell.edu/879Readings/Breazeal2004.pdf'],
+])
 const defaultView = {
   ...baseState,
   topics: [],
@@ -52,7 +50,12 @@ const defaultView = {
   runs: {},
   runOrder: [],
   noted: [],
-  trace: emptyTrace,
+}
+
+function validPaperUrl(value: string): boolean {
+  if (!URL.canParse(value)) return false
+  const url = new URL(value)
+  return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password
 }
 
 function answerMessages(session: string, { task_id, question, answer }: Turn): [ChatMessage, ChatMessage] {
@@ -91,19 +94,6 @@ function mergeAnswers(messages: ChatMessage[], session: string, turns: Turn[]): 
     return existing.has(pair[1].id) ? [message] : pair
   })
   return [...merged, ...Array.from(turnsByQuestion.values()).flat()]
-}
-
-function traceSteps(steps: Step[]): AgentRun['steps'] {
-  return steps.map((step, index) =>
-    step.action === 'search'
-      ? { id: String(index), kind: 'tool', title: step.query, call: step.source, detail: step.observation }
-      : {
-          id: String(index),
-          kind: step.action === 'stop' ? 'stop' : 'decide',
-          title: step.action === 'stop' ? 'Stop searching' : 'Search again',
-          detail: step.reason,
-        },
-  )
 }
 
 function paperFromAbstract(source: Abstract | DocumentView, paper?: Paper): Paper {
@@ -150,7 +140,6 @@ export function MainlineProvider({
   const [papers, setPapers] = useState<Record<string, Paper>>({})
   const [evidence, setEvidence] = useState<Record<string, EvidenceAnchor>>({})
   const [search, setSearch] = useState<Discovery>()
-  const [savedTrace, setSavedTrace] = useState<{ id: string; steps: Step[] }>()
   const [error, setError] = useState('')
   const [ready, setReady] = useState(false)
   const availableTopics = useRead('topic.list', {}, ready && !demo)
@@ -200,7 +189,6 @@ export function MainlineProvider({
   const writeKeys = useRef(new Map<string, string>())
   const topic = view.route.view === 'topic' ? view.route.topicId : ''
   const savedNotes = useRead('note.list', { topic_id: topic }, !!topic)
-  const history = useRead('task.history', topic ? { topic_id: topic } : {}, ready)
   const [position, setPosition] = useState<{ version: string; passage: string }>()
   const session = view.activeSessionId
   const reveal = (cause: unknown) => setError(errorText(cause))
@@ -288,16 +276,11 @@ export function MainlineProvider({
     }))
   }
 
-  async function refreshSearch(topic_id: string, search_id: string, taskId?: string) {
+  async function refreshSearch(topic_id: string, search_id: string) {
     const revision = ++searchRequest.current
     const result = await api.call('discovery.get', { topic_id, search_id })
     if (selected.current.topic !== topic_id || revision !== searchRequest.current) return
     setSearch(result)
-    if (taskId) {
-      const { steps } = await api.call('discovery.steps', { task_id: taskId })
-      if (selected.current.topic === topic_id && revision === searchRequest.current)
-        setSavedTrace({ id: taskId, steps })
-    }
   }
 
   async function refreshSession(wanted: typeof selected.current, resume = true) {
@@ -319,7 +302,7 @@ export function MainlineProvider({
     if (resume && active_task_id) reading.attach(active_task_id)
   }
 
-  function finishDiscovery(id: string, finished: Finished) {
+  function finishDiscovery(_id: string, finished: Finished) {
     workspace.refresh()
     if (
       !('result' in finished) ||
@@ -330,10 +313,8 @@ export function MainlineProvider({
       return
     const topic = selected.current.topic
     const { search_id } = finished.result
-    localStorage.setItem(discoveryKey(topic, search_id), id)
     setSearch(finished.result)
-    setSavedTrace({ id, steps: discovering.preview.steps })
-    void refreshSearch(topic, search_id, id).catch(reveal)
+    void refreshSearch(topic, search_id).catch(reveal)
   }
 
   const discovering = useTask(api, finishDiscovery)
@@ -417,15 +398,9 @@ export function MainlineProvider({
     void Promise.all([
       api
         .call('discovery.latest', { topic_id: topic })
-        .then(async ({ search_id, active_task_id, task_id }) => {
+        .then(async ({ search_id, active_task_id }) => {
           if (!active) return
-          const saved = search_id
-            ? refreshSearch(
-                topic,
-                search_id,
-                task_id ?? localStorage.getItem(discoveryKey(topic, search_id)) ?? undefined,
-              )
-            : undefined
+          const saved = search_id ? refreshSearch(topic, search_id) : undefined
           if (active_task_id) discovering.attach(active_task_id)
           await saved
         }),
@@ -476,7 +451,6 @@ export function MainlineProvider({
       searchRequest.current++
       discovering.detach()
       setSearch(undefined)
-      setSavedTrace(undefined)
       setRound(0)
       setLoadingSearch(true)
       setSearchQuestion(title ?? view.topics.find((item) => item.id === topicId)?.title ?? '')
@@ -491,7 +465,7 @@ export function MainlineProvider({
         ? { activeEvidence: null, readerPaperId: '' }
         : {}),
       ...(switchingToDiscover && { activeEvidence: null }),
-      ...(changedTopic ? { library: [], readerPaperId: '', trace: emptyTrace } : {}),
+      ...(changedTopic ? { library: [], readerPaperId: '' } : {}),
     }))
   }
 
@@ -507,7 +481,6 @@ export function MainlineProvider({
       route: { view: 'home' },
       activeSessionId: null,
       activeEvidence: null,
-      trace: emptyTrace,
       homeRevision: state.homeRevision + Number(reset),
     }))
   }
@@ -697,7 +670,8 @@ export function MainlineProvider({
     const actions = { pending: 'pending', held: 'hold', excluded: 'exclude', added: 'add' } as const
     const { search_id } = search
     void status(async () => {
-      await keyedWrite(JSON.stringify([search_id, id, decision]), (operation_id) =>
+      const key = JSON.stringify([search_id, id, decision])
+      const result = await keyedWrite(key, (operation_id) =>
         api.call('candidate.decide', {
           topic_id: topic,
           search_id,
@@ -705,8 +679,29 @@ export function MainlineProvider({
           decision: actions[decision],
           operation_id,
         }),
-      )
-      await Promise.all([refreshSearch(topic, search_id), refreshLibrary(topic)])
+      ).catch(async (failure: unknown) => {
+        if (decision !== 'added') throw failure
+        const persisted = await api.call('discovery.get', { topic_id: topic, search_id }).catch(() => undefined)
+        const candidate = persisted?.candidates.find((row) => row.candidate_id === id)
+        if (candidate?.decision !== 'added') throw failure
+        writeKeys.current.delete(key)
+        if (selected.current.topic === topic) setSearch((old) => old?.search_id === search_id ? persisted : old)
+        return undefined
+      })
+      if (result?.decision === 'added' && selected.current.topic === topic) {
+        setSearch((old) => old?.search_id === search_id ? { ...old, candidates: old.candidates.map((row) =>
+          row.candidate_id === id ? { ...row, decision: 'added' } : row),
+        } : old)
+      }
+      if (decision !== 'added') {
+        await Promise.all([refreshSearch(topic, search_id), refreshLibrary(topic)])
+        return
+      }
+      // A view refresh can fail after the write has committed. Keep the confirmed card state.
+      const refreshes = await Promise.allSettled([refreshSearch(topic, search_id), refreshLibrary(topic)])
+      if (refreshes.some((refresh) => refresh.status === 'rejected')) {
+        setError(tr('Paper added. Reopen the topic to refresh the library.'))
+      }
     })
   }
 
@@ -765,74 +760,6 @@ export function MainlineProvider({
       },
     ]),
   )
-  const steps = discovering.task ? discovering.preview.steps : (savedTrace?.steps ?? [])
-  const runId = discovering.task ?? savedTrace?.id
-  const discoveryRun: AgentRun | undefined = runId
-    ? {
-        id: runId,
-        task: 'Discovery',
-        label: searchQuestion,
-        status: discovering.task ? 'running' : 'done',
-        steps: traceSteps(steps),
-      }
-    : undefined
-  const questionRun: AgentRun | undefined = reading.task
-    ? {
-        id: reading.task,
-        task: 'Question',
-        label: view.messages.find((message) => message.id === `user:${reading.task}`)?.segments[0]?.text
-          ?? 'Reading abstracts',
-        status: 'running',
-        steps: reading.preview.progress
-          ? [{ id: 'reading', kind: 'tool', title: reading.preview.progress }]
-          : [],
-      }
-    : undefined
-  const labels: Record<HistoryRun['kind'], AgentRun['task']> = {
-    reading_qa: 'Question',
-    discovery: 'Discovery',
-    paper_import: 'Import',
-    paper_comparison: 'Comparison',
-    literature_synthesis: 'Literature synthesis',
-    citation_audit: 'Citation check',
-    reader_question: 'Ask about selection',
-    visual_index: 'Index figure descriptions',
-    citation_suggest: 'Citation suggestions',
-    resume: 'Resume',
-  }
-  const recorded: AgentRun[] = (history?.items ?? []).map((h) => ({
-    id: h.task_id,
-    task: labels[h.kind],
-    label: h.label,
-    usage: h.usage,
-    status: h.status === 'queued' ? 'running' : h.status === 'completed' ? 'done' : h.status,
-    steps: h.steps.map((s, i) => ({ ...s, id: String(i) })),
-  }))
-  const runs = [
-    questionRun,
-    discovering.task ? discoveryRun : undefined,
-    ...recorded.filter((h) => h.id !== reading.task && h.id !== discovering.task),
-    ...(!discovering.task && discoveryRun && !recorded.some((r) => r.id === discoveryRun.id)
-      ? [discoveryRun]
-      : []),
-  ].filter((run): run is AgentRun => Boolean(run))
-  const searchSteps = steps.filter((step) => step.action === 'search')
-  const angles: SearchAngle[] = searchSteps.map((step, index) => ({
-    id: `angle-${index}`,
-    label: step.query,
-    query: step.query,
-    status: discovering.task && index === searchSteps.length - 1 ? 'searching' : 'covered',
-    found: 0,
-  }))
-  if (search)
-    angles.push({
-      id: 'results',
-      label: 'Search results',
-      query: searchQuestion,
-      status: search.candidates.length ? 'covered' : 'gap',
-      found: search.candidates.length,
-      gapReason: search.coverage.gaps.join(' ') || undefined,
-    })
   const messages =
     reading.task && session
       ? [
@@ -1003,15 +930,13 @@ export function MainlineProvider({
         summary: `${search.candidates.length} visible candidates`,
       }),
     },
-    angles,
     messages,
     qaRunning: Boolean(reading.task) || loadingSession || busy,
-    runs: Object.fromEntries(runs.map((run) => [run.id, run])),
-    runOrder: runs.map((run) => run.id),
     candidates: candidates.map((c) => ({
       id: c.candidate_id,
       paperId: c.candidate_id,
-      pdf: c.pdf_status ?? (c.pdf_urls ? c.pdf_urls.length ? 'available' : 'missing' : undefined),
+      accessUrl: (c.doi && verifiedPdfByDoi.get(c.doi.toLowerCase()))
+        || [...(c.pdf_urls ?? []), c.metadata_url].find(validPaperUrl),
       change: c.change,
       angleId: 'results',
       reason: c.reason,
@@ -1086,8 +1011,6 @@ export function MainlineProvider({
       readerRequest.current++
       setView((state) => ({ ...state, activeEvidence: null }))
     },
-    showTrace: (open: boolean, focus?: string | null) =>
-      setView((state) => ({ ...state, trace: { open, focus: focus ?? null } })),
   }
   const taskError = activeTask.error || activeTask.connectionError || activeTask.status
   const notice = error || taskError

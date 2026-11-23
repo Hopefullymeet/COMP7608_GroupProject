@@ -1,14 +1,11 @@
 import { useLanguage } from '../i18n'
 import { useLayoutEffect, useRef, type ReactNode } from 'react'
-import { anyRunning, useStore } from '../data/store'
-import { Icon, Spinner } from './Icon'
+import { Icon } from './Icon'
 
 /** Header for the workspace pages (Library, Citation check, Models & services). */
-export function PageHead({ icon, title, sub, children, trace = false }: {
-  icon: string; title: string; sub: string; children?: ReactNode; trace?: boolean
+export function PageHead({ icon, title, sub, children }: {
+  icon: string; title: string; sub: string; children?: ReactNode
 }) {
-  const { tr } = useLanguage()
-  const { state, act } = useStore()
   return (
     <header className="page-head">
       <span className="page-icon"><Icon name={icon} size={18} /></span>
@@ -17,11 +14,6 @@ export function PageHead({ icon, title, sub, children, trace = false }: {
         <p>{sub}</p>
       </div>
       {children}
-      {trace && (
-        <button className={`trace-btn ${state.trace.open ? 'on' : ''}`} onClick={() => act.showTrace(!state.trace.open)}>
-          {anyRunning(state) ? <Spinner /> : <Icon name="trace" size={15} />}{' '}{tr('Agent trace')}
-        </button>
-      )}
     </header>
   )
 }

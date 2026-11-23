@@ -107,7 +107,7 @@ export function checkScript(runId: string, manuscript: typeof MANUSCRIPTS[number
   checkSources: (finding: Finding) => Finding, sentenceNumber?: number): ScriptItem[] {
   const label = manuscript.name + ' · draft v' + version + (sentenceNumber === undefined ? '' : ' · sentence ' + sentenceNumber)
   const out: ScriptItem[] = [
-    at(0, { type: 'run', run: { id: runId, task: 'Citation check', manuscriptId: manuscript.id, label, status: 'running', steps: [] } }),
+    at(0, { type: 'run', run: { id: runId, task: 'Citation check', manuscriptId: manuscript.id, label, status: 'running' } }),
     at(500, step(runId, 'plan', 'Split the current wording into checkable claims', { tokens: 820, ms: 1600 })),
   ]
   let incomplete = false

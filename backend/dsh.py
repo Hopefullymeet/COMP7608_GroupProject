@@ -453,6 +453,31 @@ class Dsh:
                 return message
             raise failure("TASK_TIMEOUT", True, "retry")
 
+        def record_result(result):
+            nonlocal limited
+            name, args = calls.get(result.get("toolCallId"), ("", {}))
+            if research and name:
+                observation = "Tool returned an error."
+                if not result.get("isError"):
+                    try:
+                        blocks = result.get("content", [])
+                        found = json.loads("".join(block["text"] for block in blocks if block.get("type") == "text"))
+                        if isinstance(found, list):
+                            if name == "paper_read":
+                                for item in found:
+                                    seen[item["passage_id"]] = item
+                            observation = f"{len(found)} result(s)."
+                        elif found.get("limit_reached"):
+                            limited = True
+                            observation = "Evidence budget reached."
+                    except (AttributeError, KeyError, TypeError, ValueError):
+                        observation = "Tool result could not be decoded."
+                trace.append({"kind": "tool", "title": name, "detail": observation})
+                if progress:
+                    progress(name, observation)
+            elif name == "paper_read" and not result.get("isError") and args.get("id") in passages:
+                seen[args["id"]] = passages[args["id"]]
+
         def record(event):
             nonlocal text, reason, step_count, limited
             data = event.get("data", {})
@@ -470,29 +495,13 @@ class Dsh:
                     except (KeyError, TypeError, ValueError):
                         pass
             if kind == "tool/result":
-                result = data.get("message", {})
-                name, args = calls.get(result.get("toolCallId"), ("", {}))
-                if research and name:
-                    observation = "Tool returned an error."
-                    if not result.get("isError"):
-                        try:
-                            blocks = result.get("content", [])
-                            found = json.loads("".join(block["text"] for block in blocks if block.get("type") == "text"))
-                            if isinstance(found, list):
-                                if name == "paper_read":
-                                    for item in found:
-                                        seen[item["passage_id"]] = item
-                                observation = f"{len(found)} result(s)."
-                            elif found.get("limit_reached"):
-                                limited = True
-                                observation = "Evidence budget reached."
-                        except (AttributeError, KeyError, TypeError, ValueError):
-                            observation = "Tool result could not be decoded."
-                    trace.append({"kind": "tool", "title": name, "detail": observation})
-                    if progress:
-                        progress(name, observation)
-                elif name == "paper_read" and not result.get("isError") and args.get("id") in passages:
-                    seen[args["id"]] = passages[args["id"]]
+                message = data.get("message", {})
+                if message.get("toolCallId"):
+                    record_result(message)
+                else:
+                    for block in message.get("content", []):
+                        if block.get("type") == "tool-result":
+                            record_result(block)
             if kind == "assistant/message":
                 usage = data.get("usage") or {}
                 for reported, target in (("inputTokens", "input_tokens"), ("outputTokens", "output_tokens")):

@@ -1,4 +1,4 @@
-import { count, useLanguage } from '../i18n'
+import { useLanguage } from '../i18n'
 import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { NEW_SESSION, allEvidence, currentTopic, evidenceFor, paperFor, papersOfTopic, sourceStatus, useStore } from '../data/store'
 import { QUESTIONS } from '../data/scripts'
@@ -22,9 +22,6 @@ type Location = { page: number; rect?: Rect }
 function AgentMessage({ m }: { m: ChatMessage }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
-  const run = m.runId ? state.runs[m.runId] : undefined
-  const lastStep = run?.steps[run.steps.length - 1]
-  const tools = run?.steps.filter((s) => s.kind === 'tool').length ?? 0
   const papers = papersOfTopic(state, currentTopic(state))
   const citationNumbers = new Map<string, number>()
   for (const segment of m.segments) {
@@ -39,7 +36,7 @@ function AgentMessage({ m }: { m: ChatMessage }) {
     <div className="msg agent">
       <div className="msg-who">
         <span className="avatar">P</span> PaperTrace
-        {!m.done && <span className="working"><Spinner /> {tr(lastStep?.title ?? 'Planning…')}</span>}
+        {!m.done && <span className="working"><Spinner /> {tr('Reading…')}</span>}
       </div>
       {m.segments.length > 0 && (
         <div className="answer">
@@ -81,13 +78,6 @@ function AgentMessage({ m }: { m: ChatMessage }) {
         </div>
       )}
       {m.done && state.mainline?.saveAnswer && <button className="link-btn" onClick={()=>state.mainline?.saveAnswer?.(m)}>{tr('Save answer as note')}</button>}
-      {m.done && run && (
-        <div className="msg-foot">
-          <span className="run-chip done">{tr('Done')}</span>
-          <span>{count(tr, run.steps.length, 'step')} · {count(tr, tools, 'tool call')}</span>
-          <button className="link-btn" onClick={() => act.showTrace(true, run.id)}>{tr('View trace')}</button>
-        </div>
-      )}
     </div>
   )
 }

@@ -435,7 +435,6 @@ export function CitationPage() {
   return (
     <div className="page">
       <PageHead
-        trace
         title={tr('Citation check')}
         icon="shield"
         sub={tr('Check a manuscript against its selected sources')}

@@ -112,7 +112,7 @@ export function LibraryPage() {
   if (reader) return <ArchivedReader reader={reader} close={() => setReader(undefined)} />
   return (
     <div className="page library-page">
-      <PageHead trace icon="library" title={tr('Library')} sub={tr('Papers, versions and research notes')}>
+      <PageHead icon="library" title={tr('Library')} sub={tr('Papers, versions and research notes')}>
         <button className="primary" disabled={busy} onClick={() => void pick().catch(report)}>
           <Icon name="plus" size={14} />{' '}{tr('Import papers')}
         </button>
