@@ -66,6 +66,10 @@ function AgentMessage({ m }: { m: ChatMessage }) {
     <div className="msg agent" data-answer-id={m.id}>
       {!m.done && <div className="msg-who"><span className="working"><Spinner /> {tr(lastStep?.title ?? 'Planning…')}</span></div>}
       {m.wikiTask && state.topics.find(t=>t.id===currentTopic(state))?.wikiTurns?.includes(m.wikiTask) && <small className="wiki-update"><Icon name="wiki" size={13}/>{tr('Wiki updated')}</small>}
+      {run?.historicalReadingSummary && <details className="chat-work-steps" open={prefs.collapse === 'never'}>
+        <summary>{tr('Step summary (older session)')}</summary>
+        <p>{run.historicalReadingSummary}</p>
+      </details>}
       {run && run.steps.length > 0 && <details key={String(m.done) + prefs.collapse} open={!m.done || prefs.collapse === 'never'} className="chat-work-steps">
         <summary>{count(tr,run.steps.length,'step')}</summary>
         <ol>{run.steps.map(step=><li key={step.id}>{tr(step.title)}
