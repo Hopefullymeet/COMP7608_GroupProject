@@ -170,8 +170,6 @@ class TopicWiki:
             if answer["sentences"]:
                 first = answer["sentences"][0]
                 yield key, "finding", "qa", first["text"], first["anchor_ids"]
-            else:
-                yield key, "open_question", "qa", answer["question"], []
         for note in material["notes"]:
             key = f"note:{note['id']}:{note['revision']}"
             if key not in seen and note["text"]:
@@ -241,54 +239,20 @@ class TopicWiki:
 
     # ---------- capture triggers ----------
 
-    def grow_map(self, wiki, material):
-        topic = wiki["topic_id"]
-        nodes = wiki.setdefault("map_nodes", {})
-        observed = set(wiki.get("map_turns", []))
-        hidden = set(wiki.get("map_hidden", []))
-        changed_tasks = []
-        pending = False
-        def key(*parts):
-            return digest(json.dumps(parts, ensure_ascii=False).encode())[:32]
-        def add(identifier, parent, title, anchors):
-            if identifier in hidden or parent in hidden:
-                return False
-            if identifier in nodes:
-                node = nodes[identifier]
-                merged = list(dict.fromkeys(node["anchors"] + anchors))
-                if merged == node["anchors"]:
-                    return False
-                node["anchors"] = merged
-            else:
-                nodes[identifier] = dict(id=identifier, parent=parent, title=title, anchors=anchors)
-            return True
-        for answer in material["answers"]:
-            if answer["id"] in observed:
-                continue
-            observed.add(answer["id"])
-            question = answer["question"].strip()
-            if not question or re.fullmatch(r"你好[！!。]?|hello[!.]?|hi[!.]?", question, re.I):
-                continue
-            branch = key("direction", question.casefold())
-            if branch in hidden:
-                suggestions = wiki.setdefault("map_questions", [])
-                if question not in suggestions:
-                    suggestions.append(question)
-                    pending = True
-                continue
-            changed = add(branch, "", question, [])
-            for sentence in answer["sentences"]:
-                if add(key(branch, sentence["text"]), branch, sentence["text"], sentence["anchor_ids"]):
-                    changed = True
-            if changed:
-                changed_tasks.append(answer["id"])
-        wiki["map_turns"] = sorted(observed)
-        if changed_tasks or pending:
-            record = self.worker.get("topic", topic)
-            record["wiki_unread"] = True
-            record["wiki_turns"] = list(dict.fromkeys(record.get("wiki_turns", []) + changed_tasks))
-            self.worker.put("topic", topic, record)
-        return bool(changed_tasks or pending)
+    @staticmethod
+    def directory_nodes(wiki):
+        """Keep authored nodes visible while retiring the old automatic Q&A folders."""
+        nodes = wiki.get("map_nodes", {})
+
+        def legacy_id(parent, title):
+            return digest(json.dumps((parent, title), ensure_ascii=False).encode())[:32]
+
+        folders = {uid for uid, node in nodes.items() if not node["parent"]
+                   and uid == legacy_id("direction", node["title"].casefold())}
+        hidden = folders | {uid for uid, node in nodes.items() if node["parent"] in folders
+                            and uid == legacy_id(node["parent"], node["title"])}
+        return {uid: dict(node, parent="" if node["parent"] in hidden else node["parent"])
+                for uid, node in nodes.items() if uid not in hidden}
 
     def map_edit(self, wiki, params):
         nodes = wiki.setdefault("map_nodes", {})
@@ -375,17 +339,23 @@ class TopicWiki:
         wiki = self.load(topic)
         material = self.material(topic)
         seen = set(wiki["observed"])
-        previous_turns = wiki.get("map_turns")
-        map_changed = self.grow_map(wiki, material)
         before = len(wiki["observed"])
         added = 0
+        new_turns = []
         for key, kind, origin, text, anchors in self.observations(topic, material, seen):
+            if origin == "qa":
+                new_turns.append(key.removeprefix("qa:"))
             seen.add(key)
             wiki["observed"].append(key)
             text = clip(text)
             if text and text not in wiki.get("forgotten_texts", []) and not any(e["text"] == text for e in wiki["entries"]):
                 wiki["entries"].append(self.entry(kind, text, list(dict.fromkeys(anchors)), origin))
                 added += 1
+        if new_turns:
+            record = self.worker.get("topic", topic)
+            record["wiki_unread"] = True
+            record["wiki_turns"] = list(dict.fromkeys(record.get("wiki_turns", []) + new_turns))
+            self.worker.put("topic", topic, record)
         overflow = len(wiki["entries"]) - MAX_ENTRIES
         if overflow > 0:  # forget the oldest captured entries first; user, chat and pinned entries stay
             drop = [e["entry_id"] for e in wiki["entries"] if e["origin"] in CAPTURED and not e["pinned"]][:overflow]
@@ -398,7 +368,7 @@ class TopicWiki:
         if start:
             wiki["status"] = "generating"
             self.running.add((topic, "refresh"))
-        if before != len(wiki["observed"]) or start or map_changed or previous_turns != wiki["map_turns"]:
+        if before != len(wiki["observed"]) or start:
             self.store(wiki)
         if start:
             self.spawn(lambda topic: self.generate(topic, automatic=True), topic, "refresh")
@@ -426,30 +396,25 @@ class TopicWiki:
         model = self.model()
         hidden = ("forgotten_texts", "fingerprint", "generator", "observed", "captured_since")
         result = {k: v for k, v in wiki.items() if k not in hidden}
+        nodes = self.directory_nodes(wiki)
+        result["map_nodes"] = nodes
         candidates = [e for e in wiki["entries"] if e["kind"] == "finding" and e["anchor_ids"]]
-        result["map_sources"] = self.map_sources(topic, wiki.get("map_nodes", {}),
+        result["map_sources"] = self.map_sources(topic, nodes,
                                                  (a for e in candidates for a in e["anchor_ids"]))
         result["home_points"] = []
-        seen_papers = set()
         for entry in candidates:
             anchors = entry["anchor_ids"]
             sources = [result["map_sources"].get(a, {}) for a in anchors]
             if not all(s.get("scope") == "full_text" and s.get("quote") and s.get("page") for s in sources):
                 continue
-            papers = {s["paper_id"] for s in sources}
-            if wiki.get("home_selection") == "model":
-                if not entry.get("home_receipt") or entry["origin"] != "summary":
-                    continue
-            elif papers <= seen_papers:
+            if not entry.get("home_receipt") or entry["origin"] != "summary":
                 continue
             result["home_points"].append(entry["entry_id"])
-            seen_papers.update(papers)
             if len(result["home_points"]) == 3:
                 break
-        result["documents"] = self.documents(wiki.get("map_nodes", {}), result["map_sources"])
+        result["documents"] = self.documents(nodes, result["map_sources"])
         result["history"] = [{"created": created, "changes": json.loads(changes)} for created, changes in
                              self.worker.db.execute("SELECT created,changes FROM wiki_history WHERE topic=? ORDER BY id DESC LIMIT 20", (topic,))]
-        nodes = wiki.get("map_nodes", {})
         result["integrity_issues"] = [node["title"] for node in nodes.values()
                                       if (node["parent"] and node["parent"] not in nodes) or
                                       any(a not in result["map_sources"] for a in node["anchors"])]
@@ -584,7 +549,11 @@ class TopicWiki:
         try:
             if model:
                 with host.lock:
-                    evidence = self.map_sources(topic, {}, (a for e in entries for a in e["anchor_ids"]))
+                    anchor_ids = {a for e in entries for a in e["anchor_ids"]}
+                    for answer in material["answers"]:
+                        for sentence in answer["sentences"]:
+                            anchor_ids.update(sentence["anchor_ids"])
+                    evidence = self.map_sources(topic, {}, anchor_ids)
                 draft = self.model_summary(model, dict(material, home_evidence=evidence), kept, captured)
             else:  # nothing rewrites entries offline, so earlier summary entries stay
                 draft = local_summary(material, [e for e in entries if e not in kept], has_focus=any(
@@ -598,10 +567,13 @@ class TopicWiki:
         for answer in material["answers"]:
             for sentence in answer["sentences"]:
                 known.update(sentence["anchor_ids"])
+        questions = {a["question"].casefold() for a in material["answers"]}
         fresh = []
         run_id = self.identifier()
         for row in draft["entries"]:
             text = clip(row.get("text"))
+            if text.casefold() in questions and "entry" not in row:
+                continue
             if text and row.get("kind") in KINDS and not any(e["text"] == text for e in kept + fresh):
                 anchors = [a for a in row.get("anchor_ids", []) if isinstance(a, str) and a in known]
                 fresh.append(row["entry"] if "entry" in row else self.entry(row["kind"], text, list(dict.fromkeys(anchors)), "summary"))
@@ -729,6 +701,10 @@ class TopicWiki:
             '"anchor_ids":["anchor ID"]}]}. Consolidate observations: merge duplicates, keep one paper entry per paper, '
             "keep their anchor IDs, and write at most 24 entries. Cite only anchor IDs present in the input. "
             "user_entries were confirmed by the user: respect them and do not repeat them. "
+            "Treat each question as context. Skip fragments, search commands, and answers without evidence. "
+            "Compare answers with prior findings by meaning. Merge paraphrases into one standalone claim, "
+            "retain distinct supporting passages and experimental conditions, and distinguish conflicting results. "
+            "Include only conclusions useful for the topic and supported by the quoted evidence. "
             "Choose zero to three findings for the topic homepage. For those entries add homepage:true "
             "and reason explaining their relevance to the user's research question. Name the subject, "
             "report concrete results or limitations, and keep all qualifying conditions. Prefer complementary "
@@ -786,8 +762,6 @@ def topic_name(material):
     """Topics created from a PDF are often named after the file; describe the research instead."""
     title = material["title"].strip()
     if not title or re.search(r"\.(pdf|bib|ris|json)$", title, re.I):
-        if material["answers"]:
-            return material["answers"][0]["question"]
         if material["papers"]:
             return material["papers"][0]
     return title
@@ -799,21 +773,16 @@ def local_summary(material, previous, has_focus=False):
     name = name or ("未命名主题" if zh else "Untitled topic")
     papers, notes, answers, findings = (material[k] for k in ("papers", "notes", "answers", "findings"))
     shown = ("、" if zh else ", ").join(papers[:3])
-    questions = [a["question"] for a in answers[-3:]]
     summary = []
     if zh:
         headline = f"这个主题研究「{name}」，目前汇集 {len(papers)} 篇论文和 {len(answers)} 轮问答。"
         summary.append(f"主题中的论文包括 {shown}。" if papers else "主题中还没有论文。")
-        if questions:
-            summary.append("最近关注的问题：" + "；".join(f"「{q}」" for q in questions) + "。")
         if notes or findings:
             summary.append(f"已保存 {len(notes)} 条笔记和 {len(findings)} 条发现。")
     else:
         plural = lambda n, word: f"{n} {word}{'' if n == 1 else 's'}"  # noqa: E731
         headline = f"Research on “{name}”, drawing on {plural(len(papers), 'paper')} and {plural(len(answers), 'conversation turn')}."
         summary.append(f"The topic’s papers include {shown}." if papers else "No papers have been added to this topic yet.")
-        if questions:
-            summary.append("Recent questions: " + "; ".join(f"“{q}”" for q in questions) + ".")
         if notes or findings:
             summary.append(f"You have saved {plural(len(notes), 'note')} and {plural(len(findings), 'finding')}.")
     entries = [] if has_focus else [{"kind": "focus", "text": name, "anchor_ids": []}]
