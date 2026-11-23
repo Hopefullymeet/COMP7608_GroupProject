@@ -1238,6 +1238,18 @@ class Worker:
                 found = json.loads(row[0])
                 if not metadata.get("doi") and "doi" not in details["manual_fields"] and found.get("doi"):
                     metadata["doi"] = found["doi"]
+                if not found.get("publication") and metadata.get("venue_type") != "preprint":
+                    first = self.db.execute("""SELECT p.text FROM passage_lookup l JOIN paper_passages p
+                        ON p.rowid=l.fts_rowid WHERE l.version_id=? AND l.page=1 AND l.ordinal=0""", (version,)).fetchone()
+                    if first:
+                        masthead = re.search(r"Citation information:\s*DOI\s+10\.\d{4,9}/[^\s,]+,\s+(.+?)(?:\s+\d+\s|$)",
+                                             first[0][:800], re.I)
+                        if masthead:
+                            journals = self.db.execute("SELECT DISTINCT venue FROM venue_rank_rows WHERE venue_type='journal'")
+                            for (name,) in journals:
+                                if normalize_venue(masthead[1]) == normalize_venue(name):
+                                    found["publication"] = {"venue": name, "venue_type": "journal"}
+                                    break
                 if metadata.get("venue_type") != "preprint" and found.get("publication"):
                     metadata.update(found["publication"])
                     source = "PDF"

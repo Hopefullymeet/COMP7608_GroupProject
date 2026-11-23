@@ -153,11 +153,11 @@ export function PublicationDetails({ topic, paper }: { topic: string; paper: str
     </>}
     </div>
   </Disclosure>
-  {hits.length > 0 && <Disclosure className="publication-details" icon="library" title={tr('Rankings and indexes')}>
+  {hits.length > 0 && <section aria-label={tr('Rankings and indexes')}>
     <div className="publication-body">{hits.map(rank => rank.entries.map(hit =>
       <div key={JSON.stringify([rank.scheme, hit])}><strong>{rank.label}</strong> · <a href={hit.source_url}
         target="_blank" rel="noreferrer">{hit.value}</a> {hit.category} <small>{rank.year}
         {rank.applicability === 'verify_track' && ' · ' + tr('Verify paper track')}</small></div>
     ))}</div>
-  </Disclosure>}</>
+  </section>}</>
 }

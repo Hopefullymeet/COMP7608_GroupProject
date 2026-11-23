@@ -81,11 +81,21 @@ def init_venue_ranks(db):
         ("ccf", "2022 · CV 摘选", 2022, "https://www.ccf.org.cn/Academic_Evaluation/AI/"),
         ("icore", "CORE2023 · CV 摘选", 2023, "https://portal.core.edu.au/conf-ranks/?search=vision&source=CORE2023"),
     ):
-        if not db.execute("SELECT 1 FROM venue_catalogs WHERE scheme=?", (scheme,)).fetchone():
-            import_catalog(db, scheme, edition, year, url, [
-                {"venue": name, "aliases": aliases, "venue_type": "conference", "value": grade if scheme == "ccf" else "A*"}
-                for name, aliases, grade in venues
-            ])
+        missing = not db.execute("SELECT 1 FROM venue_catalogs WHERE scheme=?", (scheme,)).fetchone()
+        journal = "IEEE Transactions on Image Processing"
+        old_excerpt = scheme == "ccf" and db.execute(
+            "SELECT 1 FROM venue_catalogs WHERE scheme=? AND edition=? AND source_url=?", (scheme, edition, url)
+        ).fetchone() and not db.execute(
+            "SELECT 1 FROM venue_rank_rows WHERE scheme=? AND edition=? AND venue=?", (scheme, edition, journal)
+        ).fetchone()
+        if missing or old_excerpt:
+            rows = [{"venue": name, "aliases": aliases, "venue_type": "conference",
+                     "value": grade if scheme == "ccf" else "A*"} for name, aliases, grade in venues]
+            if scheme == "ccf":
+                rows.append({"venue": journal, "venue_type": "journal", "value": "A",
+                             "issns": "1057-7149 1941-0042",
+                             "source_url": "https://www.ccf.org.cn/Academic_Evaluation/CGAndMT/"})
+            import_catalog(db, scheme, edition, year, url, rows)
 
 
 def issns(value):
@@ -109,6 +119,11 @@ def conference_key(name):
     name = re.sub(r"^(?:proceedings of (?:the )?)?(?:\d{4}\s+)?(?:\d+(?:st|nd|rd|th)\s+)?", "", name, flags=re.I)
     name = re.sub(r"\s*\([^)]*(?:volume|main conference|long papers)[^)]*\)\s*$", "", name, flags=re.I)
     name = re.sub(r"\s+(?:19|20)\d{2}$", "", name)
+    # IEEE catalog records often spell out a venue and repeat its acronym in parentheses.
+    # Keep workshop and other track qualifiers intact.
+    if not QUALIFIERS.search(name):
+        name = re.sub(r"\s+\((?:ICCV|ECCV|CVPR)\)$", "", name, flags=re.I)
+        name = re.sub(r"^IEEE/CVF\s+(?=International Conference on Computer Vision$)", "", name, flags=re.I)
     return name_key(name)
 
 
