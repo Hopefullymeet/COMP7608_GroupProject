@@ -33,6 +33,7 @@ export function WikiDirectory({wiki, title, edit, Source, refresh, busy}: {wiki:
   const count = (id: string): number => children(id).reduce((total,n) => total + 1 + count(n.id), 0)
   const pages = wiki.documents?.[folder] ?? []
   const page = pages.find(p => p.id === location.page)
+  const questions = wiki.entries.filter(e=>e.kind==='open_question')
   const filed = new Set(pages.flatMap(p => p.entries))
   const trail: string[] = []
   for (let id=folder; nodes[id] && !trail.includes(id); id=nodes[id].parent) trail.unshift(id)
@@ -54,7 +55,8 @@ export function WikiDirectory({wiki, title, edit, Source, refresh, busy}: {wiki:
   }
   function evidence(id:string) {
     const a=wiki.map_sources?.[id]
-    return a && <div className="wiki-excerpt" key={id}><Source id={id} anchor={'wiki-doc-'+id} label={a.title+(a.page?' · p. '+a.page:'')}/><blockquote>{a.quote}</blockquote></div>
+    const abstract = a?.section==='abstract' || a?.section==='abstract_or_front_matter'
+    return a && <div className="wiki-excerpt" key={id}><Source id={id} anchor={'wiki-doc-'+id} label={a.title+(a.page?' · p. '+a.page:'')+(abstract?' · '+t('摘要或前置内容','Abstract or front matter'):'')}/><blockquote>{a.quote}</blockquote></div>
   }
   return <section className="wiki-directory">
     {(folder || page) && <nav className="wiki-path" aria-label={t('文档路径','Document path')}>
@@ -76,6 +78,10 @@ export function WikiDirectory({wiki, title, edit, Source, refresh, busy}: {wiki:
         if (!entry) return null
         const receipt=entry.home_receipt
         return <article className="wiki-finding" key={id}><p>{entry.text}</p>
+          {entry.anchor_ids.filter(a=>wiki.map_sources?.[a]?.section==='body').map(a=>{
+            const source=wiki.map_sources![a]
+            return <Source key={a} id={a} anchor={'wiki-home-'+a} label={source.title+' · p. '+source.page}/>
+          })}
           <details><summary>{t('依据与生成记录','Evidence and provenance')}</summary>
           <p>{receipt ? receipt.model+' · '+new Date(receipt.created).toLocaleString() :
             t('本地规则从已有研究记录中选取。','Selected locally from existing findings.')}</p>
@@ -83,6 +89,10 @@ export function WikiDirectory({wiki, title, edit, Source, refresh, busy}: {wiki:
           {entry.anchor_ids.map(evidence)}</details></article>
       })}
       {!wiki.home_points?.length && <p className="fine">{t('有正文依据的研究要点会出现在这里。','Findings with full-text evidence appear here.')}</p>}
+    </section>}
+    {!folder && !page && questions.length>0 && <section className="wiki-home-points">
+      <h3>{t('待追问题','Questions to investigate')}</h3>
+      {questions.map(q=><p key={q.entry_id}>{q.text}</p>)}
     </section>}
     {page ? page.entries.filter(id=>nodes[id]).map(id=><article className="wiki-finding" key={id}>
       <p>{nodes[id].title}</p><div className="wiki-finding-tools"><details><summary>{t('原文依据','Evidence')} · {nodes[id].anchors.length}</summary>{nodes[id].anchors.map(evidence)}</details>

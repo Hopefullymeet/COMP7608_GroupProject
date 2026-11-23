@@ -14,7 +14,7 @@ import threading
 
 from credentials import deepseek_api_key
 from dsh import DshFailure, ENDPOINT
-from literature import LiteratureError, digest
+from literature import LiteratureError, body_passage_starts, digest
 
 KINDS = ("focus", "paper", "finding", "preference", "open_question")
 CAPTURED = ("qa", "pdf", "paper", "note", "finding")      # origins written by capture triggers
@@ -92,8 +92,9 @@ class TopicWiki:
                 continue
             for turn in session["turns"]:
                 sentences = [{"text": clip(s["text"]), "anchor_ids": s["anchor_ids"]}
-                             for s in turn["answer"]["sentences"] if s.get("anchor_ids")]
-                answers.append({"id": turn["task_id"], "question": clip(turn["question"]), "sentences": sentences})
+                             for s in turn["answer"]["sentences"]]
+                answers.append({"id": turn["task_id"], "question": clip(turn["question"]), "sentences": sentences,
+                                "review": turn.get("wiki_review")})
         answers = answers[-100:]
         findings = []
         for item in host.research.wiki(topic)["items"][:30]:
@@ -165,11 +166,18 @@ class TopicWiki:
                 yield (key if index == 0 else f"{key}:{index}"), "paper", origin, f"{short}: {quote}", [anchor_id]
         for answer in material["answers"]:
             key = "qa:" + answer["id"]
-            if key in seen:
+            review = answer.get("review")
+            if review is None:
+                # Old turns have no model decision. They remain available for a full consolidation.
                 continue
-            if answer["sentences"]:
-                first = answer["sentences"][0]
-                yield key, "finding", "qa", first["text"], first["anchor_ids"]
+            for i, sentence in enumerate(answer["sentences"]):
+                item = f"{key}:finding:{i}"
+                if item not in seen and str(i) in review["findings"] and sentence["anchor_ids"]:
+                    yield item, "finding", "qa", sentence["text"], sentence["anchor_ids"]
+            for i, question in enumerate(review["questions"]):
+                item = f"{key}:question:{i}"
+                if item not in seen:
+                    yield item, "open_question", "qa", question, []
         for note in material["notes"]:
             key = f"note:{note['id']}:{note['revision']}"
             if key not in seen and note["text"]:
@@ -305,13 +313,45 @@ class TopicWiki:
             return {}
         papers = {p["paper_id"]: p["title"] for p in self.worker.rows("paper") if topic in p["topic_ids"]}
         sources = {}
+        boundaries = {}
         for row in self.worker.rows("anchor"):
             a = row["value"]
             if row.get("topic_id") != topic or a["anchor_id"] not in ids:
                 continue
             location = a.get("location", {})
+            section = "unknown"
+            pid, version = location.get("passage_id"), a.get("source_version_id")
+            if a.get("read_scope") == "abstract":
+                section = "abstract"
+            elif pid and version and location.get("page") and a.get("quote") and a.get("paper_id") in papers:
+                db = self.worker.db
+                passage = db.execute("""SELECT p.text FROM passage_lookup l JOIN paper_passages p ON p.rowid=l.fts_rowid
+                                        WHERE l.version_id=? AND l.passage_id=? AND l.page=?""",
+                                     (version, pid, location["page"])).fetchone()
+                if passage and a["quote"] in passage[0]:
+                    if version not in boundaries:
+                        rows = db.execute("""SELECT l.passage_id,l.page,p.text FROM passage_lookup l JOIN paper_passages p
+                                             ON p.rowid=l.fts_rowid WHERE l.version_id=? AND l.page <= 2
+                                             ORDER BY l.page,l.ordinal""", (version,)).fetchall()
+                        offsets = body_passage_starts(rows)
+                        has_abstract = bool(offsets)
+                        if not offsets:
+                            # Without a marked abstract, withhold front matter up to a recognizable body heading.
+                            for ident, page, text in rows:
+                                match = re.search(r"\b(?:introduction|methods|methodology)\b|引言|绪论|研究方法", text, re.I)
+                                if match:
+                                    offsets[ident] = match.end()
+                                    break
+                                offsets[ident] = len(text)
+                        boundaries[version] = offsets, has_abstract
+                    offsets, has_abstract = boundaries[version]
+                    start = passage[0].find(a["quote"])
+                    if start >= offsets.get(pid, 0):
+                        section = "body"
+                    else:
+                        section = "abstract_or_front_matter" if has_abstract else "front_matter"
             sources[a["anchor_id"]] = dict(paper_id=a.get("paper_id"), title=papers.get(a.get("paper_id"), ""), quote=a.get("quote", ""),
-                                          page=location.get("page"), scope=a.get("read_scope"))
+                                          page=location.get("page"), scope=a.get("read_scope"), section=section)
         return sources
 
     @staticmethod
@@ -342,14 +382,21 @@ class TopicWiki:
         before = len(wiki["observed"])
         added = 0
         new_turns = []
+        reviews = {a["id"]: a["review"] for a in material["answers"] if a["review"]}
         for key, kind, origin, text, anchors in self.observations(topic, material, seen):
             if origin == "qa":
-                new_turns.append(key.removeprefix("qa:"))
+                turn_id, _, index = key[3:].rsplit(":", 2)
+                new_turns.append(turn_id)
             seen.add(key)
             wiki["observed"].append(key)
             text = clip(text)
             if text and text not in wiki.get("forgotten_texts", []) and not any(e["text"] == text for e in wiki["entries"]):
                 wiki["entries"].append(self.entry(kind, text, list(dict.fromkeys(anchors)), origin))
+                if origin == "qa" and kind == "finding":
+                    entry = wiki["entries"][-1]
+                    review = reviews[turn_id]
+                    entry["home_receipt"] = {"model": review["model"], "created": entry["updated_at"],
+                                             "run_id": turn_id, "reason": review["findings"][index], "text": text}
                 added += 1
         if new_turns:
             record = self.worker.get("topic", topic)
@@ -405,9 +452,9 @@ class TopicWiki:
         for entry in candidates:
             anchors = entry["anchor_ids"]
             sources = [result["map_sources"].get(a, {}) for a in anchors]
-            if not all(s.get("scope") == "full_text" and s.get("quote") and s.get("page") for s in sources):
+            if not any(s.get("section") == "body" for s in sources):
                 continue
-            if not entry.get("home_receipt") or entry["origin"] != "summary":
+            if not entry.get("home_receipt") or entry["origin"] not in ("summary", "qa"):
                 continue
             result["home_points"].append(entry["entry_id"])
             if len(result["home_points"]) == 3:
@@ -572,7 +619,9 @@ class TopicWiki:
         run_id = self.identifier()
         for row in draft["entries"]:
             text = clip(row.get("text"))
-            if text.casefold() in questions and "entry" not in row:
+            if text.casefold() in questions and row.get("kind") != "open_question" and "entry" not in row:
+                continue
+            if row.get("kind") == "finding" and not any(a in known for a in row.get("anchor_ids", []) if isinstance(a, str)):
                 continue
             if text and row.get("kind") in KINDS and not any(e["text"] == text for e in kept + fresh):
                 anchors = [a for a in row.get("anchor_ids", []) if isinstance(a, str) and a in known]
@@ -705,7 +754,7 @@ class TopicWiki:
             "Compare answers with prior findings by meaning. Merge paraphrases into one standalone claim, "
             "retain distinct supporting passages and experimental conditions, and distinguish conflicting results. "
             "Include only conclusions useful for the topic and supported by the quoted evidence. "
-            "Choose zero to three findings for the topic homepage. For those entries add homepage:true "
+            "Read all sentences in each turn, including evidence gaps. Keep specific unresolved research questions as open_question entries. Choose zero to three findings for the topic homepage. For those entries add homepage:true "
             "and reason explaining their relevance to the user's research question. Name the subject, "
             "report concrete results or limitations, and keep all qualifying conditions. Prefer complementary "
             "findings backed by original body passages. Never choose an abstract-only finding."

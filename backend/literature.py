@@ -157,8 +157,8 @@ def body_passage_starts(rows):
     abstract = re.search(r"(?:\b(?:Abstract|ABSTRACT)\b|摘\s*要)\s*[:：—-]?", joined)
     if not abstract:
         return {}
-    end = re.search(r"(?:\b(?:[1I][.．]?\s+)?(?:Introduction|INTRODUCTION)\b|\b(?:Index Terms|INDEX TERMS)\b|\b(?:Key\s*words|Keywords|KEYWORDS)\b|关键词|引言|绪论)",
-                    joined[abstract.end():])
+    end = re.search(r"(?:\b(?:[1I][.．]?\s+)?(?:Introduction|Materials and Methods|Methodology)\b|引言|绪论|研究方法)",
+                    joined[abstract.end():], re.I)
     boundary = abstract.end() + end.end() if end else len(joined)
     # An unrecognised heading should not erase the following page.
     if not end:

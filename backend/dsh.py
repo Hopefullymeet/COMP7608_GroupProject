@@ -20,7 +20,15 @@ from credentials import deepseek_api_key
 ENDPOINT = "https://api.deepseek.com"
 MESSAGES_ENDPOINT = ENDPOINT + "/anthropic"
 MODEL = "deepseek-flash"
-ANSWER_LAYOUT = "When there are several points, put each distinct point in its own concise sentence entry. "
+ANSWER_LAYOUT = (
+    "Write the sentences array first. Put each distinct point in its own concise sentence entry. "
+    "After considering the whole question and answer, add a wiki_reason string only to sentences worth "
+    "remembering as distinct research findings. Explain their relevance in the user's language. Select zero "
+    "or more; omit instructions, restatements and unsupported claims. Add a top-level follow_up array "
+    "of specific, unresolved research questions worth pursuing, or []. Do not include generic next steps. "
+    "Use abstracts as leads. Search the body for matching methods, results and limitations even after an "
+    "abstract matches. Prefer exact supporting body passages. Distinguish abstract-only support. "
+)
 TITLE_INSTRUCTION = ("Include a top-level session_title string summarizing the focus of this first question "
                      "and your answer in the user's language. Use a specific short noun phrase "
                      "(up to 20 Chinese characters or 8 English words), without quotes around the phrase, "
@@ -104,8 +112,14 @@ def read_json_answer(text, seen):
                     if passage and isinstance(quote, str) and quote.strip() and quote in passage["text"]:
                         valid.append({"passage": passage, "quote": quote})
             answer.append({"text": claim.strip(), "references": valid})
+            reason = row.get("wiki_reason")
+            if valid and isinstance(reason, str) and reason.strip():
+                answer[-1]["wiki_reason"] = reason.strip()[:400]
         if not answer:
             raise ValueError
+        if isinstance(result.get("follow_up"), list):
+            answer[0]["follow_up"] = list(dict.fromkeys(q.strip()[:400] for q in result["follow_up"]
+                                                      if isinstance(q, str) and q.strip()))
         title = result.get("session_title")
         if isinstance(title, str) and title.strip() and len(title.strip()) <= 100 and len(title.strip().splitlines()) == 1:
             answer[0]["session_title"] = title.strip()

@@ -61,6 +61,18 @@ class EvidenceTest(unittest.TestCase):
                 self.assertEqual(worker.dispatch("session.get", session, [])["title"], expected)
                 self.assertEqual(worker.dispatch("session.list", topic, [])["items"][0]["title"], expected)
 
+    def test_model_can_select_several_findings_or_only_a_follow_up(self):
+        seen = {"p": {"text": "Observed in trials."}}
+        rows = [{"text": str(i), "wiki_reason": "Relevant result",
+                 "evidence": [{"id": "p", "quote": quote}]} for i, quote in enumerate(
+                     ["Observed", "in trials", "Unseen"])]
+        response = {"sentences": rows, "follow_up": ["Does it replicate?", "Does it replicate?"]}
+        parsed = read_json_answer(json.dumps(response), seen)
+        self.assertEqual([bool(row.get("wiki_reason")) for row in parsed], [True, True, False])
+        self.assertEqual(parsed[0]["follow_up"], ["Does it replicate?"])
+        response["sentences"] = [rows[-1]]
+        self.assertNotIn("wiki_reason", read_json_answer(json.dumps(response), seen)[0])
+
     def test_malformed_citations_do_not_discard_valid_claims(self):
         seen = {"p1": {"text": "The passage states a direct result."}}
         response = {"sentences": [None, {"text": "A claim without evidence."}, {

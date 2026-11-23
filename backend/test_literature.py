@@ -122,6 +122,32 @@ class LiteratureTest(unittest.TestCase):
         return self.call("library.import_pdf", topic_id=self.topic, name=name + ".pdf",
                          content=base64.b64encode(sample_pdf(text)).decode(), **params)
 
+    def test_wiki_retains_multiple_findings_but_only_links_verified_body_on_home(self):
+        paper = self.save_pdf("Test", "Abstract. Faster. 1. Introduction. Stable. Accurate.")
+        vid = paper["source_version_id"]
+        with self.worker.lock, self.worker.db:
+            pid, text = self.worker.db.execute("SELECT passage_id,text FROM paper_passages WHERE version_id=?", (vid,)).fetchone()
+            task = {"topic_id": self.topic}
+            passage = {"passage_id": pid, "source_version_id": vid, "paper_id": paper["paper_id"], "page": 1, "text": text}
+            ids = [self.worker.store_anchor(task, "msg", passage, q) for q in ("Faster.", "Stable.", "Accurate.")]
+            sid = self.worker.dispatch("session.create", task, [])["session_id"]
+            session = self.worker.get("session", sid)
+            session["turns"].append({"task_id": "test-turn", "question": "Compare results.",
+                                     "answer": {"sentences": [{"text": str(i), "anchor_ids": [aid]} for i, aid in enumerate(ids)]},
+                                     "wiki_review": {"model": "test", "findings": {"0":"lead", "1":"result", "2":"result"},
+                                                     "questions": ["Does this generalize?"]}})
+            self.worker.put("session", sid, session)
+            wiki = self.worker.topic_wiki.get(self.topic)
+            entries = [e for e in wiki["entries"] if e["origin"] == "qa"]
+            self.assertEqual([e["kind"] for e in entries], ["finding"] * 3 + ["open_question"])
+            self.assertEqual(wiki["home_points"], [e["entry_id"] for e in entries[1:3]])
+            self.assertEqual(wiki["map_sources"][ids[0]]["section"], "abstract_or_front_matter")
+            for aid in ids[1:]:
+                located = self.worker.dispatch("evidence.open", {"anchor_id": aid}, [])
+                self.assertEqual(located["source"]["passages"][0]["page"], 1)
+                self.assertIn(located["quote"], located["source"]["passages"][0]["text"])
+            self.assertEqual(self.worker.topic_wiki.get(self.topic)["home_points"], wiki["home_points"])
+
     def run_task(self, versions, kind="literature_synthesis"):
         input_ = {"source_versions": versions, "question": "How can answers be supported?"}
         if kind == "paper_comparison":

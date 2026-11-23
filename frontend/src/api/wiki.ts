@@ -28,7 +28,7 @@ export type Wiki = {
   revision: string
   status: 'empty' | 'generating' | 'ready' | 'failed'
   map_nodes?: Record<string, {id:string;parent:string;title:string;anchors:string[]}>
-  map_sources?: Record<string, {title:string;quote:string;page?:number;scope?:string}>
+  map_sources?: Record<string, {title:string;quote:string;page?:number;scope?:string;section?:string}>
   map_proposals?: Record<string,{action:string;entry_id:string;text:string}>
   history?: {created:string; changes:{id:string;op:string;title:string}[]}[]
   integrity_issues?: string[]
