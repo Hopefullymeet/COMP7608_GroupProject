@@ -39,7 +39,7 @@ type Tool = 'select' | 'region' | 'ink'
 
 function PdfSheet({ document, scope, page, width, aspectRatio, marks, target, citation, selection, tool,
   onMeasure, setSelection, onRegion, onInk }: {
-  document: PDFDocumentProxy; scope: { topic_id: string; source_version_id: string }
+  document: PDFDocumentProxy; scope: { topic_id: string; source_version_id: string; draft_id?: string }
   page: number; width: number; aspectRatio: number; marks: Mark[]; target?: Rect; citation?: CitationTarget
   selection?: Selection; tool: Tool; onMeasure: (page: number, ratio: number) => void
   setSelection: (selection?: Selection) => void; onRegion: () => void; onInk: (page: number, points: Point[]) => void
@@ -49,7 +49,9 @@ function PdfSheet({ document, scope, page, width, aspectRatio, marks, target, ci
   const [size, setSize] = useState<{ width: number; height: number }>()
   const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
-  const fallback = useRead('source.page', { ...scope, page }, Boolean(error))
+  const sourceFallback = useRead('source.page', { ...scope, page }, Boolean(error && !scope.draft_id))
+  const draftFallback = useRead('draft.page', { topic_id: scope.topic_id, draft_id: scope.draft_id ?? '', version_id: scope.source_version_id, page }, Boolean(error && scope.draft_id))
+  const fallback = draftFallback ?? sourceFallback
   const [drawing, setDrawing] = useState<Point[]>([])
   const surface = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
@@ -210,14 +212,15 @@ async function readOutline(pdf: PDFDocumentProxy) {
   return result
 }
 
-export default function PdfReader({ topic, version, page, target, citation, onAsk, onFind, onWiki, onPaperInfo, session, resume }: {
+export default function PdfReader({ topic, version, page, target, citation, onAsk, onFind, onWiki, onPaperInfo, session, resume, draft, pageOverlay, onPage }: {
   topic: string; version: string; page?: number; target?: Rect; citation?: CitationTarget
+  draft?: string; pageOverlay?: (page: number) => React.ReactNode; onPage?: (page: number) => void
   session?: string; resume?: boolean
   onAsk?: (selection: Selection) => void; onFind?: () => void; onWiki?: () => void; onPaperInfo?: (mode: 'scan' | 'analysis') => void
 }) {
   const { tr } = useLanguage()
   const workspace = useWorkspace()
-  const scope = { topic_id: topic, source_version_id: version }
+  const scope = { topic_id: topic, source_version_id: version, ...(draft && { draft_id: draft }) }
   const { api } = workspace
   const marks = useRead('reader.marks', scope)?.items ?? []
   const [document, setDocument] = useState<PDFDocumentProxy>()
@@ -226,6 +229,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
   const [aspectRatio, setAspectRatio] = useState(0)
   const [ratios, setRatios] = useState<Record<number, number>>({})
   const [current, setCurrent] = useState(page ?? 1)
+  useEffect(() => { onPage?.(current) }, [current, onPage])
   const [renderRange, setRenderRange] = useState([1, 3])
   const [jumpValue, setJumpValue] = useState<string>()
   const [annotationsOpen, setAnnotationsOpen] = useState(false)
@@ -286,7 +290,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
   useEffect(() => {
     let live = true
     let loading: ReturnType<typeof getDocument> | undefined
-    void api.call('reader.pdf', { topic_id: topic, source_version_id: version }).then(async ({ content }) => {
+    void api.call('reader.pdf', { topic_id: topic, source_version_id: version, ...(draft && { draft_id: draft }) }).then(async ({ content }) => {
       if (!live) return
       loading = getDocument({ data: Uint8Array.from(atob(content), (v) => v.charCodeAt(0)) })
       const pdf = await loading.promise
@@ -299,7 +303,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
       }
     }).catch(() => { if (live) setError('The PDF could not be opened.') })
     return () => { live = false; void loading?.destroy().catch(() => undefined) }
-  }, [api, topic, version])
+  }, [api, topic, version, draft])
   useEffect(() => {
     if (error && citation) citation.onMissing()
   }, [error, citation])
@@ -566,11 +570,11 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
       onScroll={(event) => { syncPageWindow(event.currentTarget); queueBookmark(event.currentTarget) }}>
       {error && <p role="alert" className="pt-pdf-loading">{tr(error)}</p>}
       {!document && !error && <p className="pt-pdf-loading" role="status">{tr('Opening PDF…')}</p>}
-      <div className="pt-reader-pages" ref={pageList} style={{ paddingInlineEnd: pageGutter }}>
+      <div className="pt-reader-pages" ref={pageList} style={draft ? { paddingInlineStart: 48 } : { paddingInlineEnd: pageGutter }}>
         {document && width > 0 && Array.from({ length: document.numPages }, (_, index) => {
           const number = index + 1
           const ratio = ratios[number] ?? aspectRatio
-          const pageWidth = Math.max(1, width - 12 - pageGutter) * zoom
+          const pageWidth = Math.max(1, width - 12 - (draft ? 48 : pageGutter)) * zoom
           return <div className="pt-pdf-sheet" key={number} style={{ width: pageWidth, aspectRatio: ratio }}>
             {(number >= renderRange[0] && number <= renderRange[1]) &&
               <PdfSheet document={document} scope={scope} page={number} width={pageWidth} aspectRatio={ratio}
@@ -578,6 +582,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
                 selection={selection?.page === number ? selection : undefined} tool={tool} onMeasure={measure}
                 setSelection={setSelection} onRegion={() => setTool('select')}
                 onInk={(number, points) => void save('ink', [], points, '', '', undefined, number)} />}
+            {tool === 'select' && number >= renderRange[0] && number <= renderRange[1] && pageOverlay?.(number)}
           </div>
         })}
       </div>

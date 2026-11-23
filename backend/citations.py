@@ -627,7 +627,10 @@ class CitationWorkspace:
         if type(page) is not int or not 1 <= page <= draft["page_count"]:
             raise LiteratureError("INVALID_PARAMS", "Invalid manuscript page.")
         row = self.host.db.execute("SELECT content FROM pdf_files WHERE version_id = ?", (draft["version_id"],)).fetchone()
-        return {"page": page, "png": render_pdf_page(row[0], page), "marks": page_marks(row[0], page, draft)}
+        marks = page_marks(row[0], page, draft)
+        if params.get("marks_only") is True:
+            return {"page": page, "marks": marks}
+        return {"page": page, "png": render_pdf_page(row[0], page), "marks": marks}
 
     def jobs(self, topic, params):
         doc, v = self.snapshot(topic, params)

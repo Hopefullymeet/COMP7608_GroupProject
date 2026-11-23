@@ -252,6 +252,16 @@ class TestCitationWorkflow(unittest.TestCase):
         self.assertIn(old_id, [row["report_id"] for row in history])
         self.assertEqual(history[0]["version_id"], draft["versions"][0]["version_id"])
 
+    def test_manuscript_reader_marks(self):
+        draft = self.import_draft()
+        scope = {"draft_id": draft["draft_id"], "source_version_id": draft["versions"][0]["version_id"], "topic_id": self.topic}
+        self.assertTrue(call(self.worker, "reader.pdf", **scope)["content"])
+        saved = call(self.worker, "reader.mark_save", **scope, kind="highlight", page=1,
+                     rects=[[.2, .2, .4, .3]], quote="test")
+        self.assertEqual(call(self.worker, "reader.marks", **scope)["items"], [saved])
+        call(self.worker, "reader.mark_delete", **scope, mark_id=saved["mark_id"], base_revision=saved["revision"])
+        self.assertEqual(call(self.worker, "reader.marks", **scope)["items"], [])
+
     def test_page_marks_keep_parallel_and_repeated_citations_at_their_own_locations(self):
         content = (Path(__file__).resolve().parents[1] / "docs/examples/CV-Citation-Check.pdf").read_bytes()
         draft = call(self.worker, "draft.import", topic_id=self.topic, name="CV.pdf",

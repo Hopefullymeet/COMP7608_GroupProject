@@ -68,7 +68,7 @@ export type CitationTask = T & {
 }
 export type CitationMethods = {
   'draft.import': [Write & T & ({ file_id: string } | { source_version_id: string } | { name: string; text: string } | { name: string; content: string; draft_id?: string }), Manuscript]
-  'draft.page': [T & V & { page: number }, { page: number; png: string; marks?: CitationMark[] }]
+  'draft.page': [T & V & { page: number; marks_only?: boolean }, { page: number; png?: string; marks?: CitationMark[] }]
   'draft.prose': [T & V, { sentences: Snapshot['sentences'] }]
   'draft.resolve_reference': [Write & T & V & { ref_key: string; paper_id: string | null }, Manuscript]
   'audit.history': [Record<string, never>, { items: AuditHistoryItem[] }]

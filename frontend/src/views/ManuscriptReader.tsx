@@ -1,4 +1,6 @@
 import { AuditText } from '../components/AuditText'
+import { lazy, Suspense } from 'react'
+const PdfReader = lazy(() => import('./PdfReader'))
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CitationMark, Report, Snapshot } from '../api/citation'
 import { useLanguage } from '../i18n'
@@ -16,25 +18,34 @@ function SourceQuote({ id }: { id: string }) {
     <EvidenceLink id={id} label={page ? tr('PDF page {0}', page) : tr('View source')}/></div>
 }
 
+function CitationPins({ topic, draft, version, page, selected, onSelect }: {
+  topic: string; draft: string; version: Snapshot; page: number; selected?: CitationMark
+  onSelect: (mark: CitationMark, button: HTMLButtonElement) => void
+}) {
+  const { tr } = useLanguage()
+  const data = useRead('draft.page', { topic_id: topic, draft_id: draft, version_id: version.version_id, page, marks_only: true })
+  return <>{data?.marks?.flatMap((mark,i) => mark.boxes.map(([l,t,r,b],j) =>
+    <button key={i+'-'+j} className={'audit-pin' + (selected?.sentence_id === mark.sentence_id && selected.label === mark.label && selected.boxes[0]?.[0] === mark.boxes[0]?.[0] ? ' current' : '')}
+      aria-label={tr('Citation check')+' '+mark.label+' · '+(version.sentences.find(s => s.id === mark.sentence_id)?.text ?? '')}
+      aria-pressed={selected?.sentence_id === mark.sentence_id && selected.label === mark.label && selected.boxes[0]?.[0] === mark.boxes[0]?.[0]} style={{left:l*100+'%',top:t*100+'%',width:(r-l)*100+'%',height:(b-t)*100+'%'}}
+      onClick={e => onSelect(mark, e.currentTarget)}/>))}</>
+}
+
 export function ManuscriptReader({ topic, draft, version, report, name, onTools, onChoose, busy, onLocalizedCheck }: {
   busy: boolean; onLocalizedCheck: () => void
   topic: string; draft: string; version: Snapshot; report?: Report; name: string; onTools: () => void; onChoose: () => void
 }) {
   const { tr, language } = useLanguage()
   const [page, setPage] = useState(1)
-  const [index, select] = useState<number>()
-  const [loose, selectLoose] = useState<CitationMark>()
+  const [mark, select] = useState<CitationMark>()
   const [wire, setWire] = useState('')
   const frame = useRef<HTMLDivElement>(null)
-  const pin = useRef<HTMLButtonElement>(null)
+  const pin = useRef<HTMLButtonElement | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
-  const data = useRead('draft.page', { topic_id: topic, draft_id: draft, version_id: version.version_id, page })
-  const marks = data?.marks ?? []
-  const mark = loose ?? (index === undefined ? undefined : marks[index])
+  const data = useRead('draft.page', { topic_id: topic, draft_id: draft, version_id: version.version_id, page, marks_only: true })
   const sentence = version.sentences.find(s => s.id === mark?.sentence_id)
-  const remaining = version.sentences.filter(s => s.page === page && !marks.some(m => m.sentence_id === s.id))
-  const close = () => { select(undefined); selectLoose(undefined) }
-  function changePage(value: number) { close(); setPage(value); frame.current?.scrollIntoView({ block: 'nearest' }) }
+  const remaining = version.sentences.filter(s => s.page === page && !data?.marks?.some(m => m.sentence_id === s.id))
+  const close = () => { select(undefined); pin.current = null }
   useEffect(() => {
     if (!mark) return
     function escape(e: KeyboardEvent) { if (e.key === 'Escape' && !document.querySelector('[role="dialog"]')) close() }
@@ -43,38 +54,35 @@ export function ManuscriptReader({ topic, draft, version, report, name, onTools,
   }, [mark])
   useLayoutEffect(() => {
     const root = frame.current, end = heading.current, start = pin.current
-    if (!root || !end || !start || !mark || loose) { setWire(''); return }
+    if (!root || !end || !start || !mark) { setWire(''); return }
     function measure() {
       if (!root || !end || !start) return
       const base = root.getBoundingClientRect(), a = start.getBoundingClientRect(), b = end.getBoundingClientRect()
       const x = a.right-base.left, y = a.bottom-base.top, dest = b.left-base.left-12, top = b.top-base.top+b.height/2
-      const edge = root.querySelector('.audit-sheet')!.getBoundingClientRect().right-base.left+6
+      const reader = root.querySelector('.pt-reader-frame')!.getBoundingClientRect()
+      if (!start.isConnected || a.bottom < reader.top || a.top > reader.bottom || a.right > reader.right || a.left < reader.left) { setWire(''); return }
+      const edge = reader.right-base.left+6
       setWire(dest > edge ? `M ${x} ${y} H ${edge} V ${top} H ${dest}` : '')
     }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(root); observer.observe(start); observer.observe(end)
-    return () => observer.disconnect()
-  }, [index, data, mark, loose])
-  const total = version.page_count ?? page
+    root.addEventListener('scroll', measure, true)
+    return () => { observer.disconnect(); root.removeEventListener('scroll', measure, true) }
+  }, [mark])
   return <section className="audit-reading">
     <div className="audit-reader-tools"><button className="ghost-btn" onClick={onChoose}>‹ {tr('Choose your paper')}</button>
       <strong title={name}>{name}</strong>{report && report.language !== language &&
         <button className="ghost-btn" disabled={busy} onClick={onLocalizedCheck}>{tr('Generate an English report')}</button>}<button className="ghost-btn" onClick={onTools}>{tr('Audit tools')}</button></div>
     <div className={'audit-spread' + (mark ? ' inspecting' : '')} ref={frame}>
-      <div className="audit-sheet">{data && <>
-        <img src={'data:image/png;base64,' + data.png} alt={tr('Original PDF page {0}', page)}/>
-        {marks.flatMap((m,i) => m.boxes.map(([l,t,r,b],j) =>
-          <button className={'audit-pin' + (i === index ? ' current' : '')} key={i+'-'+j}
-            ref={i === index && j === m.boxes.length-1 ? pin : undefined}
-            aria-label={tr('Citation check')+' '+m.label+' · '+version.sentences.find(s => s.id === m.sentence_id)?.text}
-            aria-pressed={i === index} style={{left:(100*l)+'%',top:(100*t)+'%',width:(100*(r-l))+'%',height:(100*(b-t))+'%'}}
-            onClick={() => { selectLoose(undefined); select(i) }}/>))}
-      </>}</div>
+      <Suspense fallback={<p>{tr('Opening PDF…')}</p>}><PdfReader topic={topic} version={version.version_id} draft={draft} onPage={setPage}
+        pageOverlay={number => <CitationPins topic={topic} draft={draft} version={version} page={number} selected={mark}
+          onSelect={(value, button) => { pin.current = button; select(value) }}/>} /></Suspense>
       {wire && mark && <svg className="audit-wire" aria-hidden="true"><path d={wire}/></svg>}
       {mark && <aside className="audit-inspector" aria-label={tr('Citation check')+' '+mark.label}>
         <header><h3 ref={heading}>{tr('Citation check')} {mark.label}</h3>
           <button className="icon-btn" aria-label={tr('Close')} onClick={close}>×</button></header>
+        <div className="audit-inspector-body" key={mark.sentence_id + mark.label}>
         {sentence && <p className="audit-sentence">{sentence.text}</p>}
         {report?.summaries?.[mark.sentence_id] && <AuditText text={report.summaries[mark.sentence_id]}/>}
         {mark.keys.map(key => {
@@ -92,12 +100,11 @@ export function ManuscriptReader({ topic, draft, version, report, name, onTools,
               {n.link && <a href={n.link} target="_blank" rel="noreferrer">{tr('Source link')}</a>}</details>)}
           </section>
         })}
+        </div>
       </aside>}
     </div>
-    <nav className="audit-turn"><button disabled={page<=1} className="ghost-btn" aria-label={tr('Previous page')} onClick={() => changePage(page-1)}>‹</button>
-      {page} / {total}<button disabled={page>=total} className="ghost-btn" aria-label={tr('Next page')} onClick={() => changePage(page+1)}>›</button></nav>
     {data && remaining.length > 0 && <details><summary>{tr('Citations without a page marker')}</summary>
-      {remaining.map(s => <button className="audit-option" key={s.id} onClick={() => { select(undefined); selectLoose({
+      {remaining.map(s => <button className="audit-option" key={s.id} onClick={() => { pin.current = null; select({
         sentence_id:s.id, label:'', keys:[...s.cites,...(s.unresolved ?? [])], boxes:[] }) }}>{s.text}</button>)}</details>}
   </section>
 }

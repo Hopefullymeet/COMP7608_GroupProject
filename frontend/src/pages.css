@@ -447,3 +447,13 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .audit-prose ul, .audit-prose ol { padding-inline-start: 1.5em; }
 .audit-prose li + li { margin-top: .25em; }
 .audit-prose pre { overflow-x: auto; }
+
+.audit-spread > .pt-reader { align-self: start; }
+.audit-spread .pt-pdf-sheet { position: relative; }
+.audit-spread .audit-pin { z-index: 3; }
+.audit-spread .pt-pdf-rail { inset-inline: 4px auto; }
+.audit-spread .pt-pdf-menu { left: calc(100% + 6px); right: auto; }
+.audit-inspector { align-self: stretch; contain: size; min-height: 0; display: flex; flex-direction: column; }
+.audit-inspector header { flex: none; }
+.audit-inspector-body { overflow: auto; overscroll-behavior: contain; min-height: 0; }
+@media(max-width:800px) { .audit-inspector { contain: none; max-height: 45dvh; } }

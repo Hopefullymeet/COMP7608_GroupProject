@@ -297,18 +297,24 @@ class Reader:
         host.db.execute("CREATE INDEX IF NOT EXISTS reader_translation_source "
                         "ON reader_translations(topic_id, version_id, page)")
 
-    def content(self, topic, version):
-        source = self.host.source(version, topic)
+    def reader_document(self, topic, version, draft_id=None):
+        if draft_id is None:
+            return self.host.source(version, topic)
+        doc, snapshot = self.host.citations.snapshot(topic, {"draft_id": draft_id, "version_id": version})
+        return {"page_count": snapshot["page_count"], "name": doc["name"]}
+
+    def content(self, topic, version, draft_id=None):
+        source = self.reader_document(topic, version, draft_id)
         row = self.host.db.execute("SELECT content FROM pdf_files WHERE version_id = ?", (version,)).fetchone()
         if not row:
             raise LiteratureError("NOT_FOUND", "The original PDF is unavailable.", "refresh_data", -32001)
         return source, row[0]
 
-    def location(self, topic, params):
+    def location(self, topic, params, draft_id=None):
         version, page = params.get("source_version_id"), params.get("page")
         if not isinstance(version, str):
             raise LiteratureError("INVALID_PARAMS", "Select a paper version.")
-        source, content = self.content(topic, version)
+        source, content = self.content(topic, version, draft_id)
         if type(page) is not int or not 1 <= page <= source["page_count"]:
             raise LiteratureError("INVALID_PARAMS", "Select a page of the original PDF.")
         return version, page, content
@@ -384,8 +390,8 @@ class Reader:
         return bool(self.vision_model and not self.vision_model.lower().endswith(("-cloud", ":cloud"))
                     and 1 <= self.vision_port <= 65535)
 
-    def list(self, topic, version):
-        self.host.source(version, topic)
+    def list(self, topic, version, draft_id=None):
+        self.reader_document(topic, version, draft_id)
         return {"items": [json.loads(row[0]) for row in self.host.db.execute(
             "SELECT data FROM reader_marks WHERE topic_id=? AND version_id=? ORDER BY rowid", (topic, version))]}
 
@@ -422,8 +428,8 @@ class Reader:
             raise LiteratureError("LAYOUT_FAILED", "The embedded PDF annotations could not be read.") from None
         return {"source_version_id": version, "page": page_number, "items": annotations, "truncated": truncated}
 
-    def mark(self, topic, version, mark_id):
-        self.host.source(version, topic)
+    def mark(self, topic, version, mark_id, draft_id=None):
+        self.reader_document(topic, version, draft_id)
         row = self.host.db.execute("SELECT data FROM reader_marks WHERE id=? AND topic_id=? AND version_id=?",
                                    (mark_id, topic, version)).fetchone()
         if not row:
@@ -431,9 +437,9 @@ class Reader:
         return json.loads(row[0])
 
     def save(self, topic, params):
-        version, page, _ = self.location(topic, params)
+        version, page, _ = self.location(topic, params, params.get("draft_id"))
         mark_id, revision = params.get("mark_id"), params.get("base_revision")
-        previous = self.mark(topic, version, mark_id) if mark_id else None
+        previous = self.mark(topic, version, mark_id, params.get("draft_id")) if mark_id else None
         if previous and previous["revision"] != revision:
             raise LiteratureError("STALE_REVISION", "Reload the annotation before editing.", "refresh_data", -32020)
         kind, quote, note = params.get("kind"), params.get("quote", ""), params.get("note", "")
@@ -460,16 +466,16 @@ class Reader:
         return mark
 
     def delete(self, topic, params):
-        mark = self.mark(topic, params.get("source_version_id"), params.get("mark_id"))
+        mark = self.mark(topic, params.get("source_version_id"), params.get("mark_id"), params.get("draft_id"))
         if mark["revision"] != params.get("base_revision"):
             raise LiteratureError("STALE_REVISION", "Reload the annotation before deleting.", "refresh_data", -32020)
         self.host.db.execute("DELETE FROM reader_marks WHERE id=?", (mark["mark_id"],))
         return {"deleted": True}
 
-    def export(self, topic, version):
-        source, content = self.content(topic, version)
+    def export(self, topic, version, draft_id=None):
+        source, content = self.content(topic, version, draft_id)
         engine = pdf_engine()
-        marks = self.list(topic, version)["items"]
+        marks = self.list(topic, version, draft_id)["items"]
         palette = {"amber": (.97, .72, .18), "blue": (.35, .53, .8), "green": (.29, .64, .51), "rose": (.81, .32, .48)}
         with engine.open(stream=content, filetype="pdf") as document:
             for mark in marks:
@@ -492,8 +498,8 @@ class Reader:
                     annotation.set_info(content=mark["note"])
                 annotation.update()
             exported = document.tobytes(garbage=3, deflate=True)
-        paper = self.host.get("paper", source["paper_id"])
-        title = re.sub(r'[\\/:*?"<>|\r\n]+', "-", paper["title"])[:100]
+        name = source["name"] if draft_id else self.host.get("paper", source["paper_id"])["title"]
+        title = re.sub(r'[\\/:*?"<>|\r\n]+', "-", name)[:100]
         return {"name": f"{title}-annotated.pdf", "content": base64.b64encode(exported).decode("ascii")}
 
     def material(self, topic, params):

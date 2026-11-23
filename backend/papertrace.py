@@ -580,14 +580,14 @@ class Worker:
             return (self.research.document(source) if method == "source.read"
                     else self.research.page(source, params.get("page")))
         if method == "reader.pdf":
-            _, pdf = self.reader.content(self.topic(params), required(params, "source_version_id"))
+            _, pdf = self.reader.content(self.topic(params), required(params, "source_version_id"), params.get("draft_id"))
             return {"content": base64.b64encode(pdf).decode("ascii")}
         if method == "reader.embedded_marks":
             return self.reader.embedded_marks(self.topic(params), params)
         if method == "reader.translations":
             return self.reader.translations(self.topic(params), params)
         if method == "reader.marks":
-            return self.reader.list(self.topic(params), required(params, "source_version_id"))
+            return self.reader.list(self.topic(params), required(params, "source_version_id"), params.get("draft_id"))
         if method == "reader.mark_save":
             return self.reader.save(self.topic(params), params)
         if method == "reader.mark_delete":
@@ -605,7 +605,7 @@ class Worker:
             required(params, "mark_id")
             return self.reader.save_mark_to_wiki(self.topic(params), params)
         if method == "reader.export":
-            return self.reader.export(self.topic(params), required(params, "source_version_id"))
+            return self.reader.export(self.topic(params), required(params, "source_version_id"), params.get("draft_id"))
         if method == "visual.search":
             return self.reader.search(self.topic(params), params)
         if method == "visual.objects":
