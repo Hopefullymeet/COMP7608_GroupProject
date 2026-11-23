@@ -314,13 +314,25 @@ export function createMock(): Client {
               },
             ],
       }
-      const source = input.input.sources[0]
+      const [source, ...extraSources] = input.input.sources
+      const fullTextAvailable = (versionId: string) =>
+        state.library.some((paper) =>
+          paper.source_versions.some(
+            (version) => version.source_version_id === versionId && version.available_scope === 'full_text',
+          ),
+        ) && Boolean(state.shelf.documents[versionId]?.passages.length)
+      const missingFullText = input.input.sources.some(
+        (source) => source.requested_scope === 'full_text' && !fullTextAvailable(source.source_version_id),
+      )
       if (source.source_version_id !== 'v1') {
         const doc = state.shelf.documents[source.source_version_id]
         const p =
           doc?.passages.find((p) => p.passage_id === input.input.selection?.passage_id) ?? doc?.passages[0]
+        const scope = source.requested_scope === 'full_text' && !fullTextAvailable(source.source_version_id)
+          ? 'abstract'
+          : source.requested_scope
         answer.read_sources = [
-          { source_version_id: source.source_version_id, read_scope: p ? source.requested_scope : 'none' },
+          { source_version_id: source.source_version_id, read_scope: p ? scope : 'none' },
         ]
         answer.sentences = p
           ? [
@@ -332,8 +344,32 @@ export function createMock(): Client {
             ]
           : [{ text: 'Material unavailable.', assessment: 'evidence_not_established', anchor_ids: [] }]
       }
-      for (const extra of input.input.sources.slice(1))
+      for (const extra of extraSources)
         answer.read_sources.push({ source_version_id: extra.source_version_id, read_scope: 'none' })
+      let outcome: Finished
+      if (missingFullText) {
+        const issue = {
+          reason: 'FULL_TEXT_REQUIRED',
+          retryable: false,
+          next_action: 'attach_full_text',
+          details: { read_sources: answer.read_sources },
+        }
+        if (!answer.sentences.some((sentence) => sentence.assessment === 'supported'))
+          return [{ type: 'task.finished', payload: { status: 'failed', issue } }]
+        outcome = { status: 'partial', result: answer, issue }
+      } else if (extraSources.length) {
+        outcome = {
+          status: 'partial',
+          result: answer,
+          issue: {
+            reason: 'Fixture reads one selected version',
+            retryable: false,
+            next_action: 'review_sources',
+          },
+        }
+      } else {
+        outcome = { status: 'completed', result: answer }
+      }
       const sentence = answer.sentences[0].text
       return [
         {
@@ -342,21 +378,7 @@ export function createMock(): Client {
         },
         { type: 'answer.delta', payload: { text: sentence.slice(0, 28) } },
         { type: 'answer.delta', payload: { text: sentence.slice(28) } },
-        {
-          type: 'task.finished',
-          payload:
-            input.input.sources.length === 1
-              ? { status: 'completed', result: answer }
-              : {
-                  status: 'partial',
-                  result: answer,
-                  issue: {
-                    reason: 'Fixture reads one selected version',
-                    retryable: false,
-                    next_action: 'review_sources',
-                  },
-                },
-        },
+        { type: 'task.finished', payload: outcome },
       ]
     }
     const parent =

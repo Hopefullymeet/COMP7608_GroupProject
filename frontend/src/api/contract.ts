@@ -106,6 +106,7 @@ export class RpcError extends Error {
 export function errorText(error: unknown) {
   if (error instanceof RpcError) {
     const actions: Record<string, string> = {
+      attach_full_text: 'Attach the full text in Library before asking again.',
       restore_source: 'Restore the original material and try opening the citation again.',
       skip_candidate: 'Continue with another candidate.',
       configure_service: 'Check the service configuration.',
