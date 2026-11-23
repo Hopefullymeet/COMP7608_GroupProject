@@ -6,7 +6,7 @@ import { useLanguage } from '../i18n'
 import type { WikiSource } from './WikiPage'
 import './wiki-directory.css'
 
-export function WikiDirectory({wiki, title, edit, Source}: {wiki: Wiki; title: string; edit: (p: WikiEdit) => Promise<boolean>; Source: WikiSource['Source']}) {
+export function WikiDirectory({wiki, title, edit, Source, refresh, busy}: {wiki: Wiki; title: string; edit: (p: WikiEdit) => Promise<boolean>; Source: WikiSource['Source']; refresh:()=>void; busy:boolean}) {
   const {language} = useLanguage()
   const t = (zh: string, en: string) => language === 'zh-CN' ? zh : en
   const storageKey = 'papertrace.wiki.directory.' + wiki.topic_id
@@ -65,6 +65,22 @@ export function WikiDirectory({wiki, title, edit, Source}: {wiki: Wiki; title: s
     <header><h2>{page?pageName(page):nodes[folder]?.title || t('主题目录','Topic contents')}</h2>
       {!page && <div>{controls(folder)}</div>}</header>
     {!folder && !page && root!==title && <p className="wiki-intro">{root}</p>}
+    {!folder && !page && <section className="wiki-home-points">
+      <header><h3>{t('研究要点','Research findings')}</h3>
+        <button className="link-btn" disabled={busy} onClick={refresh}>{busy?t('整理中…','Updating…'):t('重新整理','Refresh findings')}</button></header>
+      {(wiki.home_points ?? []).map(id=>{
+        const entry=wiki.entries.find(e=>e.entry_id===id)
+        if (!entry) return null
+        const receipt=entry.home_receipt
+        return <article className="wiki-finding" key={id}><p>{entry.text}</p>
+          <details><summary>{t('依据与生成记录','Evidence and provenance')}</summary>
+          <p>{receipt ? receipt.model+' · '+new Date(receipt.created).toLocaleString() :
+            t('本地规则从已有研究记录中选取。','Selected locally from existing findings.')}</p>
+          {receipt && <><p>{receipt.reason}</p><small>{t('整理批次','Run')} · {receipt.run_id}</small></>}
+          {entry.anchor_ids.map(evidence)}</details></article>
+      })}
+      {!wiki.home_points?.length && <p className="fine">{t('有正文依据的研究要点会出现在这里。','Findings with full-text evidence appear here.')}</p>}
+    </section>}
     {page ? page.entries.filter(id=>nodes[id]).map(id=><article className="wiki-finding" key={id}>
       <p>{nodes[id].title}</p><div className="wiki-finding-tools"><details><summary>{t('原文依据','Evidence')} · {nodes[id].anchors.length}</summary>{nodes[id].anchors.map(evidence)}</details>
       <div>{controls(id)}</div></div>

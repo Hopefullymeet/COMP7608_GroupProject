@@ -335,8 +335,8 @@ class TopicWiki:
         else:
             raise invalid("Check the node, text and deletion confirmation.")
 
-    def map_sources(self, topic, nodes):
-        ids = {a for n in nodes.values() for a in n["anchors"]}
+    def map_sources(self, topic, nodes, extra=()):
+        ids = {a for n in nodes.values() for a in n["anchors"]} | set(extra)
         if not ids:
             return {}
         papers = {p["paper_id"]: p["title"] for p in self.worker.rows("paper") if topic in p["topic_ids"]}
@@ -426,7 +426,26 @@ class TopicWiki:
         model = self.model()
         hidden = ("fingerprint", "generator", "observed", "captured_since")
         result = {k: v for k, v in wiki.items() if k not in hidden}
-        result["map_sources"] = self.map_sources(topic, wiki.get("map_nodes", {}))
+        candidates = [e for e in wiki["entries"] if e["kind"] == "finding" and e["anchor_ids"]]
+        result["map_sources"] = self.map_sources(topic, wiki.get("map_nodes", {}),
+                                                 (a for e in candidates for a in e["anchor_ids"]))
+        result["home_points"] = []
+        seen_papers = set()
+        for entry in candidates:
+            anchors = entry["anchor_ids"]
+            sources = [result["map_sources"].get(a, {}) for a in anchors]
+            if not all(s.get("scope") == "full_text" and s.get("quote") and s.get("page") for s in sources):
+                continue
+            papers = {s["paper_id"] for s in sources}
+            if wiki.get("home_selection") == "model":
+                if not entry.get("home_receipt") or entry["origin"] != "summary":
+                    continue
+            elif papers <= seen_papers:
+                continue
+            result["home_points"].append(entry["entry_id"])
+            seen_papers.update(papers)
+            if len(result["home_points"]) == 3:
+                break
         result["documents"] = self.documents(wiki.get("map_nodes", {}), result["map_sources"])
         result["history"] = [{"created": created, "changes": json.loads(changes)} for created, changes in
                              self.worker.db.execute("SELECT created,changes FROM wiki_history WHERE topic=? ORDER BY id DESC LIMIT 20", (topic,))]
@@ -563,7 +582,9 @@ class TopicWiki:
             model = None
         try:
             if model:
-                draft = self.model_summary(model, material, kept, captured)
+                with host.lock:
+                    evidence = self.map_sources(topic, {}, (a for e in entries for a in e["anchor_ids"]))
+                draft = self.model_summary(model, dict(material, home_evidence=evidence), kept, captured)
             else:  # nothing rewrites entries offline, so earlier summary entries stay
                 draft = local_summary(material, [e for e in entries if e not in kept], has_focus=any(
                     e["kind"] == "focus" for e in entries))
@@ -577,11 +598,15 @@ class TopicWiki:
             for sentence in answer["sentences"]:
                 known.update(sentence["anchor_ids"])
         fresh = []
+        run_id = self.identifier()
         for row in draft["entries"]:
             text = clip(row.get("text"))
             if text and row.get("kind") in KINDS and not any(e["text"] == text for e in kept + fresh):
                 anchors = [a for a in row.get("anchor_ids", []) if isinstance(a, str) and a in known]
                 fresh.append(row["entry"] if "entry" in row else self.entry(row["kind"], text, list(dict.fromkeys(anchors)), "summary"))
+                if model and row.get("homepage") is True and row["kind"] == "finding" and anchors and len(anchors) == len(row.get("anchor_ids", [])):
+                    fresh[-1]["home_receipt"] = {"model": model["model"], "run_id": run_id, "created": self.now(),
+                                                  "reason": clip(row.get("reason")), "text": text}
         with host.lock:
             if host.closing.is_set():
                 return
@@ -593,6 +618,7 @@ class TopicWiki:
                 current_kept = [e for e in wiki["entries"] if e["pinned"] or e["origin"] in ("user", "chat")]
                 wiki.update(
                     revision=self.identifier(), status="ready", generated_at=self.now(),
+                    home_selection="model" if model else "local",
                     headline=clip(draft["headline"], 300),
                     summary=[clip(p, 1200) for p in draft["summary"] if clip(p)][:4],
                     entries=(current_kept + [e for e in later if e not in current_kept] + fresh)[:MAX_ENTRIES],
@@ -693,7 +719,11 @@ class TopicWiki:
             '"entries":[{"kind":"focus|paper|finding|preference|open_question","text":"one self-contained sentence",'
             '"anchor_ids":["anchor ID"]}]}. Consolidate observations: merge duplicates, keep one paper entry per paper, '
             "keep their anchor IDs, and write at most 24 entries. Cite only anchor IDs present in the input. "
-            "user_entries were confirmed by the user: respect them and do not repeat them."
+            "user_entries were confirmed by the user: respect them and do not repeat them. "
+            "Choose zero to three findings for the topic homepage. For those entries add homepage:true "
+            "and reason explaining their relevance to the user's research question. Name the subject, "
+            "report concrete results or limitations, and keep all qualifying conditions. Prefer complementary "
+            "findings backed by original body passages. Never choose an abstract-only finding."
         )
 
         def parse(result):

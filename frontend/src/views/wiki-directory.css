@@ -18,3 +18,8 @@
 .wiki-directory textarea {width:100%;box-sizing:border-box}
 .wiki-unread {display:inline-block;background:#4185e9;border-radius:50%;width:8px;height:8px;flex:none}
 .wiki-update {display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-3)}
+.wiki-home-points {margin:22px 0}
+.wiki-home-points header {align-items:center}
+.wiki-home-points h3 {font-size:15px;margin:0}
+.wiki-home-points details {font-size:13px;color:var(--ink-2)}
+.wiki-home-points summary {cursor:pointer;color:var(--ink-3)}

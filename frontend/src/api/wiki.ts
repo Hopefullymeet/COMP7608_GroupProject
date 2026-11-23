@@ -7,6 +7,7 @@ export type WikiKind = 'focus' | 'paper' | 'finding' | 'preference' | 'open_ques
 export type WikiOrigin = 'qa' | 'pdf' | 'paper' | 'note' | 'finding' | 'summary' | 'chat' | 'user'
 export type WikiEntry = {
   entry_id: string
+  home_receipt?: {model:string;run_id:string;created:string;reason:string;text:string}
   kind: WikiKind
   text: string
   anchor_ids: string[]
@@ -31,6 +32,7 @@ export type Wiki = {
   map_proposals?: Record<string,{action:string;entry_id:string;text:string}>
   history?: {created:string; changes:{id:string;op:string;title:string}[]}[]
   integrity_issues?: string[]
+  home_points?: string[]
   documents?: Record<string,{id:string;title:string;entries:string[]}[]>
   map_title?: string
   map_questions?: string[]
