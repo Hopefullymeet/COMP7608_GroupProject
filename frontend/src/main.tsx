@@ -13,6 +13,7 @@ import { createMock } from './api/mock'
 import { MainlineProvider } from './data/MainlineProvider'
 import { WindowControls } from './components/WindowControls'
 import { LanguageProvider } from './i18n'
+import { OverlayScrollbars } from './components/OverlayScrollbars'
 import './styles.css'
 import './pages.css'
 import './mainline.css'
@@ -25,6 +26,7 @@ const app = <App liveResearch={useRpc} comparison={api?<ComparePage/>:undefined}
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <LanguageProvider>
+      <OverlayScrollbars />
       <StoreProvider>
         {api ? <WorkspaceProvider api={api} demo={demo}><MainlineProvider api={api} demo={demo}>{app}{desktop && <FirstRunSettings/>}</MainlineProvider></WorkspaceProvider> : app}
       </StoreProvider>

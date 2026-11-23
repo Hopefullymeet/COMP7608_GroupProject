@@ -204,3 +204,4 @@ Reading answers now resolve version IDs to paper aliases or titles and localize 
 - 引用定位后显示三点气泡，点击后展开证据。关闭详情保留原文定位。
 - 侧栏会话不再显示日期，最近会话的副标题仅显示所属主题。
 - 新建空会话默认收起论文，展开后左右等宽，仍支持拖动。桌面应用图标改用抱书水獭。
+- 工作区滚动条悬浮显示，移除页面预留槽。长短列表切换与拖动验证通过。

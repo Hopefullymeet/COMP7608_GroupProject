@@ -131,7 +131,6 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ---------- library ---------- */
 /* Keep columns fixed when the selected paper changes vertical overflow. */
-.library-page > .page-body { scrollbar-gutter: stable; }
 .lib-tools { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 14px; }
 .lib-select { color: var(--ink-2); }
 .lib-reading-actions { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
@@ -315,7 +314,7 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ---------- Topic Wiki ---------- */
 .wiki-page .page-head .lib-select { max-width: min(320px, 40vw); }
-.wiki-scroll { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
+.wiki-scroll { flex: 1; min-height: 0; overflow-y: auto; }
 .wiki-column { max-width: 720px; margin: 0 auto; padding: 28px 28px 24px; min-height: 100%; display: flex; flex-direction: column; }
 
 .wiki-generating { flex: 1; min-height: 360px; display: grid; place-content: center; justify-items: center; gap: 14px; color: var(--ink-4); }
@@ -406,7 +405,6 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .audit-manuscripts button { overflow:hidden; max-width:24ch; white-space:nowrap; text-overflow:ellipsis }
 .audit-manuscripts [aria-current=page] { font-weight:650; text-decoration:underline; text-underline-offset:.3em }
 
-.page-body:has(> .audit-chooser) { scrollbar-gutter: stable; }
 .audit-chooser { max-width: 42rem; margin: clamp(20px, 5vh, 48px) auto; padding: 0 0 32px; }
 .audit-chooser h2 { margin: 0 0 16px; font: 600 clamp(22px, 2.4vw, 28px)/1.3 var(--serif); }
 .audit-chooser .fine { margin: -8px 0 20px; }

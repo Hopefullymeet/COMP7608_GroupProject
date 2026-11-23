@@ -30,15 +30,17 @@ html:root {
   --r: 10px;
 }
 
-* { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
-@supports selector(::-webkit-scrollbar) {
-  * { scrollbar-width: auto; scrollbar-color: auto; }
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border: 1px solid transparent; border-radius: 999px; background-clip: padding-box; }
-  ::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:active { background-color: var(--scroll-thumb-hover); }
-  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
-  ::-webkit-scrollbar-button { display: none; }
+* { box-sizing: border-box; scrollbar-width: none; }
+::-webkit-scrollbar { display: none; }
+.overlay-thumb {
+  position: fixed; z-index: 1000; touch-action: none; user-select: none;
+  background: transparent; border: 2px solid transparent; border-radius: 999px;
 }
+.overlay-thumb::after {
+  content: ''; display: block; width: 100%; height: 100%; border-radius: inherit;
+  background: var(--scroll-thumb); pointer-events: none;
+}
+.overlay-thumb:hover::after, .overlay-thumb:active::after { background: var(--scroll-thumb-hover); }
 html, body, #root { height: 100%; margin: 0; }
 body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
@@ -153,7 +155,7 @@ code { font: 12px/1.45 var(--mono); }
 .dropped small { color: var(--warn); font-size: 12px; }
 
 /* ---------- home ---------- */
-.home { flex: 1; display: flex; overflow-y: auto; scrollbar-gutter: stable both-edges; }
+.home { flex: 1; display: flex; overflow-y: auto; }
 .home-inner { width: 100%; max-width: 1180px; min-width: 0; margin: auto; padding: 56px clamp(16px, 3vw, 40px) 112px; }
 .topic-form { display: grid; gap: 22px; }
 .topic-form-head h1 { display: flex; align-items: center; gap: 10px; font: 600 34px/1.15 var(--serif); letter-spacing: -0.02em; }
