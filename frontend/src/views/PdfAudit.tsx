@@ -4,7 +4,10 @@ import { pickPdfs, pdfInput, downloadText } from '../api/pdf'
 import type { Decision, Report } from '../api/citation'
 import type { Located } from '../api/library'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
+import { useStore } from '../data/store'
 import { EvidenceLink } from './Notes'
+
+const originLabel = { original: 'Original study evidence', secondary: 'Reported from another study', unclear: 'Evidence origin unclear' }
 
 const assessment = {
   supported: 'Supported', partial: 'Partially supported', conflict: 'Conflicting evidence',
@@ -17,11 +20,13 @@ export function PdfAudit({ topic }: { topic: string }) {
   const scope = { topic_id: topic }
   const items = useRead('draft.list', scope)?.items ?? []
   const papers = useRead('library.list', scope)?.items ?? []
-  const [active, setActive] = useState('')
+  const { state } = useStore()
+  const [active, setActive] = useState(state.route.view === 'check' ? state.route.draftId ?? '' : '')
+  const [question, setQuestion] = useState('')
   const [versionId, selectVersion] = useState('')
   const [reportId, selectReport] = useState('')
   const [selected, select] = useState<string[]>([])
-  const [page, setPage] = useState(0)
+  const [page, setPage] = useState(1)
   const [saved, setSaved] = useState<string[]>([])
   const [exported, setExported] = useState<{ name: string; text: string }[]>([])
   const [kind, setKind] = useState<Report['kind']>('citation_audit')
@@ -60,19 +65,22 @@ export function PdfAudit({ topic }: { topic: string }) {
     citationCount += count
   }
 
-  function reset() { selectVersion(''); selectReport(''); select([]); setPage(0); setExported([]); setSource(undefined); setLimit(40) }
+  function reset() { setQuestion(''); selectVersion(''); selectReport(''); select([]); setPage(1); setExported([]); setSource(undefined); setLimit(40) }
 
-  async function importPdf(newVersion = false) {
+  async function importPdf(newVersion = false, sourceVersion?: string, dropped?: File) {
     try {
-      const [file] = await pickPdfs(false)
-      if (!file) return
-      const input = await pdfInput(file)
-      if (!('content' in input)) return
+      const file = sourceVersion ? undefined : dropped ?? (await pickPdfs(false))[0]
+      const input = sourceVersion ? { source_version_id: sourceVersion } : file ? await pdfInput(file) : undefined
+      if (!input || !('content' in input || 'source_version_id' in input)) return
       const result = await workspace.write('draft.import', {
         ...scope, ...input, draft_id: newVersion ? doc?.draft_id : undefined,
       })
       setActive(result.draft_id)
       reset()
+      setKind('citation_audit')
+      const first = result.versions[0]
+      if (first?.sentences.length && !first.reports.some(r => r.whole_document))
+        await wholeAudit(result.draft_id, first)
     } catch (error) { workspace.report(error) }
   }
 
@@ -96,6 +104,16 @@ export function PdfAudit({ topic }: { topic: string }) {
     } catch (error) { workspace.report(error) }
   }
 
+  async function wholeAudit(draftId: string, snapshot: NonNullable<typeof version>, ask?: string) {
+    const library = await workspace.api.call('library.list', scope)
+    await workspace.prepare({ ...scope, kind: 'citation_audit', input: {
+      draft_id: draftId, version_id: snapshot.version_id, whole_document: true,
+      sentence_ids: snapshot.sentences.map(s => s.id),
+      source_versions: library.items.flatMap(p => p.source_versions.slice(0, 1).map(v => v.source_version_id)),
+      ...(ask && report ? { question: ask, report_id: report.report_id } : {}),
+    } })
+  }
+
   function assignedSources(ids: string[]) {
     const keys = new Set(version?.sentences.filter((sentence) => ids.includes(sentence.id)).flatMap((sentence) => sentence.cites))
     return [...new Set(bibliography.flatMap((ref) => ref.target_version_id && keys.has(ref.key) ? [ref.target_version_id] : []))]
@@ -112,16 +130,28 @@ export function PdfAudit({ topic }: { topic: string }) {
   }
 
   return <div className="synthesis-workbench">
-    <section className="synthesis-main">
+    <section className="synthesis-main" onDragOver={e => e.preventDefault()} onDrop={e => {
+      e.preventDefault()
+      const file = e.dataTransfer.files[0]
+      if (!workspace.busy && file?.name.toLowerCase().endsWith('.pdf')) void importPdf(false, undefined, file)
+    }}>
       <div className="lib-tools">
         <button className="primary" disabled={workspace.busy} onClick={() => void importPdf()}>{tr('Add PDF manuscript')}</button>
+        {papers.length > 0 && <select aria-label={tr('Select a library PDF')} value="" disabled={workspace.busy}
+          onChange={e => { if (e.target.value) void importPdf(false, e.target.value) }}>
+          <option value="">{tr('Select a library PDF')}</option>
+          {papers.filter(p => p.source_versions[0]?.available_scope === 'full_text').map(p =>
+            <option key={p.paper_id} value={p.source_versions[0].source_version_id}>{p.title}</option>)}
+        </select>}
         {doc && <button className="ghost-btn" disabled={workspace.busy} onClick={() => void importPdf(true)}>{tr('Add version')}</button>}
       </div>
       {doc && version && <>
         <div className="lib-tools">
-          <select aria-label={tr('Manuscript')} value={doc.draft_id} onChange={(event) => { setActive(event.currentTarget.value); reset() }}>
-            {items.map((item) => <option key={item.draft_id} value={item.draft_id}>{item.name}</option>)}
-          </select>
+          <nav className="audit-manuscripts" aria-label={tr('Manuscript topics')}>
+            {items.map(item => <button key={item.draft_id} className="ghost-btn"
+              aria-current={doc.draft_id === item.draft_id ? 'page' : undefined} title={item.name}
+              onClick={() => { setActive(item.draft_id); reset() }}>{item.name}</button>)}
+          </nav>
           {doc.versions.length > 1 && <select aria-label={tr('Version')} value={version.version_id} onChange={(event) => {
             reset(); selectVersion(event.currentTarget.value)
           }}>{doc.versions.map((item, i) => <option value={item.version_id} key={item.version_id}>
@@ -135,6 +165,8 @@ export function PdfAudit({ topic }: { topic: string }) {
             {tr(mode === 'citation_audit' ? 'Citation check' : 'Citation suggestions')}
           </button>)}
         </div>
+        {!suggesting && version.sentences.length > 0 && <button className="primary" disabled={workspace.busy}
+          onClick={() => void wholeAudit(doc.draft_id, version).catch(workspace.report)}>{affected.length ? tr('Recheck affected sentences ({0})', affected.length) : tr('Check whole manuscript')}</button>}
         {!suggesting && version.warnings.map((warning) => <p className="fine" key={warning}>{tr(warning)}</p>)}
         {suggesting ? <details open className="synthesis-item">
           <summary>{tr('Papers to search')}</summary>
@@ -144,10 +176,10 @@ export function PdfAudit({ topic }: { topic: string }) {
               onChange={() => selectPapers((old) => old.includes(paper.paper_id)
                 ? old.filter((id) => id !== paper.paper_id) : old.length < 12 ? [...old, paper.paper_id] : old)} /> {paper.title}
           </label>)}
-        </details> : <details open className="synthesis-item">
+        </details> : <details className="synthesis-item">
           <summary>{tr('Citation mapping')}</summary>
           {bibliography.map((ref) => <div className="synthesis-claim" key={ref.key}>
-            <p>{ref.title || ref.text}</p>
+            <p>{ref.title || ref.text}{ref.link && <a href={ref.link} target="_blank" rel="noreferrer"> ↗</a>}</p>
             {ref.status === 'ambiguous' && <p className="fine">{tr('More than one source matches.')}</p>}
             <label>{tr('Source paper')}{' '}
               <select value={papers.find((paper) => paper.source_versions.some((v) => v.source_version_id === ref.target_version_id))?.paper_id ?? ''}
@@ -162,11 +194,11 @@ export function PdfAudit({ topic }: { topic: string }) {
             </label>
           </div>)}
         </details>}
-        {!!sentences.length && <div className="synthesis-item">
-          <h3>{tr('Select sentences to check')}</h3>
+        {!!sentences.length && <details className="synthesis-item">
+          <summary>{tr('Select sentences to check')}</summary>
           {recheckIds.length > 0 && <div className="lib-tools">
             <button className="primary" disabled={workspace.busy || (suggesting && !approved.length)}
-              onClick={() => run(recheckIds)}>{tr('Recheck affected sentences ({0})', recheckIds.length)}</button>
+              onClick={() => suggesting ? run(recheckIds) : void wholeAudit(doc.draft_id, version).catch(workspace.report)}>{tr('Recheck affected sentences ({0})', recheckIds.length)}</button>
             {affected.length > recheckIds.length && <small>{tr('{0} more sentences need review', affected.length - recheckIds.length)}</small>}
           </div>}
           {orderedSentences.slice(0, limit).map((sentence) => <div className="synthesis-claim" key={sentence.id}>
@@ -182,7 +214,7 @@ export function PdfAudit({ topic }: { topic: string }) {
           </button>}
           <button className="primary" disabled={workspace.busy || !selected.length || (suggesting && !approved.length)}
             onClick={() => run(selected)}>{tr(suggesting ? 'Find citation suggestions' : 'Check citations')}</button>
-        </div>}
+        </details>}
       </>}
       {report && version && <section className="synthesis-item">
         <h3>{tr(suggesting ? 'Citation suggestions' : 'Citation check')}</h3>
@@ -192,7 +224,22 @@ export function PdfAudit({ topic }: { topic: string }) {
           {reports.map((item, i) => <option value={item.report_id} key={item.report_id}>{tr('Audit {0}', reports.length - i)}</option>)}
         </select>}
         {report.findings.map((finding) => <article className="synthesis-item" key={finding.finding_id}>
-          <p>{sentences.find((item) => item.id === finding.sentence_id)?.text}</p>
+          {report.findings.find(f => f.sentence_id === finding.sentence_id) === finding && <>
+            <h4>{sentences.find((item) => item.id === finding.sentence_id)?.text}</h4>
+            {report.summaries?.[finding.sentence_id] && <p>{report.summaries[finding.sentence_id]}</p>}
+          </>}
+          <p className="fine">{bibliography.find(r => r.key === finding.ref_key)?.title}
+            {' '}{sentences.find(s => s.id === finding.sentence_id)?.page && <button className="link-btn"
+              onClick={() => { setSource(undefined); setPage(sentences.find(s => s.id === finding.sentence_id)?.page ?? 1) }}>
+              {tr('Open manuscript page')}</button>}</p>
+          {finding.chain?.[0]?.origin && <small>{tr(originLabel[finding.chain[0].origin])}</small>}
+          {finding.chain?.slice(1).map((node, i) => <div className="synthesis-claim" key={i}>
+            <small>{finding.chain?.[node.parent ?? 0]?.title} → </small><strong>{node.title}</strong>
+            <p>{node.same_as != null ? tr('Same source in this chain') : tr(assessment[node.status])}</p>
+            {node.limit && <p>{tr(node.limit)}</p>}
+            {node.link && <a href={node.link} target="_blank" rel="noreferrer">{tr(node.link.startsWith('https://search.crossref.org/') ? 'Search for this paper' : 'Source link')}</a>}
+            {node.anchor_ids.map(id => <EvidenceLink key={id} id={id} onOpen={setSource} />)}
+          </div>)}
           {finding.needs_review && <p className="fine">{tr('Evidence needs review')}</p>}
           {finding.claims.map((claim, i) => <div key={i}>
             <strong>{tr(assessment[claim.status])}</strong>
@@ -215,6 +262,16 @@ export function PdfAudit({ topic }: { topic: string }) {
             </button>)}
           </div>
         </article>)}
+        {report.whole_document && doc && <section>
+          <h3>{tr('Manuscript audit notebook')}</h3>
+          {report.discussion?.map((turn,i) => <article key={i}><strong>{turn.question}</strong><p>{turn.text}</p>
+            {turn.anchor_ids.map(id => <EvidenceLink id={id} key={id} onOpen={setSource}/>)}</article>)}
+          <form onSubmit={event => { event.preventDefault(); if (question.trim())
+            void wholeAudit(doc.draft_id, version, question.trim()).catch(workspace.report) }}>
+            <input aria-label={tr('Ask about this audit')} placeholder={tr('Ask about this audit')}
+              value={question} maxLength={2000} onChange={e => setQuestion(e.target.value)}/>
+            <button className="ghost-btn" disabled={workspace.busy || !question.trim()}>{tr('Ask')}</button>
+          </form></section>}
         <button className="ghost-btn" disabled={workspace.busy || !exportIds.length}
           onClick={() => void exportEvidence()}>{tr('Export accepted findings')}</button>
         {exportIds.length > 0 && exported.map((file) => <button className="link-btn" key={file.name}

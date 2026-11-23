@@ -104,6 +104,7 @@ export function citationFixture(
     'draft.resolve_reference': () => { throw new Error('PDF review requires the desktop workspace.') },
     'draft.list': ({ topic_id }) => ({ items: items(topic_id) }),
     'draft.import': (p) => {
+      if ('source_version_id' in p) throw new Error('PDF review requires the desktop workspace.')
       const name = 'name' in p ? p.name : p.file_id
       const body = 'text' in p ? p.text : 'The dataset uses entire papers and abstracts. [@v1]'
       const sentences = body

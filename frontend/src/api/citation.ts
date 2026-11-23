@@ -3,6 +3,7 @@ export type Decision = 'accept' | 'reject' | 'defer'
 export type Finding = {
   finding_id: string
   sentence_id: string
+  chain?: { parent: number | null; origin?: 'original' | 'secondary' | 'unclear'; ref_key: string; title: string; version?: string; status: Finding['claims'][number]['status']; limit?: string; anchor_ids: string[]; link?: string; same_as?: number }[]
   ref_key?: string
   source_versions?: string[]
   claims: {
@@ -19,6 +20,9 @@ export type Finding = {
 export type Report = {
   report_id: string
   kind: 'citation_audit' | 'citation_suggest'
+  summaries?: Record<string, string>
+  discussion?: { question: string; text: string; anchor_ids: string[] }[]
+  whole_document?: boolean
   complete: boolean
   model: string
   findings: Finding[]
@@ -36,7 +40,7 @@ export type Snapshot = {
   version_id: string
   sentences: { id: string; text: string; cites: string[]; page?: number; unresolved?: string[] }[]
   uncited_sentences?: Snapshot['sentences']
-  references?: { key: string; title: string; text: string; status: string; target_version_id?: string; target_title?: string }[]
+  references?: { link?: string; key: string; title: string; text: string; status: string; target_version_id?: string; target_title?: string }[]
   warnings: string[]
   reports: Report[]
 }
@@ -52,10 +56,10 @@ type V = { draft_id: string; version_id: string }
 type F = V & { report_id: string; finding_id: string }
 export type CitationTask = T & {
   kind: Report['kind']
-  input: V & { sentence_ids: string[]; source_versions: string[] }
+  input: V & { whole_document?: boolean; question?: string; report_id?: string; sentence_ids: string[]; source_versions: string[] }
 }
 export type CitationMethods = {
-  'draft.import': [Write & T & ({ file_id: string } | { name: string; text: string } | { name: string; content: string; draft_id?: string }), Manuscript]
+  'draft.import': [Write & T & ({ file_id: string } | { source_version_id: string } | { name: string; text: string } | { name: string; content: string; draft_id?: string }), Manuscript]
   'draft.page': [T & V & { page: number }, { page: number; png: string }]
   'draft.prose': [T & V, { sentences: Snapshot['sentences'] }]
   'draft.resolve_reference': [Write & T & V & { ref_key: string; paper_id: string | null }, Manuscript]

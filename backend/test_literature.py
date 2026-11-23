@@ -308,6 +308,7 @@ class LiteratureTest(unittest.TestCase):
         self.assertEqual(prepared["transfers"][0]["endpoint"], endpoint)
         with patch("papertrace.build_opener") as opener:
             response = opener.return_value.open.return_value.__enter__.return_value
+            response.headers = {"Content-Type": "application/json"}
             response.read.return_value = json.dumps({
                 "choices": [{"message": {"content": json.dumps(answer)}}],
             }).encode()

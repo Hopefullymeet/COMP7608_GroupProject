@@ -1280,7 +1280,14 @@ class Worker:
         elif kind == "citation_audit":
             draft, _, audit_jobs = self.citations.jobs(topic, input_)
             target, label = draft["draft_id"], draft["name"]
-            audit_pending = [j for j in audit_jobs if j["usable"] and j["cached"] is None]
+            audit_pending = [j for j in audit_jobs if j["usable"] and (input_.get("whole_document") or j["cached"] is None)]
+            if "question" in input_:
+                question = required(input_, "question").strip()
+                if not question or len(question) > 2000:
+                    raise invalid("Enter a question of up to 2000 characters.")
+                self.citations.report(topic, input_)
+                if not self.topic_wiki.model():
+                    raise RpcError(-32015, "MODEL_UNAVAILABLE", "configure_service", "Configure a text model.")
         elif kind == "citation_suggest":
             draft, _, _, sources = self.citations.suggestions(topic, input_)
             target, label = draft["draft_id"], draft["name"]
@@ -1338,6 +1345,8 @@ class Worker:
             audit and bool(audit_pending) and self.dsh is not None and bool(self.dsh.key))
         live = live or (reader_question and input_["medium"] == "text") or (translation and bool(pending_translation))
         live = live or (suggest and bool(task_data["suggestion_sources"]) and self.dsh is not None and bool(self.dsh.key))
+        if audit and "question" in input_:
+            live = True
         if audit:
             task_data["audit_sources"] = {j["job_id"]: j["source"]["source_version_id"] for j in audit_pending} if live else {}
 
@@ -1380,6 +1389,12 @@ class Worker:
             if audit:
                 transfers = [{"endpoint": endpoint, "purpose": "Check cited claims against selected papers",
                               "data_categories": ["Selected manuscript sentences and cited full-text excerpts"]}] if live else []
+                if input_.get("whole_document") and live:
+                    transfers[0]["data_categories"] = ["Manuscript claims and passages from direct and indirect sources in the selected project library"]
+                if "question" in input_:
+                    transfers[0]["data_categories"] = ["Question and selected manuscript audit records with evidence excerpts"]
+                if input_.get("whole_document"):
+                    return {"confirmation_id": cid, "transfers": transfers, "source_versions": input_["source_versions"]}
             if suggest:
                 transfers = [{"endpoint": endpoint, "purpose": "Find citations for selected manuscript sentences",
                               "data_categories": ["Selected manuscript sentences", "Selected paper titles and excerpts"]}] if live else []

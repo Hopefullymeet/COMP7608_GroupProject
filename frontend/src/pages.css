@@ -402,3 +402,7 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
   .wiki-book-leaf, .wiki-typing span, .wiki-summary { animation: none; }
   .wiki-book-leaf.late { display: none; }
 }
+
+.audit-manuscripts { display:flex; flex-wrap:wrap; gap:.4rem; min-width:0 }
+.audit-manuscripts button { overflow:hidden; max-width:24ch; white-space:nowrap; text-overflow:ellipsis }
+.audit-manuscripts [aria-current=page] { font-weight:650; text-decoration:underline; text-underline-offset:.3em }

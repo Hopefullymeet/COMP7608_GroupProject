@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { useStore, anyRunning, papersOfTopic, type Tab } from '../data/store'
 import { DEMO_TOPIC, PAPERS } from '../data/fixtures'
 import { Icon, Spinner } from '../components/Icon'
+import { useRead } from '../data/WorkspaceProvider'
 import { Discover } from './Discover'
 import { Read } from './Read'
 import { Compare } from './Compare'
@@ -14,6 +15,16 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'compare', label: 'Compare', icon: 'columns' },
   { id: 'synthesis', label: 'Synthesize', icon: 'note' },
 ]
+
+function ManuscriptLinks({ topicId }: { topicId: string }) {
+  const { act } = useStore()
+  const { tr } = useLanguage()
+  const drafts = useRead('draft.list', { topic_id: topicId })?.items ?? []
+  return <>{drafts.length ? drafts.map(draft =>
+    <button key={draft.draft_id} title={draft.name} onClick={() => act.navigate({ view: 'check', topicId, draftId: draft.draft_id })}>
+      <Icon name="shield" size={15} /> {tr('Citation check')} · {draft.name}</button>)
+    : <button onClick={() => act.navigate({ view: 'check', topicId })}><Icon name="shield" size={15} /> {tr('Citation check')}</button>}</>
+}
 
 export function TopicView({ topicId, tab, windowControls, comparison, liveResearch }: { topicId: string; tab: Tab; windowControls?: ReactNode; comparison?:ReactNode; liveResearch?:boolean }) {
   const { tr } = useLanguage()
@@ -52,6 +63,7 @@ export function TopicView({ topicId, tab, windowControls, comparison, liveResear
                   event.currentTarget.closest('details')!.open = false
                   act.openTopic(topicId, item.id)
                 }}><Icon name={item.icon} size={15} /> {tr(item.label)}</button>)}
+              <ManuscriptLinks topicId={topicId} />
               <button onClick={(event) => {
                 event.currentTarget.closest('details')!.open = false
                 act.showTrace(!state.trace.open)

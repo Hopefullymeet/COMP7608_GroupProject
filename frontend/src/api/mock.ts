@@ -989,7 +989,7 @@ export function createMock(): Client {
               topic_id: topic,
               session_id: input.kind === 'reading_qa' ? input.session_id : undefined,
               label:
-                'question' in input.input
+                'question' in input.input && input.input.question
                   ? input.input.question
                   : 'query' in input.input
                     ? input.input.query
