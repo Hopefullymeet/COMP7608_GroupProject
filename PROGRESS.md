@@ -198,3 +198,4 @@ Reading answers now resolve version IDs to paper aliases or titles and localize 
 - 首页按六个本地时段轮播 24 组双语问候与引文；引文及出处随界面语言切换。加宽标题和新建主题入口，已在宽窄两种视口验证。
 - 侧栏品牌入口改为阅读水獭与 PaperTrace 单行排列，已在 macOS 客户端核对实际显示。
 - 左侧导航默认宽度 216 像素，可拖动边缘并记住宽度，双击恢复默认。
+- 英文问候逐字显示与擦除提速。Wiki 与引用核查共用主题选择布局，已在宽窄窗口核对位置、宽度及底色。

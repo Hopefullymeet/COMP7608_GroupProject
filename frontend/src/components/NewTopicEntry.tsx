@@ -21,6 +21,8 @@ export function NewTopicEntry({ paused, onOpen }: { paused: boolean; onOpen: () 
   const source = text === full ? entry.source?.[language] : ''
   useEffect(() => {
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const typingDelay = language === 'en' ? 38 : 115
+    const eraseDelay = language === 'en' ? 14 : 42
     let timer: number
     function restart() {
       window.clearTimeout(timer)
@@ -38,7 +40,7 @@ export function NewTopicEntry({ paused, onOpen }: { paused: boolean; onOpen: () 
         const full = entry[language]
         cursor.current.line = line
         setFrame({ line, length })
-        let delay = erasing ? 42 : 115
+        let delay = erasing ? eraseDelay : typingDelay
         if (length === full.length) {
           erasing = true
           delay = entry.source ? 6000 : 4000
