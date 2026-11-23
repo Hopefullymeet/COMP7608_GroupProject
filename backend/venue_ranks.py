@@ -97,6 +97,14 @@ def init_venue_ranks(db):
                              "source_url": "https://www.ccf.org.cn/Academic_Evaluation/CGAndMT/"})
             import_catalog(db, scheme, edition, year, url, rows)
 
+    for scheme, edition, filename, url in (
+        ("ccf", "CCF 官网目录快照 2026-11", "ccf-public.csv", "https://www.ccf.org.cn/Academic_Evaluation/By_category/"),
+        ("icore", "ICORE2026", "icore-public.csv", "https://portal.core.edu.au/conf-ranks/?source=ICORE2026"),
+    ):
+        if not db.execute("SELECT 1 FROM venue_catalogs WHERE scheme=? AND edition=?", (scheme, edition)).fetchone():
+            rows = csv_records(Path(__file__).with_name(filename), "standard", scheme)
+            import_catalog(db, scheme, edition, 2026, url, rows)
+
 
 def issns(value):
     text = " ".join(map(str, value)) if isinstance(value, (list, tuple)) else str(value or "")
@@ -304,7 +312,7 @@ def read_rankings(db, metadata, year):
     definitions = dict(SCHEMES)
     for scheme, edition, catalog_year, label, metric, venue_types, url in db.execute("""
         SELECT scheme, edition, year, label, metric, types, source_url FROM venue_catalogs
-        ORDER BY year DESC, rowid DESC
+        ORDER BY CASE WHEN edition LIKE 'CCF 官网目录快照%' THEN 1 WHEN edition LIKE '%CV 摘选' THEN 2 ELSE 0 END, year DESC, rowid DESC
     """):
         definitions[scheme] = (label, metric, json.loads(venue_types))
         if year is None or year == catalog_year:

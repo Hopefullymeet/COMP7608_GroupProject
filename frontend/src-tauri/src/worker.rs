@@ -23,6 +23,8 @@ const READER: &[u8] = include_bytes!("../../../backend/reader.py");
 const DSH: &[u8] = include_bytes!("../../../backend/dsh.py");
 const CREDENTIALS: &[u8] = include_bytes!("../../../backend/credentials.py");
 const BIBLIOGRAPHY: &[u8] = include_bytes!("../../../backend/bibliography.py");
+const ICORE_CATALOG: &[u8] = include_bytes!("../../../backend/icore-public.csv");
+const CCF_CATALOG: &[u8] = include_bytes!("../../../backend/ccf-public.csv");
 const VENUE_RANKS: &[u8] = include_bytes!("../../../backend/venue_ranks.py");
 type Reply = Result<Value, String>;
 
@@ -59,6 +61,8 @@ impl Worker {
         WIKI.hash(&mut hash);
         RESEARCH_TOOLS.hash(&mut hash);
         BIBLIOGRAPHY.hash(&mut hash);
+        ICORE_CATALOG.hash(&mut hash);
+        CCF_CATALOG.hash(&mut hash);
         VENUE_RANKS.hash(&mut hash);
         let runtime = directory.join("runtime").join(format!("{:016x}", hash.finish()));
         fs::create_dir_all(&runtime).map_err(|error| error.to_string())?;
@@ -72,6 +76,8 @@ impl Worker {
             (&runtime.join("citations.py"), CITATIONS),
             (&runtime.join("reader.py"), READER),
             (&runtime.join("bibliography.py"), BIBLIOGRAPHY),
+            (&runtime.join("icore-public.csv"), ICORE_CATALOG),
+            (&runtime.join("ccf-public.csv"), CCF_CATALOG),
             (&runtime.join("venue_ranks.py"), VENUE_RANKS),
         ] {
             match fs::OpenOptions::new().write(true).create_new(true).open(path) {

@@ -229,6 +229,26 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
   const [zoom, setZoom] = useState(1)
   const [aspectRatio, setAspectRatio] = useState(0)
   const [ratios, setRatios] = useState<Record<number, number>>({})
+  const [ocrText, setOcrText] = useState<string>()
+  const [ocrBusy, setOcrBusy] = useState(false)
+  const ocrRun = useRef(0)
+  useEffect(() => {
+    setOcrText(undefined)
+    setOcrBusy(false)
+    return () => { ocrRun.current++ }
+  }, [version])
+  async function recognize(page: number, rect?: Rect) {
+    if (!document || ocrBusy) return
+    const run = ++ocrRun.current
+    setOcrBusy(true)
+    setOcrText(tr('Reading image text…'))
+    try {
+      const {readImageText} = await import('./paperOcr')
+      const result = await readImageText(document, page, rect)
+      if (run === ocrRun.current) setOcrText(result || tr('No text recognized'))
+    } catch { if (run === ocrRun.current) setOcrText(tr('Image recognition failed')) }
+    finally { if (run === ocrRun.current) setOcrBusy(false) }
+  }
   const [current, setCurrent] = useState(page ?? 1)
   useEffect(() => { onPage?.(current) }, [current, onPage])
   const [renderRange, setRenderRange] = useState([1, 3])
@@ -610,6 +630,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
             <button onClick={() => onPaperInfo('scan')}>{tr('Paper details')}</button>
             <button onClick={() => onPaperInfo('analysis')}>{tr('Paper references')}</button>
           </>}
+          <button disabled={!document || ocrBusy} onClick={() => void recognize(current)}>{tr('Read page text (OCR)')}</button>
           {onFind && <button onClick={onFind}>{tr('Find a figure')}</button>}
           <button disabled={!document} onClick={openFind}>{tr('Find in PDF')}</button>
           <button disabled={!document} onClick={() => {
@@ -676,9 +697,13 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
           <button disabled={workspace.busy} onClick={() => void save('highlight', selection.rects, [], selection.quote, '')}>{tr('Highlight')}</button>
           <button disabled={workspace.busy} onClick={() => void save('underline', selection.rects, [], selection.quote, '')}>{tr('Underline')}</button>
         </>}
+        {selection.medium === 'image' && <button disabled={ocrBusy} onClick={() => void recognize(selection.page, selection.rect)}>OCR</button>}
         <button onClick={() => edit({ value: '' })}>{tr('Add annotation')}</button>
         {onAsk && <button onClick={() => { onAsk(selection); setSelection(undefined); window.getSelection()?.removeAllRanges() }}>{tr('Ask AI')}</button>}
       </div>, window.document.body)}
+    {ocrText !== undefined && <Dialog title="OCR" onClose={() => { ocrRun.current++; setOcrText(undefined); setOcrBusy(false) }}>
+      <div style={{whiteSpace: 'pre-wrap', maxHeight: '60vh', overflow: 'auto'}}>{ocrText}</div>
+    </Dialog>}
     {editor && <Dialog title={tr('Annotation')} onClose={() => edit(undefined)}>
       <form className="pt-reader-note" onSubmit={(e) => {
         e.preventDefault()
