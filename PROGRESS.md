@@ -53,6 +53,9 @@
 
 ## 下一步
 
+- **客户端自带本地视觉。** 设计已补进[技术书的 Agent 工具章节](docs/source/PaperTrace_Technical_Book_ZH.md#本地视觉工具)。复用图块提取与描述缓存，后续实现推理程序随应用分发，并将图表检索接到 Agent 的主题证据流程。
+
+
 - **主题证据图。** 已完成[解析、RAG 与 Wiki 的设计方案](docs/product-plan/PaperTrace_Evidence_Map_ZH.md)及[交互原型](docs/product-plan/PaperTrace_Evidence_Map.html)。六篇公开论文通过现有后端导入和七处原文页渲染。下一步将证据图接入主题综合结果，再对照难页解析及 Wiki 换版复核。
 
 
