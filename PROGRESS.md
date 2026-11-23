@@ -4,7 +4,7 @@
 
 ## 已完成
 
-- **引擎源码迁入后端。** 完整源码位于 `backend/engine/`，源码快照提交为 `965020dd15`。在单独克隆中完成锁定依赖安装，macOS arm64 上完整构建 10 项通过，SDK 组合测试、论文片段读取、错误返回及重启恢复均通过。逐任务取消仍沿用现有进程边界。开发构建见[后端说明](backend/README.md#配置文本模型)。下一批接管研究任务和工具执行。
+- 文献发现支持长标题换行，OpenAlex 候选加入主题时会保存可取得的开放 PDF。下载失败可在候选卡重试，旧摘要记录可重新检索以补全文本。
 
 - **生成提纲。** 按 DSH 的 `turn/end` 事件结束等待。SDK 启动失败时，从已确认的每篇论文检索段落，通过同一模型端点生成提纲并校验引文。用 HRI 工作区副本和模拟模型回复重放四篇论文的失败任务，已验证提纲保存和证据打开。下一步用桌面保存的凭据复测在线生成。
 
@@ -101,12 +101,6 @@
 
 ## 下一步
 
-- **客户端自带本地视觉。** 设计已补进[技术书的 Agent 工具章节](docs/source/PaperTrace_Technical_Book_ZH.md#本地视觉工具)。复用图块提取与描述缓存，后续实现推理程序随应用分发，并将图表检索接到 Agent 的主题证据流程。
-
-
-- **主题证据图。** 已完成[解析、RAG 与 Wiki 的设计方案](docs/product-plan/PaperTrace_Evidence_Map_ZH.md)及[交互原型](docs/product-plan/PaperTrace_Evidence_Map.html)。六篇公开论文通过现有后端导入和七处原文页渲染。下一步将证据图接入主题综合结果，再对照难页解析及 Wiki 换版复核。
-
-
 - **执行引擎与产品功能对齐。** 前端接着收拢设置页并复测安装包。安排同题竞品对照，并单独验证 [运行时精简](docs/product-plan/Agentero_Parity_and_Settings_ZH.md)。
 
 
@@ -115,3 +109,7 @@
 - 配置 DeepSeek 运行三组质量对照并人工复核。继续接入外部论文发现、稿件读写、授权撤销和备份恢复。[技术交接包](docs/deliverables/PaperTrace_Handoff_20261109/)
 Library now resolves archived topic names, suppresses file fingerprints and internal version IDs, and opens archived sources in the library reader.
 Reading answers now resolve version IDs to paper aliases or titles and localize each reading status, including when reopening a saved session.
+
+- 新建会话顶部的研究工具按主题工作区居中；窄窗口改用独立一行，避免与轨迹和窗口按钮重叠。
+
+- 阅读问答直连模型端点已支持 SSE。后端逐条发送已生成的正文，正式回答沿用原有证据校验和引用锚点。新增分片回归测试。后续若 DSH SDK 提供生成中的文本事件，可接入同一预览通道。

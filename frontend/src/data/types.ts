@@ -72,6 +72,7 @@ export interface SearchAngle {
 export type Decision = 'pending' | 'added' | 'held' | 'excluded'
 
 export interface Candidate {
+  pdf?: 'available' | 'saved' | 'unavailable' | 'missing'
   change?:'new'|'updated'
   id: string
   paperId: string

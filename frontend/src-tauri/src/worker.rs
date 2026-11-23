@@ -224,7 +224,8 @@ impl Host {
             worker.send(&request, id, Pending { response, subscription })?;
             Arc::clone(&worker.routes)
         };
-        match receiver.recv_timeout(Duration::from_secs(20)) {
+        let timeout = if method == "candidate.decide" { 90 } else { 20 };
+        match receiver.recv_timeout(Duration::from_secs(timeout)) {
             Ok(reply) => reply,
             Err(_) => {
                 routes.lock().unwrap().requests.remove(id);

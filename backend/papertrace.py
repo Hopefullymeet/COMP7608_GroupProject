@@ -26,7 +26,7 @@ from workbench import Workbench
 from citations import CitationWorkspace, init_citations
 from reader import Reader
 from bibliography import (OPENALEX, PROVIDERS, PublicServiceError, arxiv_id, bibliography_records, doi, export_bibliography, identity_keys, imported_metadata,
-                          lookup_target, metadata_from_provider, normalize_venue, openalex_search, selected_metadata)
+                          download_open_pdf, lookup_target, metadata_from_provider, normalize_venue, openalex_search, selected_metadata)
 from venue_ranks import init_venue_ranks, issns, lookup_rankings
 
 
@@ -247,7 +247,7 @@ class Worker:
         response = {"jsonrpc": "2.0", "id": rpc_id}
         after = []
         method = request.get("method") if isinstance(request, dict) else None
-        with nullcontext() if method in ("services.test", "library.preview_identifier") else self.lock:
+        with nullcontext() if method in ("services.test", "library.preview_identifier", "candidate.decide") else self.lock:
             try:
                 if not isinstance(rpc_id, str) or not isinstance(request.get("method"), str) or request.get("jsonrpc") != "2.0":
                     raise RpcError(-32600, "INVALID_REQUEST", "correct_request", "Expected a JSON-RPC 2.0 request.")
@@ -256,6 +256,8 @@ class Worker:
                     raise invalid("params must be an object.")
                 if method == "services.test":
                     response["result"] = self.test_service(params)
+                elif method == "candidate.decide":
+                    response["result"] = self.decide_operation(params)
                 elif method == "library.preview_identifier":
                     response["result"] = self.preview_identifier(params)
                 else:
@@ -1302,7 +1304,32 @@ class Worker:
         after.append(lambda: self.jobs.put(tid))
         return {key: task[key] for key in ("task_id", "run_id", "status", "scope_id") if key in task}
 
-    def decide(self, params):
+    def decide_operation(self, params):
+        operation = required(params, "operation_id")
+        fingerprint = encode(params)
+        method = "candidate.decide"
+        with self.lock:
+            if (saved := self.saved_operation(method, operation, fingerprint)) is not None:
+                return saved
+            search = self.search(params)
+            candidate = next((c for c in search["candidates"] if c["candidate_id"] == params.get("candidate_id")), {})
+            urls = candidate.get("pdf_urls", []) if params.get("decision") == "add" else []
+            paper = self.find_bibliographic_paper(candidate) if urls else None
+            if paper and self.has_pdf(paper):
+                urls = []
+        content = download_open_pdf(urls) if urls else None
+        with self.lock, self.db:
+            if (saved := self.saved_operation(method, operation, fingerprint)) is not None:
+                return saved
+            result = self.decide(params, content)
+            self.save_operation(method, operation, fingerprint, result)
+            return result
+
+    def has_pdf(self, paper):
+        return any(self.db.execute("SELECT 1 FROM pdf_files WHERE version_id = ?", (v["source_version_id"],)).fetchone()
+                   for v in paper["source_versions"])
+
+    def decide(self, params, content=None):
         saved = self.search(params)
         cid, action = required(params, "candidate_id"), required(params, "decision")
         candidate = next((c for c in saved["candidates"] if c["candidate_id"] == cid), None)
@@ -1315,6 +1342,18 @@ class Worker:
         result = {"candidate_id": cid, "decision": action}
         if action == "add":
             paper, linked = self.add_bibliographic_paper(saved["topic_id"], candidate)
+            if candidate.get("pdf_urls"):
+                if content and not self.has_pdf(paper):
+                    self.db.execute("SAVEPOINT candidate_pdf")
+                    try:
+                        self.research.import_pdf(saved["topic_id"], {"paper_id": paper["paper_id"],
+                            "name": paper["title"] + ".pdf", "content": base64.b64encode(content).decode("ascii")})
+                    except LiteratureError:
+                        self.db.execute("ROLLBACK TO candidate_pdf")
+                    finally:
+                        self.db.execute("RELEASE candidate_pdf")
+                    paper = self.get("paper", paper["paper_id"])
+                candidate["pdf_status"] = "saved" if self.has_pdf(paper) else "unavailable"
             result.update(decision="added", paper_id=paper["paper_id"], **paper["source_versions"][0],
                           link_status="already_linked" if linked else "linked")
         candidate["decision"] = result["decision"]
@@ -1404,7 +1443,7 @@ class Worker:
         return [{"source_version_id": row["source_version_id"],
                  "read_scope": versions.get(row["source_version_id"], "none")} for row in selected]
 
-    def answer_with_model_endpoint(self, endpoint, model, key, question, sources, cancelled):
+    def answer_with_model_endpoint(self, endpoint, model, key, question, sources, cancelled, preview=None):
         if not key:
             raise DshFailure("SERVICE_AUTH_FAILED", False, "configure_service")
         # Separate CJK text from adjacent terms such as HRI before querying SQLite FTS.
@@ -1446,12 +1485,12 @@ class Worker:
             for pid, row in seen.items()
         ]})}]
         payload = {
-            "model": model, "messages": messages, "max_tokens": 3200, "stream": False,
+            "model": model, "messages": messages, "max_tokens": 3200, "stream": preview is not None,
         }
         if endpoint == ENDPOINT:
             payload.update(thinking={"type": "disabled"}, response_format={"type": "json_object"})
         try:
-            return self.request_reading_answer(endpoint, key, payload, seen), seen
+            return self.request_reading_answer(endpoint, key, payload, seen, preview), seen
         except DshFailure as error:
             if error.issue["reason"] != "MODEL_OUTPUT_INVALID" or not error.issue["retryable"]:
                 raise
@@ -1476,17 +1515,56 @@ class Worker:
 
         return self.request_model_json(endpoint, key, payload, seen, parse, timeout=90)
 
-    def request_reading_answer(self, endpoint, key, payload, seen):
-        return self.request_model_json(endpoint, key, payload, seen, lambda text: read_json_answer(text, seen))
+    def request_reading_answer(self, endpoint, key, payload, seen, preview=None):
+        return self.request_model_json(endpoint, key, payload, seen, lambda text: read_json_answer(text, seen), preview=preview)
 
-    def request_model_json(self, endpoint, key, payload, seen, parse, timeout=30):
+    def request_model_json(self, endpoint, key, payload, seen, parse, timeout=30, preview=None):
         request = Request(endpoint + "/chat/completions", data=encode(payload).encode("utf-8"),
                           headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
         stage = "completion_envelope"
         try:
             with build_opener(NoServiceRedirect()).open(request, timeout=timeout) as response:
-                reply = json.loads(response.read(262145))
-            choice = reply["choices"][0]
+                if payload.get("stream") and getattr(response, "headers", {}).get("Content-Type", "").startswith("text/event-stream"):
+                    content = ""
+                    finish = None
+                    cursor = 0
+                    decoder = json.JSONDecoder()
+                    for line in response:
+                        if not line.startswith(b"data:"):
+                            continue
+                        data = line[5:].strip()
+                        if data == b"[DONE]":
+                            break
+                        frame = json.loads(data)
+                        if "error" in frame:
+                            raise ValueError
+                        choices = frame.get("choices", [])
+                        if not choices:
+                            continue
+                        part = choices[0]
+                        finish = part.get("finish_reason") or finish
+                        content += part.get("delta", {}).get("content") or ""
+                        if len(content) > 262144:
+                            raise ValueError
+                        # Preview only complete sentence objects, excluding evidence and metadata.
+                        if preview and not cursor:
+                            start = re.match(r'\s*(?:```json\s*)?\{\s*"sentences"\s*:\s*\[', content)
+                            if start:
+                                cursor = start.end()
+                        while preview and cursor:
+                            offset = cursor + len(content[cursor:]) - len(content[cursor:].lstrip(" ,\r\n\t"))
+                            try:
+                                row, end = decoder.raw_decode(content, offset)
+                            except ValueError:
+                                break
+                            cursor = end
+                            if isinstance(row, dict) and isinstance(row.get("text"), str) and row["text"].strip():
+                                preview(row["text"].strip())
+                    if finish is None:
+                        raise ValueError
+                    choice = {"message": {"content": content}, "finish_reason": finish}
+                else:
+                    choice = json.loads(response.read(262145))["choices"][0]
             finish_reason = choice.get("finish_reason")
             if finish_reason == "content_filter":
                 stage = "content_filtered"
@@ -1548,10 +1626,23 @@ class Worker:
                     if not error.startup:
                         raise
                     used_endpoint = True
+            streamed = False
+
+            def preview(text):
+                nonlocal streamed
+                with self.lock:
+                    current = self.get("task", task_id)
+                    if current["status"] != "running":
+                        return
+                    with self.db:
+                        event = self.emit(current, "answer.delta", {"text": ("\n\n" if streamed else "") + text})
+                    streamed = True
+                    self.send_events([event])
+
             if used_endpoint:
                 claims, seen = self.answer_with_model_endpoint(
                     endpoint, task.get("dsh_model", MODEL),
-                    runtime.key if runtime is not None else deepseek_api_key(), question, sources, signal,
+                    runtime.key if runtime is not None else deepseek_api_key(), question, sources, signal, preview,
                 )
             with self.lock:
                 task = self.get("task", task_id)
@@ -1576,7 +1667,7 @@ class Worker:
                         "kind": "tool", "title": "Read locally retrieved passages" if used_endpoint else "Read with DeepSeek Harness",
                         "detail": (f"Sent {len(seen)} approved passage(s) to the configured model." if used_endpoint
                                    else f"Read {len(seen)} approved passage(s) using paper_read."),
-                    }, issue=issue)
+                    }, issue=issue, streamed=streamed)
                 self.send_events(events)
         except DshFailure as error:
             self.fail_dsh(task_id, error.issue, error.seen)
@@ -1650,6 +1741,10 @@ class Worker:
                     decision = ("added" if keys & paper_keys else "exclude" if "exclude" in prior_matches
                                 else "hold" if "hold" in prior_matches else "pending")
                     candidate.update(candidate_id=identifier(), decision=decision)
+                    if decision == "added" and candidate.get("pdf_urls"):
+                        paper = self.find_bibliographic_paper(candidate)
+                        if paper and self.has_pdf(paper):
+                            candidate["pdf_status"] = "saved"
                 # Keep explicit exclusions available even if they fall outside this response page.
                 if previous_id := task["input"].get("previous_search_id"):
                     present = set().union(*(identity_keys(c) for c in candidates))
@@ -1705,7 +1800,7 @@ class Worker:
             "kind": "tool", "title": "Read saved abstract", "detail": "Checked the local fixture passage.",
         })
 
-    def persist_reading(self, task, message_id, sentences, reads, step, issue=None):
+    def persist_reading(self, task, message_id, sentences, reads, step, issue=None, streamed=False):
         input_ = task["input"]
         answer = {"scope_id": task["scope_id"], "message_id": message_id, "read_sources": reads, "sentences": sentences}
         session = self.get("session", task["session_id"])
@@ -1713,7 +1808,7 @@ class Worker:
         session["updated_at"] = now()
         self.put("session", session["session_id"], session)
         task["steps"] = [step]
-        delta = self.emit(task, "answer.delta", {"text": " ".join(s["text"] for s in sentences)})
+        events = [] if streamed else [self.emit(task, "answer.delta", {"text": " ".join(s["text"] for s in sentences)})]
         full_reads = {source["source_version_id"] for source in reads if source["read_scope"] == "full_text"}
         if issue:
             final = self.finish(task, "partial", result=answer, issue=issue)
@@ -1723,7 +1818,7 @@ class Worker:
             })
         else:
             final = self.finish(task, "completed", result=answer)
-        return [delta, final]
+        return [*events, final]
 
     def close(self):
         with self.lock:
@@ -1756,7 +1851,7 @@ def main():
             except ValueError:
                 send({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}})
                 continue
-            if isinstance(request, dict) and request.get("method") in ("services.test", "library.preview_identifier"):
+            if isinstance(request, dict) and request.get("method") in ("services.test", "library.preview_identifier", "candidate.decide"):
                 probes.submit(worker.process, request)
             else:
                 worker.process(request)

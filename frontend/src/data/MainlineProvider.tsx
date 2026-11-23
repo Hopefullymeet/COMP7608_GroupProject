@@ -984,6 +984,7 @@ export function MainlineProvider({
     candidates: candidates.map((c) => ({
       id: c.candidate_id,
       paperId: c.candidate_id,
+      pdf: c.pdf_status ?? (c.pdf_urls ? c.pdf_urls.length ? 'available' : 'missing' : undefined),
       change: c.change,
       angleId: 'results',
       reason: c.reason,

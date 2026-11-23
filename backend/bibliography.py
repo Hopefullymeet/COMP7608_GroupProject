@@ -1,15 +1,18 @@
 """Public bibliographic lookup. Calls are independent of the workspace database."""
 
+import ipaddress
 import json
+import time
+from http.client import HTTPException
 from html.parser import HTMLParser
 import re
 import socket
 import xml.etree.ElementTree as ET
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, unquote, urlencode
+from urllib.parse import quote, unquote, urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from literature import LiteratureError
+from literature import LiteratureError, MAX_PDF
 
 
 OPENALEX = "https://api.openalex.org/works"
@@ -190,6 +193,60 @@ def normalize_venue(value):
     return re.sub(r"[\W_]+", " ", value.casefold()).strip()
 
 
+def open_pdf_urls(row):
+    urls = []
+    for location in [row.get("best_oa_location"), row.get("primary_location"), *(row.get("locations") or [])]:
+        if not isinstance(location, dict) or not location.get("is_oa"):
+            continue
+        url = location.get("pdf_url")
+        if not url:
+            landing = location.get("landing_page_url") or ""
+            if landing.startswith("https://arxiv.org/abs/") and (identifier := arxiv_id(landing)):
+                url = "https://arxiv.org/pdf/" + identifier
+        if isinstance(url, str) and url.startswith("https://") and url not in urls:
+            urls.append(url)
+    return urls[:3]
+
+
+def public_pdf_url(url):
+    parts = urlsplit(url)
+    if parts.scheme != "https" or not parts.hostname or parts.username or parts.password or parts.port not in (None, 443):
+        raise ValueError("Invalid PDF address")
+    addresses = socket.getaddrinfo(parts.hostname, 443, type=socket.SOCK_STREAM)
+    if not addresses or any(not ipaddress.ip_address(item[4][0]).is_global for item in addresses):
+        raise ValueError("Invalid PDF host")
+    return url
+
+
+class PdfRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return super().redirect_request(req, fp, code, msg, headers, public_pdf_url(newurl))
+
+
+def download_open_pdf(urls):
+    deadline = time.monotonic() + 28
+    for url in urls:
+        try:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            request = Request(public_pdf_url(url), headers={"User-Agent": "PaperTrace/0.4", "Accept": "application/pdf"})
+            with build_opener(PdfRedirect()).open(request, timeout=min(8, remaining)) as response:
+                body = bytearray()
+                while len(body) <= MAX_PDF and time.monotonic() < deadline:
+                    chunk = response.read1(65536)
+                    if not chunk:
+                        if body.startswith(b"%PDF-"):
+                            return bytes(body)
+                        break
+                    body.extend(chunk)
+                    if len(body) >= 5 and not body.startswith(b"%PDF-"):
+                        break
+        except (OSError, HTTPException, ValueError):
+            continue
+    return None
+
+
 def openalex_search(query, filters, key):
     criteria = ["is_retracted:false"]
     if "year_from" in filters:
@@ -197,7 +254,7 @@ def openalex_search(query, filters, key):
     if "year_to" in filters:
         criteria.append(f"publication_year:<{filters['year_to'] + 1}")
     params = {"search": query, "filter": ",".join(criteria), "per_page": 50 if "venue" in filters else 20,
-              "select": "id,doi,display_name,publication_year,authorships,primary_location,locations,abstract_inverted_index"}
+              "select": "id,doi,display_name,publication_year,authorships,primary_location,best_oa_location,locations,abstract_inverted_index"}
     payload = json_response(OPENALEX + "?" + urlencode(params), key)
     rows = payload.get("results")
     if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
@@ -236,6 +293,7 @@ def openalex_search(query, filters, key):
                            **({"year": year} if type(year) is int else {}),
                            **({"doi": work_doi} if work_doi else {}), "source_id": work_id,
                            "metadata_url": work_id, "provider": "OpenAlex", "abstract": abstract,
+                           "pdf_urls": open_pdf_urls(row),
                            **({"venue": {"name": source["display_name"], "source": "OpenAlex"}}
                               if source.get("display_name") else {}),
                            **({"venue_type": source["type"], "issns": source.get("issn") or []}

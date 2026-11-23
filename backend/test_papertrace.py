@@ -20,7 +20,7 @@ from uuid import uuid4
 from papertrace import Worker
 from credentials import WindowsStore
 from dsh import Dsh, DshFailure, ENDPOINT, read_json_answer
-from bibliography import PublicServiceError, bibliography_records
+from bibliography import PublicServiceError, bibliography_records, download_open_pdf
 from literature import LiteratureError
 from test_literature import sample_pdf
 
@@ -52,6 +52,31 @@ class EvidenceTest(unittest.TestCase):
             {"text": "A claim without evidence.", "references": []},
             {"text": "A direct result.", "references": [{"passage": seen["p1"], "quote": "a direct result"}]},
         ])
+
+    def test_reading_stream_previews_claims_before_response_ends(self):
+        first = '{"sentences":[{"text":"First claim","evidence":[]}'
+        second = ',{"text":"Second claim","evidence":[]}]}'
+        previews = []
+
+        class Stream(BytesIO):
+            headers = {"Content-Type": "text/event-stream"}
+
+            def __iter__(self):
+                for part in (first[:17], first[17:], second):
+                    if part == second:
+                        self_test.assertEqual(previews, ["First claim"])
+                    frame = {"choices": [{"delta": {"content": part}, "finish_reason": None}]}
+                    yield b"data: " + json.dumps(frame).encode() + b"\n"
+                yield b'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n'
+                yield b"data: [DONE]\n"
+
+        self_test = self
+        with tempfile.TemporaryDirectory() as directory, closing(Worker(Path(directory), lambda _: None)) as worker:
+            with patch("papertrace.build_opener") as opener:
+                opener.return_value.open.return_value = Stream()
+                rows = worker.request_reading_answer(ENDPOINT, "test", {"stream": True}, {}, previews.append)
+        self.assertEqual(previews, ["First claim", "Second claim"])
+        self.assertEqual(previews, [row["text"] for row in rows])
 
     def test_reading_retries_blank_or_truncated_completions_with_the_same_passages(self):
         def completion(content, finish_reason):
@@ -845,6 +870,36 @@ ER  -"""
             task = self.finish(self.start_search(query="citation evidence"))
             self.assertEqual(task["result"]["candidates"], [])
             self.assertEqual(task["status"], "completed")
+
+    def test_pdf_download_skips_html_and_keeps_original_bytes(self):
+        pdf = sample_pdf("A result from page one.")
+        address = [(2, 1, 6, "", ("93.184.216.34", 443))]
+        with patch("bibliography.socket.getaddrinfo", return_value=address), patch("bibliography.build_opener") as opener:
+            opener.return_value.open.side_effect = [BytesIO(b"<html>Publisher login</html>"), BytesIO(pdf)]
+            self.assertEqual(download_open_pdf(["https://example.org/publisher", "https://example.org/archive"]), pdf)
+            self.assertEqual(opener.return_value.open.call_count, 2)
+
+    def test_discovery_download_retries_and_opens_original_pdf(self):
+        url = "https://example.org/paper.pdf"
+        record = {"id": "https://openalex.org/W1234", "display_name": "HRI",
+                  "abstract_inverted_index": {"Abstract": [0]},
+                  "best_oa_location": {"is_oa": True, "pdf_url": url}}
+        with patch("bibliography.fetch", return_value=json.dumps({"results": [record]}).encode()):
+            result = self.finish(self.start_search(query="citation evidence"))["result"]
+        candidate = result["candidates"][0]
+        self.assertEqual(candidate["pdf_urls"], [url])
+        params = {**self.topic, "search_id": result["search_id"], "candidate_id": candidate["candidate_id"], "decision": "add"}
+        pdf = sample_pdf("Evidence from the complete paper.")
+        with patch("papertrace.download_open_pdf", side_effect=[None, pdf]) as download:
+            abstract = self.call("candidate.decide", **params)
+            self.assertEqual(abstract["available_scope"], "abstract")
+            saved = self.call("candidate.decide", **params)
+            self.assertEqual(saved["available_scope"], "full_text")
+            self.assertEqual(saved["paper_id"], abstract["paper_id"])
+            self.assertEqual(self.call("candidate.decide", **params)["source_version_id"], saved["source_version_id"])
+            self.assertEqual(download.call_count, 2)
+        document = self.call("reader.pdf", **self.topic, source_version_id=saved["source_version_id"])
+        self.assertEqual(base64.b64decode(document["content"]), pdf)
 
     def test_discovery_failure_and_cancellation_do_not_save_candidates(self):
         with patch("bibliography.fetch", side_effect=PublicServiceError("SERVICE_RATE_LIMITED", "Rate limited.")):

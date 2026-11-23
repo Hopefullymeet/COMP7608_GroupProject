@@ -23,6 +23,7 @@ function CandidateCard({ c, disabled }: { c: Candidate; disabled?: boolean }) {
           {!state.mainline && c.round > 1 && <span className="tag accent">{tr('New in round')}{' '}{c.round}</span>}
           <span className="tag">{tr(c.readLevel)}</span>
           <span className="tag quiet">{tr('via')}{' '}{c.source}</span>
+          {c.pdf && <span className="tag">{tr(({ available: 'Open PDF available', saved: 'PDF saved', unavailable: 'PDF download failed', missing: 'No open PDF listed' })[c.pdf])}</span>}
           {previousSource && <span className="tag quiet">{tr('Earlier search')}</span>}
         </div>
         <h3>{p.title}</h3>
@@ -35,11 +36,15 @@ function CandidateCard({ c, disabled }: { c: Candidate; disabled?: boolean }) {
         {availability === 'deleted' ? (
           <span className="decided">{tr('Deleted from library')}</span>
         ) : c.note && c.decision === 'added' ? (
-          <span className="decided added"><Icon name="check" size={14} /> {tr(c.note)}</span>
+          <>
+            <span className="decided added"><Icon name="check" size={14} /> {tr(c.note)}</span>
+            {(c.pdf === 'available' || c.pdf === 'unavailable') &&
+              <button className="ghost-btn sm" disabled={disabled} onClick={() => act.decide(c.id, 'added')}>{tr('Download PDF')}</button>}
+          </>
         ) : c.decision === 'pending' ? (
           <>
             <button className="ghost-btn sm accent" disabled={disabled} onClick={() => act.decide(c.id, 'added')}>
-              <Icon name={availability === 'in trash' ? 'undo' : 'plus'} size={14} /> {availability === 'in trash' ? tr('Restore and add to topic') : tr('Add to topic')}
+              <Icon name={availability === 'in trash' ? 'undo' : 'plus'} size={14} /> {availability === 'in trash' ? tr('Restore and add to topic') : c.pdf === 'available' ? tr('Add with PDF') : tr('Add to topic')}
             </button>
             <button className="ghost-btn sm" disabled={disabled} onClick={() => act.decide(c.id, 'held')}><Icon name="clock" size={14} />{' '}{tr('Hold')}</button>
             <button className="ghost-btn sm" disabled={disabled} onClick={() => act.decide(c.id, 'excluded')}><Icon name="x" size={14} />{' '}{tr('Not relevant')}</button>
@@ -137,6 +142,13 @@ export function Discover() {
   const { state, act } = useStore()
   const [picked,pick]=useState<string[]>([])
   const batch=state.candidates.filter(c=>picked.includes(c.id)&&c.decision!=='added'&&c.decision!=='excluded').map(c=>c.id)
+  const topicPapers = new Map<string, ReturnType<typeof paperFor>>()
+  for (const id of papersOfTopic(state, currentTopic(state))) {
+    const paper = paperFor(state, id)
+    const key = paper.paperId ?? id
+    const current = topicPapers.get(key)
+    if (!current || (!current.pdfAvailable && paper.pdfAvailable)) topicPapers.set(key, paper)
+  }
   const d = state.discovery
   const discoveryRuns = state.runOrder.map((id) => state.runs[id]).filter((r) => r.task === 'Discovery')
   const latest = discoveryRuns[0]
@@ -269,13 +281,13 @@ export function Discover() {
           <div className="card">
             <h3>{tr('In this topic')}</h3>
             <ul className="in-topic">
-              {papersOfTopic(state, currentTopic(state)).map((id) => {
-                const paper = paperFor(state, id)
+              {Array.from(topicPapers.values()).map((paper) => {
+                const id = paper.id
                 const wikiPage = state.wiki.pages.find((p) => p.paperId === id)
                 return <li key={id}>
                   <span>{paper.title}</span>
                   <div className="in-topic-actions">
-                    {paper.stored !== 'metadata'
+                    {paper.pdfAvailable || paper.stored !== 'metadata'
                       ? <button className="link-btn" aria-label={tr('Read {0}', paper.title)} onClick={() => { act.openTopic(currentTopic(state), 'read'); act.setReader(id) }}>{tr('Read')}{' '}<Icon name="arrowRight" size={12} /></button>
                       : <small>{tr('Metadata only')}</small>}
                     {wikiPage && <button className="link-btn quiet" aria-label={tr('Open Wiki page for {0}', paper.title)} onClick={() => act.openWikiPage(wikiPage.id)}>{tr('Wiki')}</button>}

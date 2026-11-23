@@ -15,6 +15,7 @@ export type LibraryItem = { paper_id: Id; title: string; alias?: string; topic_i
 export type Action = 'pending' | 'hold' | 'exclude' | 'add'
 export type Decision = Exclude<Action, 'add'> | 'added'
 export type Candidate = {
+  pdf_urls?: string[]; pdf_status?: 'saved' | 'unavailable'
   candidate_id: Id; title: string; authors: string[]; doi?: string; year?: number
   provider?: string; source_id?: string
   venue?: { name: string; source: string }; metadata_url: string; abstract?: string
