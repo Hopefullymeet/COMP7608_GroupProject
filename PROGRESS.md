@@ -187,3 +187,5 @@ Reading answers now resolve version IDs to paper aliases or titles and localize 
 - Wiki 首页显示带正文引用的研究要点与整理记录。本机 CV 主题经桌面「重新整理」实际调用 deepseek-flash，展示两条模型推荐，并核对 LightGlue 的第 1、8 页来源。既有条目在重新整理前以本地规则选取并标明。
 
 - Wiki 目录首页以主题名称和简介开头。正文细节按论文查看，补充记录、用户笔记和待查问题单独收纳。此次只调整显示层级。
+
+- 设置整合语言、模型服务和本地个人记忆。Wiki 更新记录按新增/更新与移除分栏，条目删除及主题/会话归档使用客户端确认窗。已设置窗口边界与内层滚动约束，并在 macOS 打开通用设置核对字段。

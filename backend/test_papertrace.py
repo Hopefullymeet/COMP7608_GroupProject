@@ -78,6 +78,21 @@ class EvidenceTest(unittest.TestCase):
         self.assertEqual(previews, ["First claim", "Second claim"])
         self.assertEqual(previews, [row["text"] for row in rows])
 
+    def test_personal_memory_is_opt_in_and_survives_reopening(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with closing(Worker(Path(directory), lambda _: None)) as worker, worker.db:
+                worker.remember_request("记住：先列实验条件")
+                self.assertEqual(worker.personal_context("实验"), [])
+                worker.save_profile(dict(worker.user_profile(), enabled=True, identity="视觉研究者"))
+                worker.remember_request("记住：先列实验条件")
+                worker.remember_request("记住：先列实验条件")
+            with closing(Worker(Path(directory), lambda _: None)) as worker, worker.db:
+                self.assertEqual(worker.personal_context("实验"), ["视觉研究者", "先列实验条件"])
+                worker.save_profile(dict(worker.user_profile(), memories=[]))
+                self.assertEqual(worker.personal_context("实验"), ["视觉研究者"])
+                worker.save_profile(dict(worker.user_profile(), enabled=False))
+                self.assertEqual(worker.personal_context("实验"), [])
+
     def test_reading_context_uses_only_current_topic_and_limits_memory(self):
         with tempfile.TemporaryDirectory() as directory, closing(Worker(Path(directory), lambda _: None)) as worker:
             with worker.lock, worker.db:

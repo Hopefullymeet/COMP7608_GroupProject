@@ -1,3 +1,4 @@
+import { confirmAction } from '../components/confirmAction'
 import { useLanguage, type Translate } from '../i18n'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useStore } from '../data/store'
@@ -119,7 +120,7 @@ function EntryRow({ entry, onEdit, disabled, Source }: {
         <button className="icon-btn sm" disabled={disabled} aria-label={tr('Edit Wiki entry')} title={tr('Edit')}
           onClick={() => setDraft(entry.text)}><Icon name="edit" size={13} /></button>
         <button className="icon-btn sm" disabled={disabled} aria-label={tr('Forget this entry')} title={tr('Forget')}
-          onClick={() => { if (window.confirm(tr('Delete this Wiki entry?'))) void onEdit({ action: 'remove', entry_id: entry.entry_id }) }}><Icon name="trash" size={13} /></button>
+          onClick={async () => { if (await confirmAction(tr('Delete this Wiki entry?'), tr('Cancel'), tr('Delete'))) void onEdit({ action: 'remove', entry_id: entry.entry_id }) }}><Icon name="trash" size={13} /></button>
       </div>
     </li>
   )
@@ -230,7 +231,10 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
         {wiki.map_nodes && !!Object.keys(wiki.pending_removals ?? {}).length && <p>{tr('Pending deletion')} · {Object.values(wiki.pending_removals!).join(' / ')}</p>}
         {!!wiki.integrity_issues?.length && <details><summary>{tr('Links to review')}</summary><ul>{wiki.integrity_issues.map((label,i)=><li key={i}>{label}</li>)}</ul></details>}
         {!!wiki.history?.length && <details><summary>{tr('Update history')}</summary>{wiki.history.map((event,i)=><section key={i}>
-          <time>{new Date(event.created).toLocaleString()}</time><ul>{event.changes.map(c=><li key={c.id}>{tr(c.op==='add'?'Added':c.op==='remove'?'Removed':'Updated')} · {c.title}</li>)}</ul>
+          <time>{new Date(event.created).toLocaleString()}</time><div className="wiki-history-columns">{[false,true].map(removed=><div key={String(removed)}>
+            <h4>{tr(removed?'Removed':'Added or updated')}</h4>
+            <ul>{event.changes.filter(c=>(c.op==='remove')===removed).map(c=><li key={c.id}>{c.title}</li>)}</ul>
+          </div>)}</div>
         </section>)}</details>}
         <details open={wiki.map_nodes ? undefined : true}><summary>{tr(directory ? 'Notes and open questions' : 'Topic overview')}</summary>
         {!directory && (generating ? <FlippingBook label={tr('Generating')} />

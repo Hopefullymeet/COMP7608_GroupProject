@@ -383,7 +383,7 @@ class TopicWiki:
             seen.add(key)
             wiki["observed"].append(key)
             text = clip(text)
-            if text and not any(e["text"] == text for e in wiki["entries"]):
+            if text and text not in wiki.get("forgotten_texts", []) and not any(e["text"] == text for e in wiki["entries"]):
                 wiki["entries"].append(self.entry(kind, text, list(dict.fromkeys(anchors)), origin))
                 added += 1
         overflow = len(wiki["entries"]) - MAX_ENTRIES
@@ -424,7 +424,7 @@ class TopicWiki:
                         issue={"reason": "PROCESS_INTERRUPTED", "retryable": True, "next_action": "retry"})
             self.store(wiki)
         model = self.model()
-        hidden = ("fingerprint", "generator", "observed", "captured_since")
+        hidden = ("forgotten_texts", "fingerprint", "generator", "observed", "captured_since")
         result = {k: v for k, v in wiki.items() if k not in hidden}
         candidates = [e for e in wiki["entries"] if e["kind"] == "finding" and e["anchor_ids"]]
         result["map_sources"] = self.map_sources(topic, wiki.get("map_nodes", {}),
@@ -517,6 +517,7 @@ class TopicWiki:
                 raise missing("This Wiki entry was not found.")
             if action == "remove":
                 entries.remove(entry)
+                wiki["forgotten_texts"] = sorted(set(wiki.get("forgotten_texts", [])) | {entry["text"]})
                 wiki.get("pending_removals", {}).pop(entry["entry_id"], None)
             elif action == "update":
                 text = clip(params.get("text"))
@@ -621,7 +622,8 @@ class TopicWiki:
                     home_selection="model" if model else "local",
                     headline=clip(draft["headline"], 300),
                     summary=[clip(p, 1200) for p in draft["summary"] if clip(p)][:4],
-                    entries=(current_kept + [e for e in later if e not in current_kept] + fresh)[:MAX_ENTRIES],
+                    entries=(current_kept + [e for e in later if e not in current_kept] +
+                             [e for e in fresh if e["text"] not in wiki.get("forgotten_texts", [])])[:MAX_ENTRIES],
                     fingerprint=self.fingerprint(material), captured_since=max(0, wiki["captured_since"] - previous["captured_since"]),
                     generator={"kind": "model", "model": model["model"], "endpoint": model["endpoint"]} if model
                     else {"kind": "local"},
@@ -637,6 +639,7 @@ class TopicWiki:
             model = self.model()
             material = self.material(topic)
             wiki = self.load(topic)
+            material["personal_preferences"] = host.personal_context(wiki["thread"][-1]["text"])
         message = wiki["thread"][-1]["text"]
         try:
             answer = self.model_reply(model, material, wiki, message) if model else local_reply(wiki, message)

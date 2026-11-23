@@ -1,4 +1,5 @@
 import type { Write, Picked } from './library'
+export type PersonalProfile = {identity:string;enabled:boolean;memories:string[];revision:string}
 export type Model = {
   id: string
   label: string
@@ -53,6 +54,8 @@ export type Watch = { topic_id: string; search_id: string; interval_days: number
 export type ResumeTask = { kind: 'resume'; topic_id: string; input: { checkpoint_id: string } }
 type Inspection = { preview_id: string; valid: boolean; summary: string; issues: string[] }
 export type ServiceMethods = {
+  'profile.get': [Record<string,never>,PersonalProfile]
+  'profile.save': [Write & PersonalProfile,PersonalProfile]
   'services.get': [Record<string, never>, Config]
   'services.save': [Write & Omit<Config, 'revision'> & { base_revision: string }, Config]
   'services.test': [Write & { id: string }, { ok: boolean; message: string }]

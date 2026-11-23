@@ -1,3 +1,4 @@
+import { confirmAction } from '../components/confirmAction'
 import { pickPdfs, pdfInput } from '../api/pdf'
 import { useLanguage } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
@@ -866,8 +867,8 @@ export function MainlineProvider({
       )
     })
   }
-  function archive(kind: 'topic' | 'session', id: string) {
-    if (!window.confirm(tr(kind === 'topic' ? 'Archive this topic? You can restore it from Library.' : 'Archive this session? You can restore it from Library.'))) return
+  async function archive(kind: 'topic' | 'session', id: string) {
+    if (!await confirmAction(tr(kind === 'topic' ? 'Archive this topic? You can restore it from Library.' : 'Archive this session? You can restore it from Library.'), tr('Cancel'), tr('Archive'))) return
     void status(async () => {
       await workspace.write('workspace.archive', { kind, id })
       if (id === topic || id === session) goHome()

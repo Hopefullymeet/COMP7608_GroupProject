@@ -464,3 +464,5 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .audit-question { display: grid; gap: 6px; margin-top: auto; padding-top: 10px; }
 .audit-question textarea { width: 100%; resize: vertical; min-height: 4em; }
 .audit-question button { justify-self: start; }
+.settings-tabs {display:flex;gap:6px;margin-bottom:18px}
+.settings-tabs .active {background:var(--sunk);color:var(--ink);font-weight:600}

@@ -39,3 +39,11 @@ type Activity={id:Id,topic_id:Id,title:string,detail:string,target:'library'|'re
 扩展 discovery.filters.venue 为可选非空字符串，仅在启用来源声明 venue 能力时开放。只纳入具有可核验会议元数据的命中；缺失会议字段计入覆盖缺口。task.prepare 可附 budget:Budget、source_versions:Id[]，用于展示预算与确切材料；单次超限时保存检查点和部分成果，用户在恢复前确认预算。discovery.latest 可带 task_id 对应已完成检索，供其他客户端读步骤。文件恢复和来源更新按实际依赖产生 Activity。
 
 样例：PubMedQA 主题 t1 的搜索 s1 设置每 7 天检查。v1 更新为 v2 后 activity 指向受影响的稿件 d1 / 句 s1。外部只读提议 o1 指定 v1 和任务 t2，用户确认获得 g1，access.revoke(g1) 返回 revoked=true，先前传出的片段不会被撤回。中断后的 checkpoint c1 重新确认，序号 1 validate、2 resume、3 completed；预算不足返回 partial 及已提交记录。备份 b1 检查缺少 v1 时 valid=false 并列出问题，restore 拒绝且原库保留。
+
+## 个人身份与长期记忆
+
+设置入口分为「通用」和「模型与服务」。通用页提供界面语言、身份及跨主题记忆。个人资料保存在当前设备的工作区，初始关闭跨主题使用。
+
+- `profile.get` 返回 `identity`、`enabled`、`memories` 和修订号 `revision`。首次读取返回空资料。
+- `profile.save` 带操作 ID 和上次读取的修订号。身份最多 500 字，记忆最多 60 条、每条 400 字。过期修订返回参数错误，避免覆盖另一窗口的修改。
+- 开启后，论文问答和 Wiki 对话可将身份及最多十条偏好作为模型上下文。论文问答完成时，会保存以「记住」或「请记住」开头的明确请求，重复内容只保留一次。资料和偏好用于个性化回答，论文结论仍需原文证据。

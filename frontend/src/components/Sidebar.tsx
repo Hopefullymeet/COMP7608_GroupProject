@@ -2,7 +2,6 @@ import { useLanguage } from '../i18n'
 import { useRef, useState } from 'react'
 import { hasMessages, sessionsOf, useStore, type Page } from '../data/store'
 import { Icon } from './Icon'
-import { LanguagePicker } from './LanguagePicker'
 import { Logo } from './Logo'
 import { Dialog } from './PageHead'
 import { errorText } from '../api/contract'
@@ -11,7 +10,6 @@ const PAGES: { page: Page; icon: string; label: string }[] = [
   { page: 'library', icon: 'library', label: 'Library' },
   { page: 'wiki', icon: 'wiki', label: 'Wiki' },
   { page: 'check', icon: 'shield', label: 'Citation check' },
-  { page: 'settings', icon: 'settings', label: 'Models & services' },
 ]
 
 /** Lists longer than this collapse behind a "Show more" row. */
@@ -179,7 +177,7 @@ export function Sidebar() {
         {(!state.mainline || state.mainline.demo) && <span className="proto-badge">{state.mainline ? tr('Contract demo · mock data') : tr('Prototype · mock data')}</span>}
         {(!state.mainline || state.mainline.demo) && <small>{tr('Local workspace · nothing leaves this page')}</small>}
       </div>
-      <LanguagePicker />
+      <button className={'side-item'+(route.view==='settings'?' active':'')} onClick={()=>act.navigate({view:'settings'})}><Icon name="settings" size={16}/>{tr('Settings')}</button>
       {editing && rename && <Dialog title={tr(editing.kind === 'topic' ? 'Rename topic' : 'Rename session')}
         onClose={() => { if (!savingName) setEditing(undefined) }}>
         <form onSubmit={async (event) => {

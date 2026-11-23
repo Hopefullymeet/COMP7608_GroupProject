@@ -1,3 +1,4 @@
+import { PersonalSettings } from './PersonalSettings'
 import { useLanguage, type Message } from '../i18n'
 import { useEffect, useState } from 'react'
 import { Dialog, PageHead } from '../components/PageHead'
@@ -460,6 +461,7 @@ function AccessAndBackup() {
 }
 export function ServicesPage() {
   const { tr } = useLanguage()
+  const [tab,setTab]=useState('general')
   const config = useRead('services.get', {})
   const { demo, refresh } = useWorkspace()
   useEffect(() => {
@@ -470,13 +472,15 @@ export function ServicesPage() {
     <div className="page">
       <PageHead
         trace
-        title={tr('Models & services')}
+        title={tr('Settings')} sub=""
         icon="settings"
-        sub={tr('Model destinations, tools and workspace access')}
+
       />
       <div className="page-body scroll settings">
-        {config && <SettingsForm key={config.revision} config={config} />}
-        {demo && <AccessAndBackup />}
+        <nav className="settings-tabs">{['general','model'].map(id=><button key={id} className={'ghost-btn'+(tab===id?' active':'')} aria-pressed={tab===id} onClick={()=>setTab(id)}>{tr(id==='general'?'General':'Models & services')}</button>)}</nav>
+        {tab==='general' && <PersonalSettings/>}
+        {tab==='model' && config && <SettingsForm key={config.revision} config={config} />}
+        {tab==='model' && demo && <AccessAndBackup />}
       </div>
     </div>
   )

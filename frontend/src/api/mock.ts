@@ -42,6 +42,7 @@ type Run = {
   script: EventBody[]
 }
 type State = {
+  profile?: import('./services').PersonalProfile
   config: Config
   grants: Grant[]
   watches: Watch[]
@@ -553,6 +554,8 @@ export function createMock(): Client {
     'synthesis.list': () => ({ items: [] }),
     'synthesis.wiki': () => ({ revision: '', items: [] }),
     'synthesis.review': () => { throw new Error('Synthesis review requires the desktop workspace.') },
+    'profile.get': () => state.profile ?? {identity:'',enabled:false,memories:[],revision:''},
+    'profile.save': ({identity,enabled,memories}) => state.profile={identity,enabled,memories,revision:crypto.randomUUID()},
     'services.get': () => state.config,
     'services.save': ({ base_revision, operation_id: _, ...config }) => {
       if (base_revision !== state.config.revision)

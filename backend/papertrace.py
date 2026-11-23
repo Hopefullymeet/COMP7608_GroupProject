@@ -25,7 +25,7 @@ from literature import LiteratureError, MAX_VERSIONS, body_passage_starts, diges
 from workbench import Workbench
 from citations import CitationWorkspace, init_citations
 from reader import Reader
-from wiki import CAPTURE_TASKS, CAPTURE_WRITES, TopicWiki
+from wiki import CAPTURE_TASKS, CAPTURE_WRITES, TopicWiki, words
 from bibliography import (OPENALEX, PROVIDERS, PublicServiceError, arxiv_id, bibliography_records, doi, export_bibliography, identity_keys, imported_metadata,
                           download_open_pdf, lookup_target, metadata_from_provider, normalize_venue, openalex_search, selected_metadata)
 from venue_ranks import init_venue_ranks, issns, lookup_rankings
@@ -146,7 +146,7 @@ class Worker:
         "topic.create", "topic.rename", "session.create", "session.rename", "task.prepare", "task.start", "task.cancel",
         "candidate.decide", "reader.bookmark", "note.save", "library.import_pdf", "library.set_alias", "synthesis.review",
         "reader.mark_save", "reader.mark_delete", "reader.answer_save", "reader.mark_to_wiki",
-        "services.save",
+        "services.save", "profile.save",
         "library.commit_identifier", "library.update_metadata", "workspace.archive", "workspace.unarchive", "library.organize",
         "library.preview_bibliography", "library.commit_bibliography", "library.commit_zotero_attachment",
         "library.trash", "library.restore", "library.purge",
@@ -319,6 +319,42 @@ class Worker:
                 self.topic_wiki.capture_safely(params["topic_id"])
             return result
         return self.dispatch(method, params, after)
+
+    def user_profile(self):
+        row = self.db.execute("SELECT data FROM records WHERE kind='personal_profile' AND id='local'").fetchone()
+        return json.loads(row[0]) if row else {"identity": "", "enabled": False, "memories": [], "revision": ""}
+
+    def save_profile(self, params):
+        profile = self.user_profile()
+        if profile["revision"] != params.get("revision"):
+            raise invalid("The profile changed. Reopen Settings before saving.")
+        identity, memories, enabled = params.get("identity"), params.get("memories"), params.get("enabled")
+        if (not isinstance(identity, str) or len(identity) > 500 or not isinstance(enabled, bool)
+                or not isinstance(memories, list) or len(memories) > 60
+                or any(not isinstance(m, str) or len(m) > 400 for m in memories)):
+            raise invalid("Check your profile and memory lengths.")
+        profile.update(identity=identity.strip(), enabled=enabled, revision=identifier(),
+                       memories=list(dict.fromkeys(m.strip() for m in memories if m.strip())))
+        self.put("personal_profile", "local", profile)
+        return profile
+
+    def personal_context(self, question):
+        profile = self.user_profile()
+        if not profile["enabled"]:
+            return []
+        terms = words(question)
+        ranked = sorted(reversed(profile["memories"]), key=lambda m: len(terms & words(m)), reverse=True)
+        return [text for text in [profile["identity"], *ranked[:10]] if text]
+
+    def remember_request(self, question):
+        profile = self.user_profile()
+        if not profile["enabled"]:
+            return
+        match = re.match(r"^\s*(?:请记住|请记下|记住|remember that|remember)\s*[：:,，]?\s*(.+)", question, re.I)
+        if match:
+            memory = match.group(1).strip()
+            if len(memory) <= 400 and len(profile["memories"]) < 60 and memory not in profile["memories"]:
+                self.save_profile(dict(profile, memories=profile["memories"] + [memory]))
 
     def credential_status(self):
         key = system_key()
@@ -733,6 +769,10 @@ class Worker:
                         "source": self.research.document(source), "passage_id": pid, "quote": value["quote"],
                         "read_scope": "full_text"}
             return {"anchor": value, "source": source}
+        if method == "profile.get":
+            return self.user_profile()
+        if method == "profile.save":
+            return self.save_profile(params)
         if method == "services.get":
             return self.services_config()
         if method == "services.save":
@@ -1373,6 +1413,8 @@ class Worker:
         if live and kind == "reading_qa":
             memory = (self.topic_wiki.reading_context(topic, label) if method == "task.prepare"
                       else confirmation.get("topic_memory"))
+            if method == "task.prepare":
+                memory = list(memory or []) + self.personal_context(label)
             if memory:
                 task_data["topic_memory"] = memory
         fingerprint = encode([task_data, endpoint, model])
@@ -1395,7 +1437,7 @@ class Worker:
                 transfers = [{"endpoint": endpoint, "purpose": "Answer using selected sources",
                               "data_categories": ["Research question and excerpts from the selected papers"]}]
             if task_data.get("topic_memory"):
-                transfers[0]["data_categories"].append("Compact memory from the current topic Wiki")
+                transfers[0]["data_categories"].append("Topic Wiki and enabled personal preferences")
             if audit:
                 transfers = [{"endpoint": endpoint, "purpose": "Check cited claims against selected papers",
                               "data_categories": ["Selected manuscript sentences and cited full-text excerpts"]}] if live else []
@@ -2012,6 +2054,7 @@ class Worker:
         input_ = task["input"]
         answer = {"scope_id": task["scope_id"], "message_id": message_id, "read_sources": reads, "sentences": sentences}
         session = self.get("session", task["session_id"])
+        self.remember_request(input_["question"])
         session["turns"].append({"task_id": task["task_id"], "question": input_["question"], "answer": answer})
         session["updated_at"] = now()
         self.put("session", session["session_id"], session)

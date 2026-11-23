@@ -1,3 +1,4 @@
+import { LanguagePicker } from '../components/LanguagePicker'
 import { useLanguage } from '../i18n'
 import { useId, useState } from 'react'
 import { useStore } from '../data/store'
@@ -112,8 +113,8 @@ export function Settings() {
 
   return (
     <div className="page">
-      <PageHead icon="settings" title={tr('Models & services')} sub={tr('Configure the model, search sources and limits for new demo tasks.')} trace />
-      <div className="page-body scroll settings">
+      <PageHead icon="settings" title={tr('Settings')} sub={tr('Configure the model, search sources and limits for new demo tasks.')} trace />
+      <div className="page-body scroll settings"><LanguagePicker/>
         <section className="set-section">
           <div className="set-intro">
             <h2>{tr('Model')}</h2>
