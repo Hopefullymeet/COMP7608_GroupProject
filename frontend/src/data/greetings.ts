@@ -45,11 +45,20 @@ const periods = {
     line('下一次翻开论文，想从哪里接着读？', 'Where would you like to pick up next time?'),
   ],
 }
+export function periodAt(hour: number): keyof typeof periods {
+  if (hour < 2) return 'midnight'
+  if (hour < 5) return 'predawn'
+  if (hour < 9) return 'morning'
+  if (hour < 13) return 'day'
+  if (hour < 18) return 'afternoon'
+  return 'evening'
+}
+
 export function greetingsAt(hour: number): Greeting[] {
-  if (hour < 2) return periods.midnight
-  if (hour < 5) return periods.predawn
-  if (hour < 9) return periods.morning
-  if (hour < 13) return periods.day
-  if (hour < 18) return periods.afternoon
-  return periods.evening
+  return periods[periodAt(hour)]
+}
+
+export function dreamFrame(hour: number, variant: number) {
+  const first = { morning: 0, day: 2, afternoon: 4, evening: 6, midnight: 8, predawn: 10 }
+  return first[periodAt(hour)] + variant % 2
 }

@@ -491,9 +491,9 @@ mark.on { background: #efcabb; box-shadow: 0 2px 0 var(--accent); }
 .new-topic-entry h1 i { display: inline-block; height: .95em; margin-left: 3px; border-left: 2px solid var(--accent); vertical-align: -.08em; animation: topic-caret 1.1s step-end infinite; }
 @keyframes topic-caret { 50% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .new-topic-entry h1 i { display: none; } }
-.new-topic-entry button { display: flex; align-items: center; gap: 12px; width: min(100%, 840px); min-height: 68px; margin: auto; padding: 12px 22px; border: 1px dashed var(--ink-4); border-radius: 14px; background: var(--surface); color: var(--ink-2); user-select: none; }
-.new-topic-entry button:hover, .new-topic-entry button:focus-visible { border-color: var(--accent); color: var(--accent); }
-.new-topic-entry button svg:last-child { margin-left: auto; }
+.new-topic-entry > button { display: flex; align-items: center; gap: 12px; width: min(100%, 840px); min-height: 68px; margin: auto; padding: 12px 22px; border: 1px dashed var(--ink-4); border-radius: 14px; background: var(--surface); color: var(--ink-2); user-select: none; }
+.new-topic-entry > button:hover, .new-topic-entry > button:focus-visible { border-color: var(--accent); color: var(--accent); }
+.new-topic-entry > button svg:last-child { margin-left: auto; }
 
 .claim-sources { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; vertical-align: baseline; }
 .claim-sources small { font: 11px var(--sans); color: var(--ink-3); }
@@ -513,6 +513,12 @@ html, body, #root {overflow:hidden;overscroll-behavior:none}
 .chat-work-steps code { display:block; white-space:pre-wrap; }
 .chat-scroll { overflow-anchor:none; }
 
+.dream-trigger { position: relative; justify-self: center; max-width: 100%; overflow-wrap: anywhere; text-wrap: balance; line-height: inherit; }
+.dream-bubble { position: absolute; pointer-events: none; width: min(142px, 38cqw); aspect-ratio: 148 / 128; bottom: 97%; left: min(calc(100% - 5px), calc(50% + 50cqw - min(142px, 38cqw))); filter: drop-shadow(0 3px 4px #55351815); transform-origin: bottom left; animation: dream-appear .22s ease-out; }
+.dream-bubble svg { display: block; width: 100%; height: 100%; }
+.dream-pose { position: absolute; left: 26%; top: 16%; width: 56%; aspect-ratio: 9 / 8; background: url('/otters/greetings.webp') no-repeat; background-size: 400% 300%; }
+@keyframes dream-appear { from { opacity: 0; transform: translateY(3px) scale(.9); } }
+@media (prefers-reduced-motion: reduce) { .dream-bubble { animation: none; } }
 .greeting-source { min-height:1.5em; margin:5px 0 12px; font-size:12px; line-height:1.5; color:var(--ink-3); }
 
 .chat-viewport { position: relative; display: flex; flex: 1; min-height: 0; }
