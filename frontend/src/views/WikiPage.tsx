@@ -204,6 +204,7 @@ function TopicWiki({ topicId }: { topicId: string }) {
   const issue = wiki.issue && tr(ISSUE_TEXT[wiki.issue.reason] ?? 'The Wiki could not finish. Try again.')
   const generating = wiki.status === 'generating'
   const summarized = !!wiki.revision
+  const empty = wiki.entries.length === 0 && threadLength === 0 && !wiki.pending_reply
   const groups = KIND_ORDER.map((kind) => [kind, wiki.entries.filter((e) => e.kind === kind)] as const)
   const { papers, notes, answers, findings } = wiki.sources
   const plural = (n: number, one: string, many: string) => tr(n === 1 ? one : many, n)
@@ -214,7 +215,7 @@ function TopicWiki({ topicId }: { topicId: string }) {
     <div className="wiki-scroll">
       <div className="wiki-column">
         {generating ? <FlippingBook label={tr('Generating')} />
-          : !summarized ? <section className="wiki-empty">
+          : !summarized ? <section className={`wiki-empty${empty ? ' wiki-empty-centered' : ''}`}>
             <span className="wiki-empty-icon" aria-hidden="true"><Icon name="book" size={30} /></span>
             <h2>{tr(wiki.entries.length ? 'Ready to summarize' : 'Nothing in this Wiki yet')}</h2>
             <p>{tr('The Wiki is this topic’s long-term memory. It collects what you learn across all papers and conversations here: answers, parsed PDF passages, notes and saved findings, and turns them into a summary you can talk to.')}</p>
@@ -223,7 +224,6 @@ function TopicWiki({ topicId }: { topicId: string }) {
             <button className="primary" disabled={working} onClick={() => void refresh()}>
               <Icon name="book" size={15} />{' '}{tr('Summarize this topic')}
             </button>
-            {wiki.transfer && <p className="fine">{tr('Sends {0} to {1}.', wiki.transfer.data_categories.map((c) => tr(c).replace(/^(?!Wiki)\w/, (x) => x.toLowerCase())).join(', '), wiki.transfer.endpoint)}</p>}
           </section>
           : <article className="wiki-summary">
             <p className="wiki-meta">

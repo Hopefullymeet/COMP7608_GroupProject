@@ -49,7 +49,7 @@
 .target-material { overflow-wrap: anywhere; }
 .result-card, .lib-detail { overflow-wrap: anywhere; }
 .topic-head--desktop { height: var(--topic-header-height); gap: 12px; padding-right: 16px; }
-.topic-head--desktop .topic-title { max-width: 480px; }
+.topic-head--desktop .topic-title { max-width: 480px; -webkit-user-select: none; user-select: none; }
 .topic-head--desktop .topic-title h1 { overflow: hidden; text-overflow: ellipsis; }
 .topic-head--desktop .head-meta { gap: 10px; }
 .app--desktop:has(.topic-head--desktop) .drawer { top: var(--topic-header-height); }
@@ -87,7 +87,7 @@
 .result-card { display: grid; gap: 12px; padding: 20px; margin-bottom: 14px; }
 .result-card h2, .result-card h3 { margin: 0; font: 600 18px/1.35 var(--serif); }
 .result-card .lib-tools, .lib-detail .lib-tools { margin: 0; }
-.result-card > button, .lib-detail > button, .dialog > button { justify-self: start; }
+.result-card > button, .lib-detail > button, .pt-dialog > button { justify-self: start; }
 .result-card > select { justify-self: start; }
 .table-scroll { overflow: auto; }
 .table-scroll table { width: 100%; table-layout: fixed; }
@@ -95,10 +95,10 @@
 .table-scroll thead th { font: 600 14px/1.4 var(--serif); }
 .table-scroll th small { display: block; font: 12px/1.4 var(--sans); color: var(--ink-3); }
 .table-scroll td > :is(.text-field, select) { width: 100%; margin-bottom: 6px; }
-.dialog .link-btn + .link-btn {margin-inline-start: 8px;}
-.dialog { max-height: 85vh; overflow: auto; color: var(--ink-2); font-size: 13.5px; overflow-wrap: anywhere; }
+.pt-dialog .link-btn + .link-btn {margin-inline-start: 8px;}
+.pt-dialog { max-height: 85vh; overflow: auto; color: var(--ink-2); font-size: 13.5px; overflow-wrap: anywhere; }
 .dialog-head { color: var(--ink); }
-.dialog .card { padding: 12px; }
+.pt-dialog .card { padding: 12px; }
 .paper-choice { background: transparent; text-align: left; border: 0; color: inherit; flex: 1; min-width: 0; }
 .lib-row > input[type="checkbox"] { margin-top: 3px; }
 .lib-more { margin: 10px 16px; }
@@ -116,9 +116,6 @@
 .history-entries { display: grid; gap: 8px; padding: 6px 11px 11px; }
 .history-entries > button { justify-self: start; }
 .settings-save { margin-top: 16px; }
-.discovery-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
-.discovery-watch { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
-.candidate-selection { margin: 0 0 6px 2px; }
 .paper .located-passage {
   background: var(--accent-soft);
   border-radius: 4px;

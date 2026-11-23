@@ -1,4 +1,6 @@
-:root {
+/* PDF.js also sets :root's color scheme when the reader loads. */
+html:root {
+  color-scheme: only light;
   --bg: #f8f4ef;
   --surface: #fffdfa;
   --sidebar: #f0e9e1;

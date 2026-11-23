@@ -45,7 +45,7 @@ export function Dialog({ title, children, onClose }: { title: string; children: 
     <dialog ref={ref} className="dialog-backdrop" aria-label={title}
       onCancel={(e) => { e.preventDefault(); onClose() }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="dialog">
+      <div className="pt-dialog">
         <div className="dialog-head">
           <h2>{title}</h2>
           <button className="icon-btn sm" onClick={onClose} aria-label={tr('Close')}><Icon name="x" size={14} /></button>

@@ -8,6 +8,7 @@ import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { Notes } from './Notes'
 import { PaperImportDialog, usePdfDrop } from './PaperImportDialog'
 import { PublicationDetails } from '../components/PublicationDetails'
+import { TopicPicker } from '../components/TopicPicker'
 
 const PdfReader = lazy(() => import('./PdfReader'))
 
@@ -44,8 +45,6 @@ export function LibraryPage() {
   const [tab, setTab] = useState('Papers'),
     [query, search] = useState(''),
     [limit, more] = useState(30)
-  const [membership, filterMembership] = useState('all'),
-    [availability, filterScope] = useState('')
   const [chosen, choose] = useState<string[]>([]),
     [focus, setFocus] = useState(state.route.view === 'library' ? (state.route.paperId ?? '') : '')
   const [topic, setTopic] = useState(''),
@@ -60,12 +59,10 @@ export function LibraryPage() {
   const [feedback, setFeedback] = useState('')
   const [reader, setReader] = useState<LibraryReader>()
   const topics = state.topics
-  const rows = (tab === 'Trash' ? catalog?.trash : catalog?.papers) ?? []
+  const rows = ((tab === 'Trash' ? catalog?.trash : catalog?.papers) ?? [])
+    .filter((paper) => !topic || paper.topic_ids.includes(topic))
   const shown = rows.filter(
-    (p) =>
-      (membership === 'all' || (membership === 'linked') === p.topic_ids.length > 0) &&
-      (!availability || p.source_versions.some((v) => v.available_scope === availability)) &&
-      [p.title, p.identity, ...p.authors, ...p.tags].join(' ').toLowerCase().includes(query.toLowerCase()),
+    (p) => [p.title, p.identity, ...p.authors, ...p.tags].join(' ').toLowerCase().includes(query.toLowerCase()),
   )
   const paper = shown.find((p) => p.paper_id === focus) ?? shown[0]
   const checked = chosen.filter((id) => rows.some((p) => p.paper_id === id))
@@ -92,6 +89,26 @@ export function LibraryPage() {
     paper?.topic_ids.find((id) => topics.some((t) => t.id === id))
   const archivedTopics = archived?.items.filter((item) => item.kind === 'topic') ?? []
   const readerTopic = activeTopic ?? paper?.topic_ids.find((id) => archivedTopics.some((t) => t.id === id))
+  const topicSelect = (
+    <select
+      aria-label={tr('Working topic')}
+      className="lib-select"
+      value={topic}
+      onChange={(e) => {
+        setTopic(e.target.value)
+        choose([])
+        more(30)
+        setFeedback('')
+      }}
+    >
+      <option value="">{tr(tab === 'Notes' ? 'Choose a topic' : 'All topics')}</option>
+      {topics.map((t) => (
+        <option key={t.id} value={t.id}>
+          {t.title}
+        </option>
+      ))}
+    </select>
+  )
   if (reader) return <ArchivedReader reader={reader} close={() => setReader(undefined)} />
   return (
     <div className="page library-page">
@@ -118,19 +135,7 @@ export function LibraryPage() {
               </button>
             ))}
           </div>
-          <select
-            aria-label={tr('Working topic')}
-            className="lib-select"
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-          >
-            <option value="">{tr('Choose a topic')}</option>
-            {topics.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.title}
-              </option>
-            ))}
-          </select>
+          {tab === 'Notes' && topicSelect}
         </div>
         {feedback && (
           <p className="review-done" role="status">
@@ -174,7 +179,7 @@ export function LibraryPage() {
                   </button>
                 </div>
               ))}
-            <div className="lib-tools">
+            <div className="lib-tools lib-search-tools">
               <label className="field-search">
                 <Icon name="search" />
                 <input
@@ -187,25 +192,7 @@ export function LibraryPage() {
                   }}
                 />
               </label>
-              <select
-                aria-label={tr('Topic membership')}
-                value={membership}
-                onChange={(e) => filterMembership(e.target.value)}
-              >
-                <option value="all">{tr('Any membership')}</option>
-                <option value="linked">{tr('In a topic')}</option>
-                <option value="unfiled">{tr('Unfiled')}</option>
-              </select>
-              <select
-                aria-label={tr('Reading scope')}
-                value={availability}
-                onChange={(e) => filterScope(e.target.value)}
-              >
-                <option value="">{tr('Any text availability')}</option>
-                <option value="full_text">{tr('Full text')}</option>
-                <option value="abstract">{tr('Abstract')}</option>
-                <option value="metadata">{tr('Metadata only')}</option>
-              </select>
+              {topicSelect}
               {ids.length > 0 &&
                 (tab === 'Trash' ? (
                   <>
@@ -220,12 +207,14 @@ export function LibraryPage() {
                     >
                       {tr('Restore')}
                     </button>
-                    <button className="danger-link" onClick={() => void preview(true).catch(report)}>
+                    <button className="ghost-btn lib-delete" onClick={() => void preview(true).catch(report)}>
+                      <Icon name="trash" size={15} />
                       {tr('Delete permanently…')}
                     </button>
                   </>
                 ) : (
-                  <button className="ghost-btn" onClick={() => void preview(false).catch(report)}>
+                  <button className="ghost-btn lib-delete" onClick={() => void preview(false).catch(report)}>
+                    <Icon name="trash" size={15} />
                     {tr('Move to trash…')}
                   </button>
                 ))}
@@ -321,13 +310,7 @@ export function LibraryPage() {
                         return item && <p key={id}>{item.title} · {tr('Archived')}</p>
                       })}
                       <div className="lib-tools">
-                        <button
-                          className="ghost-btn sm"
-                          disabled={!topic || busy}
-                          onClick={() => organize('link', topic)}
-                        >
-                          {tr('Add to topic')}
-                        </button>
+                        <TopicPicker topics={topics} disabled={busy} onSelect={(id) => organize('link', id)} />
                         <button
                           className="ghost-btn sm"
                           disabled={!topic || busy}

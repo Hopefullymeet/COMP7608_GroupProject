@@ -11,9 +11,8 @@ import { LiteratureWorkbench } from './LiteratureWorkbench'
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'discover', label: 'Discover', icon: 'compass' },
   { id: 'read', label: 'Read & ask', icon: 'book' },
-  { id: 'compare', label: 'Compare', icon: 'columns' },
-  { id: 'synthesis', label: 'Synthesize', icon: 'note' },
 ]
+const COMPARE_TAB = { id: 'compare', label: 'Compare', icon: 'columns' } as const
 
 export function TopicView({ topicId, tab, windowControls, comparison, liveResearch }: { topicId: string; tab: Tab; windowControls?: ReactNode; comparison?:ReactNode; liveResearch?:boolean }) {
   const { tr } = useLanguage()
@@ -24,16 +23,17 @@ export function TopicView({ topicId, tab, windowControls, comparison, liveResear
   const session = state.sessions.find((s) => s.id === state.activeSessionId && s.topicId === topicId)
   const request = state.messages.find((m) => m.sessionId === session?.id && m.role === 'user')
   const papers = papersOfTopic(state, topicId)
-  const tabs = TABS.filter((item) => item.id === 'synthesis' ? liveResearch : !state.mainline || (item.id !== 'compare' || !!comparison))
+  const dragRegion = windowControls ? '' : undefined
+  const tabs = !liveResearch && (!state.mainline || comparison) ? [...TABS, COMPARE_TAB] : TABS
 
   return (
     <div className="topic">
       <header className={windowControls ? 'topic-head topic-head--desktop' : 'topic-head'}
-        data-tauri-drag-region={windowControls ? '' : undefined}>
+        data-tauri-drag-region={dragRegion}>
         <button className="icon-btn" onClick={() => act.navigate({ view: 'home' })} aria-label={tr('Back to home')}><Icon name="arrowLeft" /></button>
-        <div className="topic-title" data-tauri-drag-region={windowControls ? 'deep' : undefined}>
-          <h1 title={windowControls ? topic.title : undefined}>{topic.title}</h1>
-          <small>{topic.goal}</small>
+        <div className="topic-title" data-tauri-drag-region={dragRegion}>
+          <h1 data-tauri-drag-region={dragRegion} title={windowControls ? topic.title : undefined}>{topic.title}</h1>
+          <small data-tauri-drag-region={dragRegion}>{topic.goal}</small>
         </div>
         {topic.scripted && (liveResearch ? (
           <details className="pt-topic-actions" onKeyDown={(event) => {
@@ -56,9 +56,6 @@ export function TopicView({ topicId, tab, windowControls, comparison, liveResear
                 event.currentTarget.closest('details')!.open = false
                 act.showTrace(!state.trace.open)
               }}><Icon name="trace" size={15} /> {tr('Agent trace')}</button>
-              {tab === 'read' && <button onClick={() => act.navigate({ view: 'home' })}>
-                <Icon name="x" size={15} /> {tr('Close Read & ask')}
-              </button>}
             </nav>
           </details>
         ) : (
