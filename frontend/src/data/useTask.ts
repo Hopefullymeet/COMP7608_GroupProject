@@ -74,9 +74,9 @@ export function useTask(api: Client, onFinished: (task: string, result: Finished
             tracker.cursor = event.event_seq
             switch (event.type) {
               case 'task.progress': {
-                const { stage, message } = event.payload
+                const { stage, message, activity } = event.payload
                 setPreview(state => ({ ...state, progress: message, tools: stage.startsWith('tool.')
-                  ? [...state.tools, { kind: 'tool', title: stage.slice(5), detail: message }] : state.tools }))
+                  ? [...state.tools, { kind: 'tool', title: stage.slice(5), detail: message, activity }] : state.tools }))
                 break
               }
               case 'discovery.step': setPreview((state) => ({ ...state, steps: [...state.steps, event.payload] })); break

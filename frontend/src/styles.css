@@ -501,3 +501,10 @@ html, body, #root {overflow:hidden;overscroll-behavior:none}
 .turn-rail button { display: grid; place-items: center; width: 20px; height: 14px; border: 0; padding: 0; background: transparent; }
 .turn-rail button::after { content: ''; width: 6px; height: 2px; background: var(--ink-3); opacity: .45; }
 .turn-rail button:is(:hover, :focus-visible, [aria-current])::after { width: 10px; background: var(--ink); opacity: 1; }
+
+.work-step-group { margin: .6rem 0 0 .45rem; padding: .5rem 0 0 .7rem; border-top: 1px solid var(--line); }
+.work-step-group ul { list-style: none; padding: 0; margin: .4rem 0; }
+.work-step-group li { padding: .3rem 0; overflow-wrap: anywhere; }
+.work-step-group svg { vertical-align: -.12em; }
+.work-step-group blockquote { border-left: 2px solid var(--line); margin: .5rem 0 .5rem 1rem; padding-left: .7rem; }
+.work-step-group p { margin: .25rem 0; }

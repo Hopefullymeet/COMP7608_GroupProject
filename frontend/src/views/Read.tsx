@@ -15,7 +15,7 @@ import { PublicationDetails } from '../components/PublicationDetails'
 import { AnswerText } from '../components/AnswerText'
 import { errorText } from '../api/contract'
 import type { ReaderAnswer, Rect, Selection } from '../api/reader'
-import type { ChatMessage, Paper, Passage } from '../data/types'
+import type { AgentRun, AgentStep, ChatMessage, Paper, Passage } from '../data/types'
 
 const PdfReader = lazy(() => import('./PdfReader'))
 
@@ -44,24 +44,57 @@ function ClaimSources({ ids, sentence, numbers }: { ids: string[]; sentence: num
   </span>
 }
 
+function WorkStep({ step }: { step: AgentStep }) {
+  const { tr } = useLanguage()
+  const activity = step.activity
+  const fragments = activity?.passages ?? []
+  const papers = [...new Set(fragments.map(p => p.paper))]
+  const result = step.detail?.match(/^(\d+) result\(s\)\.(?: ([\s\S]+))?$/)
+  const query = activity?.query || result?.[2]
+  const target = query || papers.join('、') || activity?.paper
+  const outcome = result ? tr('{0} results', result[1]) : step.detail && tr(step.detail)
+  const icon = step.title.includes('search') ? 'search' : step.title === 'paper_read' ? 'book' : 'tool'
+  const label = <><Icon name={icon} size={14} /> {tr(step.title)}{target && <> · {target}</>}</>
+  if (!fragments.length && !step.call && !activity?.paper)
+    return <li>{label}{outcome && <small> · {outcome}</small>}</li>
+  return <li><details><summary>{label}</summary>
+    {query && activity?.paper && <p>{activity.paper}</p>}
+    {outcome && <small>{outcome}</small>}
+    {step.call && <code>{step.call}</code>}
+    {fragments.map(fragment => <blockquote key={fragment.passage_id}>
+      <strong>{papers.length > 1 && fragment.paper + ' · '}
+        {fragment.page ? tr('PDF page {0}', fragment.page) : tr('Abstract')}
+        {fragment.ordinal != null && ' · ' + tr('Passage {0}', fragment.ordinal + 1)}
+      </strong>
+      <p>{fragment.excerpt}</p>
+    </blockquote>)}
+  </details></li>
+}
+
+function WorkSteps({ run, done }: { run: AgentRun; done: boolean }) {
+  const { tr } = useLanguage()
+  const prefs = usePreferences()
+  const seconds = run.durationSeconds
+  const duration = seconds == null ? '' : seconds < 60 ? tr('{0}s elapsed', seconds)
+    : tr('{0}m {1}s elapsed', Math.floor(seconds / 60), seconds % 60)
+  const status = { running: 'Working…', done: 'Done', partial: 'Partially completed', failed: 'Failed', cancelled: 'Cancelled' }[run.status]
+  const actions = [...new Set(run.steps.map(step => tr(step.title)))].join(' · ')
+  return <details key={String(done) + prefs.collapse} open={!done || prefs.collapse === 'never'} className="chat-work-steps">
+    <summary>{tr(status)}{duration && ' · ' + duration}</summary>
+    <details className="work-step-group" open={prefs.steps === 'detailed' || !done}>
+      <summary>{actions}</summary>
+      <ul>{run.steps.map(step => <WorkStep key={step.id} step={step} />)}</ul>
+    </details>
+  </details>
+}
+
 function AgentMessage({ m }: { m: ChatMessage }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
   const runId = m.runId ?? m.wikiTask
   const run = runId ? state.runs[runId] : undefined
-  const prefs = usePreferences()
   const lastStep = run?.steps[run.steps.length - 1]
   const tools = run?.steps.filter((s) => s.kind === 'tool').length ?? 0
-  const stepGroups: NonNullable<typeof run>['steps'][] = []
-  for (const step of run?.steps ?? []) {
-    const group = stepGroups.at(-1)
-    if (prefs.steps !== 'detailed' && group?.[0].title === step.title) group.push(step)
-    else stepGroups.push([step])
-  }
-  function stepDetail(detail: string) {
-    const result = detail.match(/^([0-9]+) result\(s\)\.(?: (.*))?$/)
-    return result ? [result[2], tr('{0} results', result[1])].filter(Boolean).join(' · ') : tr(detail)
-  }
   const papers = papersOfTopic(state, currentTopic(state))
   const citationNumbers = new Map<string, number>()
   for (const segment of m.segments) {
@@ -76,15 +109,7 @@ function AgentMessage({ m }: { m: ChatMessage }) {
     <div className="msg agent" data-answer-id={m.id}>
       {!m.done && <div className="msg-who"><span className="working"><Spinner /> {tr(lastStep?.title ?? 'Planning…')}</span></div>}
       {m.wikiTask && state.topics.find(t=>t.id===currentTopic(state))?.wikiTurns?.includes(m.wikiTask) && <small className="wiki-update"><Icon name="wiki" size={13}/>{tr('Wiki updated')}</small>}
-      {run && run.steps.length > 0 && <details key={String(m.done) + prefs.collapse} open={!m.done || prefs.collapse === 'never'} className="chat-work-steps">
-        <summary>{count(tr,run.steps.length,'step')}</summary>
-        <ul>{stepGroups.map(group => {
-          const step = group[0]
-          return <li key={step.id}>{tr(step.title)}{group.length > 1 && ' × ' + group.length}
-            {prefs.steps === 'detailed' && <>{step.call && <code>{step.call}</code>}{step.detail && <p>{stepDetail(step.detail)}</p>}</>}
-          </li>
-        })}</ul>
-      </details>}
+      {run && run.steps.length > 0 && <WorkSteps run={run} done={m.done} />}
       {m.segments.length > 0 && (
         <div className="answer">
           {m.segments.map((s, i) => {

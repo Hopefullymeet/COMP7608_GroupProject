@@ -241,7 +241,7 @@ class Worker:
         return data
 
     def finish(self, task, status, **result):
-        task.update(status=status, **result)
+        task.update(status=status, finished_at=now(), **result)
         event = self.emit(task, "task.finished", {"status": status, **result})
         if status in ("completed", "partial") and task["kind"] in CAPTURE_TASKS and task.get("topic_id"):
             self.topic_wiki.capture_safely(task["topic_id"])
@@ -556,7 +556,7 @@ class Worker:
         if method == "task.history":
             topic = self.topic(params) if "topic_id" in params else None
             return {"items": [
-                {key: t[key] for key in ("task_id", "run_id", "topic_id", "session_id", "kind", "label", "status", "started_at", "steps") if key in t}
+                {key: t[key] for key in ("task_id", "run_id", "topic_id", "session_id", "kind", "label", "status", "started_at", "finished_at", "steps") if key in t}
                 for t in self.rows("task") if topic is None or t["topic_id"] == topic
             ]}
         if method == "discovery.latest":
@@ -1887,14 +1887,19 @@ class Worker:
             memory = task.get("topic_memory")
             issue = None
             used_endpoint = runtime is None
-            def record_tool(name, observation):
+            titles = {s["source_version_id"]: s["title"] for s in sources}
+            def record_tool(name, observation, activity):
+                if activity.get("version") in titles:
+                    activity["paper"] = titles[activity["version"]]
+                for fragment in activity.get("passages", []):
+                    fragment["paper"] = titles.get(fragment["source_version_id"], fragment["source_version_id"])
                 with self.lock:
                     current = self.get("task", task_id)
                     if current["status"] != "running":
                         return
                     with self.db:
-                        current["steps"].append({"kind": "tool", "title": name, "detail": observation})
-                        event = self.emit(current, "task.progress", {"stage": "tool." + name, "message": observation})
+                        current["steps"].append({"kind": "tool", "title": name, "detail": observation, "activity": activity})
+                        event = self.emit(current, "task.progress", {"stage": "tool." + name, "message": observation, "activity": activity})
                     self.send_events([event])
 
             if runtime is not None:

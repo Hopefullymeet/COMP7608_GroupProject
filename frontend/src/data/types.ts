@@ -1,4 +1,4 @@
-import type { Reading } from '../api/contract'
+import type { Reading, ReadingActivity } from '../api/contract'
 import type { RunConfiguration, Usage } from './serviceSettings'
 
 // Domain objects, named after the Technical Book (Topic, Session, Paper, Candidate,
@@ -90,6 +90,7 @@ export interface Candidate {
 export type StepKind = 'plan' | 'tool' | 'observe' | 'decide' | 'stop'
 
 export interface AgentStep {
+  activity?: ReadingActivity
   id: string
   kind: StepKind
   title: string
@@ -102,6 +103,7 @@ export interface AgentStep {
 export type RunStatus = 'running' | 'done' | 'partial' | 'failed' | 'cancelled'
 
 export interface AgentRun {
+  durationSeconds?: number
   id: string
   manuscriptId?: string
   task: 'Discovery' | 'Question' | 'Comparison' | 'Citation check' | 'Citation suggestions' | 'Import' | 'Resume' | 'Literature synthesis' | 'Ask about selection' | 'Index figure descriptions'

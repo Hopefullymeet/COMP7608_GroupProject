@@ -60,13 +60,17 @@ export type Finished =
   | { status: 'partial'; result: Result; issue: Issue }
   | { status: 'failed'; issue: Issue }
   | { status: 'cancelled'; result?: Result }
-export type HistoryRun={task_id:Id;run_id:Id;kind:TaskInput['kind'];label:string;status:'queued'|'running'|Finished['status'];started_at:string;topic_id?:Id;session_id?:Id;
-  steps:{kind:'plan'|'tool'|'observe'|'decide'|'stop';title:string;detail:string}[];usage?:{calls:number;tokens:number;ms:number;cost:number};checkpoint_id?:Id}
+export type ReadingActivity = {
+  query?: string; version?: string; paper?: string
+  passages?: { source_version_id: string; paper: string; passage_id: string; page?: number; ordinal?: number; excerpt: string }[]
+}
+export type HistoryRun={task_id:Id;run_id:Id;kind:TaskInput['kind'];label:string;status:'queued'|'running'|Finished['status'];started_at:string;finished_at?:string;topic_id?:Id;session_id?:Id;
+  steps:{kind:'plan'|'tool'|'observe'|'decide'|'stop';title:string;detail:string;activity?:ReadingActivity}[];usage?:{calls:number;tokens:number;ms:number;cost:number};checkpoint_id?:Id}
 export type Snapshot = { task_id: Id; run_id: Id; last_event_seq: number } & (
   { status: 'queued' | 'running' } | Finished
 )
 export type EventBody =
-  | { type: 'task.progress'; payload: { stage: string; message: string } }
+  | { type: 'task.progress'; payload: { stage: string; message: string; activity?: ReadingActivity } }
   | { type: 'task.finished'; payload: Finished }
   | { type: 'discovery.step'; payload: Step }
   | { type: 'answer.delta'; payload: { text: string } }

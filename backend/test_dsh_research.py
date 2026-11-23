@@ -206,9 +206,14 @@ class DshResearchTest(unittest.TestCase):
                     steps = []
                     full, seen, issue = dsh.answer_full_text(
                         "What benchmark does Alpha define?", sources, threading.Event(),
-                        progress=lambda name, detail: steps.append(name),
+                        progress=lambda name, detail, activity: steps.append((name, activity)),
                     )
-                    self.assertEqual(steps, ["paper_search", "paper_read"])
+                    self.assertEqual([name for name, _ in steps], ["paper_search", "paper_read"])
+                    self.assertEqual(steps[0][1]["query"], "benchmark")
+                    fragment = steps[1][1]["passages"][0]
+                    self.assertEqual(fragment["source_version_id"], version)
+                    self.assertTrue(fragment["excerpt"])
+                    self.assertGreaterEqual(fragment["page"], 1)
                     self.assertIsNone(issue)
                     self.assertIn(full[0]["references"][0]["passage"]["passage_id"], seen)
                     full, seen, issue = dsh.answer_full_text("Return an invalid response.", sources, threading.Event())

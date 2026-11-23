@@ -802,6 +802,7 @@ export function MainlineProvider({
   const recorded: AgentRun[] = (history?.items ?? []).map((h) => ({
     id: h.task_id,
     task: labels[h.kind],
+    durationSeconds: h.finished_at ? Math.max(0, Math.round((Date.parse(h.finished_at) - Date.parse(h.started_at)) / 1000)) : undefined,
     label: h.label,
     usage: h.usage,
     status: h.status === 'queued' ? 'running' : h.status === 'completed' ? 'done' : h.status,

@@ -104,6 +104,11 @@ def read_json_answer(text, seen):
         raise failure("MODEL_OUTPUT_INVALID", True, "retry") from None
 
 
+def reading_fragment(item):
+    return {**{k: item[k] for k in ("source_version_id", "passage_id", "page", "ordinal") if k in item},
+            "excerpt": item.get("text", "")[:240]}
+
+
 class Dsh:
     def __init__(self, node, cli, key, workspace, *, use_system_credential=False):
         self.node = node
@@ -188,7 +193,7 @@ class Dsh:
                               .replace("__SCOPE__", json.dumps(str(scope))), encoding="utf-8")
             patch = root / "papertrace.patch.yml"
             self.write_patch(patch, root, plugin)
-            return self.run(root, patch, passages, prompt, cancelled, progress=progress)
+            return self.run(root, patch, passages, prompt, cancelled, reading_progress=progress)
 
     def synthesize(self, question, sources, wiki, cancelled, progress, mode="wiki", dimensions=None,
                    endpoint_completion=None):
@@ -284,7 +289,7 @@ class Dsh:
             "Papers: " + json.dumps([{k: v for k, v in source.items() if k not in ("passages", "body_starts")} for source in sources],
                                      ensure_ascii=False) + "\nQuestion: " + question
         )
-        raw, seen, _, _, issue = self.run_research(prompt + memory_prompt(memory), sources, [], cancelled, "agent", progress, question)
+        raw, seen, _, _, issue = self.run_research(prompt + memory_prompt(memory), sources, [], cancelled, "agent", None, question, reading_progress=progress)
         if issue and not raw:
             return [], seen, issue
         try:
@@ -366,7 +371,7 @@ class Dsh:
             result[key] = value.strip()
         return result
 
-    def run_research(self, prompt, sources, wiki, cancelled, mode, progress, question):
+    def run_research(self, prompt, sources, wiki, cancelled, mode, progress, question, reading_progress=None):
         tools = self.tools_entry() if mode != "fixed" else None
         with tempfile.TemporaryDirectory(prefix="dsh-", dir=self.workspace) as folder:
             root = Path(folder)
@@ -385,7 +390,7 @@ class Dsh:
             fixed = self.fixed_search(question, sources) if mode == "fixed" else {}
             if mode == "fixed":
                 prompt += "\nUse only the following fixed retrieval results: " + json.dumps(list(fixed.values()), ensure_ascii=False)
-            return self.run(root, patch, fixed, prompt, cancelled, research=True, progress=progress)
+            return self.run(root, patch, fixed, prompt, cancelled, research=True, progress=progress, reading_progress=reading_progress)
 
     def fixed_search(self, question, sources, limit=36):
         terms = list(dict.fromkeys(re.findall(r"[^\W_]+", question.lower())))[:12]
@@ -415,7 +420,7 @@ class Dsh:
             *([{"insert": [{"id": "papertrace-paper-tools", "name": str(plugin)}]}] if plugin else []),
         ]), encoding="utf-8")
 
-    def run(self, root, patch, passages, prompt, cancelled, research=False, progress=None):
+    def run(self, root, patch, passages, prompt, cancelled, research=False, progress=None, reading_progress=None):
         env = {k: v for k, v in os.environ.items() if not k.startswith(("DSH_", "DEEPSEEK_", "PAPERTRACE_"))
                and k not in ("NODE_OPTIONS", "NODE_PATH", "NODE_EXTRA_CA_CERTS", "NODE_TLS_REJECT_UNAUTHORIZED")}
         env.update(DSH_HOME=str(root / "home"), DSH_TELEMETRY_DISABLED="1", DSH_PRIMARY_RUNTIME="",
@@ -490,6 +495,11 @@ class Dsh:
             if kind == "tool/result":
                 result = data.get("message", {})
                 name, args = calls.get(result.get("toolCallId"), ("", {}))
+                activity = {}
+                if isinstance(args.get("query"), str):
+                    activity["query"] = args["query"]
+                if args.get("version"):
+                    activity["version"] = args["version"]
                 if research and name:
                     observation = "Tool returned an error."
                     if not result.get("isError"):
@@ -500,6 +510,7 @@ class Dsh:
                                 if name == "paper_read":
                                     for item in found:
                                         seen[item["passage_id"]] = item
+                                    activity["passages"] = [reading_fragment(item) for item in found]
                                 observation = f"{len(found)} result(s)."
                                 if name == "paper_search" and isinstance(args.get("query"), str):
                                     observation += " " + args["query"][:180]
@@ -509,14 +520,17 @@ class Dsh:
                         except (AttributeError, KeyError, TypeError, ValueError):
                             observation = "Tool result could not be decoded."
                     trace.append({"kind": "tool", "title": name, "detail": observation})
+                    if reading_progress:
+                        reading_progress(name, observation, activity)
                     if progress:
                         progress(name, observation)
                 elif name == "paper_read":
                     found = not result.get("isError") and args.get("id") in passages
                     if found:
                         seen[args["id"]] = passages[args["id"]]
-                    if progress:
-                        progress(name, "1 result(s)." if found else "Tool returned an error.")
+                        activity["passages"] = [reading_fragment(passages[args["id"]])]
+                    if reading_progress:
+                        reading_progress(name, "1 result(s)." if found else "Tool returned an error.", activity)
             if kind == "assistant/message":
                 usage = data.get("usage") or {}
                 for reported, target in (("inputTokens", "input_tokens"), ("outputTokens", "output_tokens")):
