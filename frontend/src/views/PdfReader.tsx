@@ -190,7 +190,7 @@ async function readOutline(pdf: PDFDocumentProxy) {
 export default function PdfReader({ topic, version, page, target, onAsk, onFind, onWiki, onPaperInfo, session, resume }: {
   topic: string; version: string; page?: number; target?: Rect
   session?: string; resume?: boolean
-  onAsk: (selection: Selection) => void; onFind?: () => void; onWiki: () => void; onPaperInfo?: (mode: 'scan' | 'analysis') => void
+  onAsk?: (selection: Selection) => void; onFind?: () => void; onWiki?: () => void; onPaperInfo?: (mode: 'scan' | 'analysis') => void
 }) {
   const { tr } = useLanguage()
   const workspace = useWorkspace()
@@ -239,11 +239,25 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
   const [editor, edit] = useState<{ value: string; mark?: Mark }>()
   const [history, setHistory] = useState<{ undo: Mark[]; redo: Mark[] }>({ undo: [], redo: [] })
   const frame = useRef<HTMLDivElement>(null)
+  const resizeAnchor = useRef<{ page: number; offset: number }>()
 
   useEffect(() => {
-    if (!frame.current) return
-    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
-    observer.observe(frame.current)
+    const scroller = frame.current
+    if (!scroller) return
+    let previousWidth = 0
+    const observer = new ResizeObserver(([entry]) => {
+      const nextWidth = entry.contentRect.width
+      if (!nextWidth || nextWidth === previousWidth) return
+      const top = scroller.scrollTop
+      const page = pageAt(top)
+      const sheet = pageElement(page)
+      resizeAnchor.current = top > 0 && sheet?.offsetHeight
+        ? { page, offset: (top - sheet.offsetTop) / sheet.offsetHeight }
+        : undefined
+      previousWidth = nextWidth
+      setWidth(nextWidth)
+    })
+    observer.observe(scroller)
     return () => observer.disconnect()
   }, [])
   useEffect(() => {
@@ -269,23 +283,24 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
 
   function pageElement(number: number) { return pageList.current?.children.item(number - 1) as HTMLElement | undefined }
 
+  function pageAt(position: number) {
+    let first = 1
+    let last = pageList.current?.children.length ?? 0
+    while (first < last) {
+      const middle = Math.floor((first + last + 1) / 2)
+      if (pageElement(middle)!.offsetTop <= position) first = middle
+      else last = middle - 1
+    }
+    return first
+  }
+
   function syncPageWindow(scroller: HTMLDivElement) {
     if (!document || !pageList.current) return
     const top = scroller.scrollTop
     const total = pageList.current.children.length
     if (!total) return
-    function at(position: number) {
-      let first = 1
-      let last = total
-      while (first < last) {
-        const middle = Math.floor((first + last + 1) / 2)
-        if (pageElement(middle)!.offsetTop <= position) first = middle
-        else last = middle - 1
-      }
-      return first
-    }
-    setCurrent(at(top + Math.min(120, scroller.clientHeight * .25)))
-    const range = [Math.max(1, at(top) - 1), Math.min(total, at(top + scroller.clientHeight) + 1)]
+    setCurrent(pageAt(top + Math.min(120, scroller.clientHeight * .25)))
+    const range = [Math.max(1, pageAt(top) - 1), Math.min(total, pageAt(top + scroller.clientHeight) + 1)]
     setRenderRange((old) => old[0] === range[0] && old[1] === range[1] ? old : range)
   }
 
@@ -302,6 +317,8 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
 
   useLayoutEffect(() => {
     if (!document || !width || !frame.current) return
+    const anchor = resizeAnchor.current
+    resizeAnchor.current = undefined
     if (page !== undefined && (initialJump.current?.page !== page || initialJump.current?.target !== target)) {
       initialJump.current = { page, target }
       jump(Math.max(1, Math.min(document.numPages, page)), target)
@@ -326,6 +343,10 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
       }
       setRestored(true)
       return
+    }
+    if (anchor) {
+      const sheet = pageElement(anchor.page)
+      if (sheet) frame.current.scrollTop = sheet.offsetTop + anchor.offset * sheet.offsetHeight
     }
     syncPageWindow(frame.current)
   }, [document, page, target, width, session, resume, restored, savedPosition])
@@ -365,6 +386,7 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
   useEffect(() => {
     if (!document) return
     function findShortcut(e: KeyboardEvent) {
+      if (frame.current?.closest('[hidden]')) return
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' &&
           (frame.current?.parentElement?.contains(window.document.activeElement) || window.document.activeElement === window.document.body)) {
         e.preventDefault()
@@ -622,7 +644,7 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
           <button disabled={workspace.busy} onClick={() => void save('underline', selection.rects, [], selection.quote, '')}>{tr('Underline')}</button>
         </>}
         <button onClick={() => edit({ value: '' })}>{tr('Add annotation')}</button>
-        <button onClick={() => { onAsk(selection); setSelection(undefined); window.getSelection()?.removeAllRanges() }}>{tr('Ask AI')}</button>
+        {onAsk && <button onClick={() => { onAsk(selection); setSelection(undefined); window.getSelection()?.removeAllRanges() }}>{tr('Ask AI')}</button>}
       </div>, window.document.body)}
     {editor && <Dialog title={tr('Annotation')} onClose={() => edit(undefined)}>
       <form className="pt-reader-note" onSubmit={(e) => {
@@ -648,9 +670,9 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
         <p>{m.note || m.quote || tr(m.kind)}</p>
         <button className="link-btn" onClick={() => { setAnnotationsOpen(false); edit({ value: m.note, mark: m }) }}>{tr('Edit')}</button>
         <button className="link-btn" disabled={workspace.busy} onClick={() => void remove(m)}>{tr('Delete')}</button>
-        {m.rects.length > 0 && <button className="link-btn" onClick={() => { setAnnotationsOpen(false); onAsk({ page: m.page, rect: union(m.rects),
+        {onAsk && m.rects.length > 0 && <button className="link-btn" onClick={() => { setAnnotationsOpen(false); onAsk({ page: m.page, rect: union(m.rects),
           rects: m.rects, quote: m.quote, medium: m.kind === 'region' ? 'image' : 'text' }) }}>{tr('Ask AI')}</button>}
-        {m.rects.length > 0 && (m.note || m.quote) && <button className="link-btn" disabled={workspace.busy}
+        {onWiki && m.rects.length > 0 && (m.note || m.quote) && <button className="link-btn" disabled={workspace.busy}
           onClick={() => void workspace.write('reader.mark_to_wiki', { ...scope, mark_id: m.mark_id }).then(onWiki).catch(workspace.report)}>
           {tr('Save annotation to Topic Wiki')}
         </button>}

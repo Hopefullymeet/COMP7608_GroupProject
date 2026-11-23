@@ -1,5 +1,5 @@
 import { count, useLanguage } from '../i18n'
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { PageHead, Dialog } from '../components/PageHead'
 import { Icon } from '../components/Icon'
 import { useStore } from '../data/store'
@@ -8,6 +8,32 @@ import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { Notes } from './Notes'
 import { PaperImportDialog, usePdfDrop } from './PaperImportDialog'
 import { PublicationDetails } from '../components/PublicationDetails'
+
+const PdfReader = lazy(() => import('./PdfReader'))
+
+function publicIdentity(identity: string) {
+  return /^[a-f0-9]{64}$/i.test(identity) ? '' : identity
+}
+
+type LibraryReader = { topic: string; version: string; title: string }
+
+function ArchivedReader({ reader, close }: { reader: LibraryReader; close: () => void }) {
+  const { tr } = useLanguage()
+  const library = useRead('library.list', { topic_id: reader.topic })
+  const version = library?.items.flatMap((item) => item.source_versions)
+    .find((item) => item.source_version_id === reader.version)
+  const pdf = version?.pdf_available ?? version?.available_scope === 'full_text'
+  const source = useRead('source.read', { topic_id: reader.topic, source_version_id: reader.version }, !!version && !pdf)
+  return <div className="page library-reader">
+    <PageHead icon="book" title={reader.title} sub={tr('Library')}>
+      <button className="ghost-btn" onClick={close}>{tr('Close')}</button>
+    </PageHead>
+    {pdf ? <Suspense fallback={<p role="status">{tr('Opening PDF…')}</p>}>
+      <PdfReader topic={reader.topic} version={reader.version} />
+    </Suspense> : <div className="page-body scroll">{source?.passages.map((p) => <p key={p.passage_id}>{p.text}</p>)}
+      {source && !source.passages.length && tr('Text unavailable')}</div>}
+  </div>
+}
 
 export function LibraryPage() {
   const { tr } = useLanguage()
@@ -32,6 +58,7 @@ export function LibraryPage() {
   const [impact, setImpact] = useState<Impact & { ids: string[]; purge: boolean }>(),
     [clear, setClear] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const [reader, setReader] = useState<LibraryReader>()
   const topics = state.topics
   const rows = (tab === 'Trash' ? catalog?.trash : catalog?.papers) ?? []
   const shown = rows.filter(
@@ -61,6 +88,11 @@ export function LibraryPage() {
       .then(() => setFeedback('Library updated.'))
       .catch(report)
   }
+  const activeTopic = paper?.topic_ids.includes(topic) && topics.some((t) => t.id === topic) ? topic :
+    paper?.topic_ids.find((id) => topics.some((t) => t.id === id))
+  const archivedTopics = archived?.items.filter((item) => item.kind === 'topic') ?? []
+  const readerTopic = activeTopic ?? paper?.topic_ids.find((id) => archivedTopics.some((t) => t.id === id))
+  if (reader) return <ArchivedReader reader={reader} close={() => setReader(undefined)} />
   return (
     <div className="page library-page">
       <PageHead trace icon="library" title={tr('Library')} sub={tr('Papers, versions and research notes')}>
@@ -216,7 +248,7 @@ export function LibraryPage() {
                     />
                     <button className="paper-choice" onClick={() => setFocus(p.paper_id)}>
                       <strong>{p.title}</strong>
-                      <small>{p.authors.join(', ') || p.identity}</small>
+                      {(p.authors.length > 0 || publicIdentity(p.identity)) && <small>{p.authors.join(', ') || publicIdentity(p.identity)}</small>}
                       <span className="lib-chips">
                         <span className="tag">{tr(p.source_versions[0].available_scope.replace('_', ' '))}</span>
                         <span className="tag">
@@ -245,7 +277,7 @@ export function LibraryPage() {
               {paper && (
                 <aside className="card lib-detail">
                   <h2>{paper.title}</h2>
-                  <p className="record-meta">{paper.identity}</p>
+                  {publicIdentity(paper.identity) && <p className="record-meta">{publicIdentity(paper.identity)}</p>}
                   {!demo && tab === 'Papers' && paper.topic_ids.length > 0 &&
                     <PublicationDetails key={paper.paper_id} paper={paper.paper_id}
                       topic={paper.topic_ids.includes(topic) ? topic : paper.topic_ids[0]} />}
@@ -253,11 +285,7 @@ export function LibraryPage() {
                   {paper.files.map((f) => (
                     <p key={f.source_version_id}>
                       {f.name} · {tr(f.role.replaceAll('_', ' '))}{' '}
-                      <small title={f.source_version_id}>
-                        {f.source_version_id.length > 12
-                          ? f.source_version_id.slice(0, 8)
-                          : f.source_version_id}
-                      </small>
+
                     </p>
                   ))}
                   {paper.changes.map((c) => (
@@ -267,16 +295,16 @@ export function LibraryPage() {
                   ))}
                   {tab === 'Papers' && (
                     <>
-                      {paper.topic_ids.length > 0 && (
+                      {readerTopic && (
                         <button
                           className="link-btn"
-                          onClick={() =>
+                          onClick={() => activeTopic ?
                             act.navigate({
                               view: 'topic',
-                              topicId: paper.topic_ids.includes(topic) ? topic : paper.topic_ids[0],
+                              topicId: activeTopic,
                               tab: 'read',
                               sourceVersion: paper.source_versions[0].source_version_id,
-                            })
+                            }) : setReader({ topic: readerTopic, version: paper.source_versions[0].source_version_id, title: paper.title })
                           }
                         >
                           {tr('Open in reader')}
@@ -286,11 +314,12 @@ export function LibraryPage() {
                         {tr('Add material version')}
                       </button>
                       <h3>{tr('Topics')}</h3>
-                      {paper.topic_ids.map((id) => (
-                        <button key={id} className="link-btn" onClick={() => act.openTopic(id, 'read')}>
-                          {topics.find((t) => t.id === id)?.title ?? id}
-                        </button>
-                      ))}
+                      {paper.topic_ids.map((id) => {
+                        const active = topics.find((item) => item.id === id)
+                        if (active) return <button key={id} className="link-btn" onClick={() => act.openTopic(id, 'read')}>{active.title}</button>
+                        const item = archivedTopics.find((entry) => entry.id === id)
+                        return item && <p key={id}>{item.title} · {tr('Archived')}</p>
+                      })}
                       <div className="lib-tools">
                         <button
                           className="ghost-btn sm"

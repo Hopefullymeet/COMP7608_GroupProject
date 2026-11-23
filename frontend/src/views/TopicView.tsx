@@ -56,6 +56,9 @@ export function TopicView({ topicId, tab, windowControls, comparison, liveResear
                 event.currentTarget.closest('details')!.open = false
                 act.showTrace(!state.trace.open)
               }}><Icon name="trace" size={15} /> {tr('Agent trace')}</button>
+              {tab === 'read' && <button onClick={() => act.navigate({ view: 'home' })}>
+                <Icon name="x" size={15} /> {tr('Close Read & ask')}
+              </button>}
             </nav>
           </details>
         ) : (

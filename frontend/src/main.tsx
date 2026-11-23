@@ -18,8 +18,8 @@ import './pages.css'
 import './mainline.css'
 
 const desktop = isTauri()
-const useRpc = desktop && import.meta.env.VITE_PAPERTRACE_TRANSPORT === 'rpc'
-const demo = desktop ? !useRpc : new URLSearchParams(window.location.search).get('mode') === 'contract'
+const useRpc = desktop
+const demo = !desktop && new URLSearchParams(window.location.search).get('mode') === 'contract'
 const api = useRpc ? createDesktop() : demo ? createMock() : null
 const app = <App liveResearch={useRpc} comparison={api?<ComparePage/>:undefined} pages={api ? { library:<LibraryPage/>, wiki:useRpc ? <TopicWikiPage/> : <WikiPage/>, check:<CitationPage/>,settings:<ServicesPage/> } : undefined} windowControls={desktop ? <WindowControls /> : undefined} />
 createRoot(document.getElementById('root')!).render(

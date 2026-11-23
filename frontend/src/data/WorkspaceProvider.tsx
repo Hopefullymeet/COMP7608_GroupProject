@@ -99,7 +99,7 @@ export function WorkspaceProvider({
   }
   const busy = Boolean(task.task || task.busy || task.confirmation || pending)
   return (
-    <Context.Provider value={{ api, tick, report, refresh, write, prepare: task.prepare, demo, busy }}>
+    <Context.Provider value={{ api, tick, report, refresh, write, prepare: async (input) => { await task.prepare(input) }, demo, busy }}>
       {children}
       {task.confirmation && (
         <Dialog title={tr('Confirm task scope')} onClose={task.dismiss}>

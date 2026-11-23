@@ -21,7 +21,6 @@ pnpm --dir frontend install --frozen-lockfile
 ### 2. 打包便携版
 
 ```powershell
-$env:VITE_PAPERTRACE_TRANSPORT='rpc'
 pnpm --dir frontend desktop:build --config src-tauri/tauri.portable.conf.json
 ```
 
@@ -35,7 +34,7 @@ pnpm --dir frontend desktop:build --config src-tauri/tauri.portable.conf.json
 .\frontend\src-tauri\target\release\papertrace.exe
 ```
 
-如设置了 `CARGO_TARGET_DIR`，请在该输出目录的 `release/` 下查找。便携版在 EXE 旁的 `papertrace-data/` 保存工作区数据，因此请从可写目录启动。默认可离线使用内置样例。
+如设置了 `CARGO_TARGET_DIR`，请在该输出目录的 `release/` 下查找。便携版在 EXE 旁的 `papertrace-data/` 保存工作区数据，因此请从可写目录启动。桌面端直接连接本地工作区；契约样例可在浏览器中使用。
 
 如需使用 WebView 默认用户资料目录，运行 `pnpm --dir frontend desktop:build` 生成标准版。两种构建使用相同的默认输出路径。
 
@@ -62,4 +61,4 @@ pnpm --dir frontend desktop:build --config src-tauri/tauri.portable.conf.json
 
 ## 桌面宿主接入
 
-构建或启动前设置 `$env:VITE_PAPERTRACE_TRANSPORT='rpc'`。桌面启动后通过 `protocol.version` 检查版本；`papertrace_rpc({request})` 接收 JSON-RPC 请求并返回同 ID 的响应，`papertrace_subscribe({request,channel})` 确认订阅后通过独立 Tauri Channel 转发 `task.event.params`。文件通过宿主交付的句柄传递。局部结果、错误、游标补收、任务取消及用户确认使用同一套前端控制器。[桌面适配器](src/api/desktop.ts) · [任务控制器](src/data/useTask.ts) · [页面与方法索引](../docs/contracts/README.md)
+桌面端默认通过 Tauri 连接 Python 宿主。桌面启动后通过 `protocol.version` 检查版本。`papertrace_rpc({request})` 接收 JSON-RPC 请求并返回同 ID 的响应，`papertrace_subscribe({request,channel})` 确认订阅后通过独立 Tauri Channel 转发 `task.event.params`。文件通过宿主交付的句柄传递。局部结果、错误、游标补收、任务取消及用户确认使用同一套前端控制器。[桌面适配器](src/api/desktop.ts) · [任务控制器](src/data/useTask.ts) · [页面与方法索引](../docs/contracts/README.md)

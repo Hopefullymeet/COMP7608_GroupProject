@@ -52,10 +52,8 @@ export function useTask(api: Client, onFinished: (task: string, result: Finished
       setTask(undefined)
       setPreview(empty)
       setConnectionError('')
-      const inlinePartial = result.status === 'partial' && 'record_id' in result.result &&
-        Boolean(result.result.kind)
-      setStatus(inlinePartial ? '' : result.status === 'cancelled' ? 'Task cancelled.' :
-        'issue' in result ? `${result.status === 'partial' ? 'Partial result' : 'Task failed'} · ${errorText(new RpcError(result.issue.reason, result.issue))}` : '')
+      setStatus(result.status === 'cancelled' ? 'Task cancelled.' :
+        result.status === 'failed' ? `Task failed · ${errorText(new RpcError(result.issue.reason, result.issue))}` : '')
       finish.current(tracker.id, result)
     }
     async function connect() {
@@ -106,12 +104,12 @@ export function useTask(api: Client, onFinished: (task: string, result: Finished
     return () => { valid = false; unsubscribe?.(); window.removeEventListener('online', resume) }
   }, [api, task, connection])
 
-  async function exclusive(work: () => Promise<void>) {
+  async function exclusive<T>(work: () => Promise<T>) {
     if (pending.current) return
     pending.current = true
     setBusy(true)
     setError('')
-    try { await work() } catch (cause) {
+    try { return await work() } catch (cause) {
       const existing = cause instanceof RpcError && cause.issue.reason === 'TASK_IN_PROGRESS' && cause.issue.details?.task_id
       if (typeof existing === 'string') {
         setConfirmation(undefined)
@@ -127,13 +125,14 @@ export function useTask(api: Client, onFinished: (task: string, result: Finished
     const started = await retryWrite(() => api.call('task.start', params))
     setConfirmation(undefined)
     attach(started.task_id, started)
+    return started
   }
   const prepare = (input: TaskInput, { startImmediately = false } = {}) => exclusive(async () => {
     const params = { ...input, operation_id: operation() }
     const result = await retryWrite(() => api.call('task.prepare', params))
     const prepared = { input, ...result, startKey: operation() }
-    if (startImmediately) await startPrepared(prepared)
-    else setConfirmation(prepared)
+    if (startImmediately) return startPrepared(prepared)
+    setConfirmation(prepared)
   })
   const start = () => confirmation && exclusive(() => startPrepared(confirmation))
   const cancel = () => task && exclusive(async () => {

@@ -8,6 +8,7 @@ import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { Dialog } from '../components/PageHead'
 import { FigureSearch } from '../components/FigureSearch'
 import { PublicationDetails } from '../components/PublicationDetails'
+import { AnswerText } from '../components/AnswerText'
 import { errorText } from '../api/contract'
 import type { ReaderAnswer, Rect, Selection } from '../api/reader'
 import type { ChatMessage, Paper, Passage } from '../data/types'
@@ -23,8 +24,14 @@ function AgentMessage({ m }: { m: ChatMessage }) {
   const lastStep = run?.steps[run.steps.length - 1]
   const tools = run?.steps.filter((s) => s.kind === 'tool').length ?? 0
   const papers = papersOfTopic(state, currentTopic(state))
-  let n = 0
-  const numbered = m.segments.map((s) => (s.evidenceId ? ++n : 0))
+  const citationNumbers = new Map<string, number>()
+  for (const segment of m.segments) {
+    if (segment.tone === 'scope') continue
+    for (const id of segment.evidenceIds ?? (segment.evidenceId ? [segment.evidenceId] : [])) {
+      if (!citationNumbers.has(id)) citationNumbers.set(id, citationNumbers.size + 1)
+    }
+  }
+  const AnswerPoint = state.mainline ? 'p' : 'span'
 
   return (
     <div className="msg agent">
@@ -33,15 +40,29 @@ function AgentMessage({ m }: { m: ChatMessage }) {
         {!m.done && <span className="working"><Spinner /> {tr(lastStep?.title ?? 'Planning…')}</span>}
       </div>
       {m.segments.length > 0 && (
-        <p className="answer">
+        <div className="answer">
           {m.segments.map((s, i) => {
-            if (s.tone === 'scope') return <span key={i} className="scope-note"><Icon name="eye" size={13} /> {s.text}</span>
-            if (state.mainline && s.evidenceIds?.length) return <span key={i} className="claim">
-              {s.text}{s.evidenceIds.map((id, index) => <button key={id} className="cite"
-                aria-label={tr('Show source {0} for sentence {1}', index + 1, i + 1)}
-                onClick={() => act.openEvidence(id, '', true)}>{index + 1}</button>)}
-            </span>
-            if (!s.evidenceId) return <span key={i}>{s.text}</span>
+            if (s.tone === 'scope') return <div key={i} className="scope-note">
+              <Icon name="eye" size={13} />
+              {s.readSources?.length ? <div>
+                <strong>{tr('Reading coverage')}</strong>
+                <ul className="scope-sources">{s.readSources.map((source, index) => {
+                  const paper = paperFor(state, source.source_version_id)
+                  const label = paper?.alias || paper?.title || tr('Source {0}', index + 1)
+                  const scope = source.read_scope === 'none' ? 'Not read' : source.read_scope === 'abstract' ? 'Abstract' : 'Full text'
+                  return <li key={source.source_version_id}>{label} · {tr(scope)}</li>
+                })}</ul>
+              </div> : s.readSources ? tr('No sources read.') : s.text}
+            </div>
+            if (s.evidenceIds?.length) return <AnswerPoint key={i} className="claim">
+              {s.text}{[...new Set(s.evidenceIds)].map((id) => <button key={id} className="cite"
+                aria-label={tr('Show source {0} for sentence {1}', citationNumbers.get(id)!, i + 1)}
+                onClick={() => act.openEvidence(id, '', true)}>{citationNumbers.get(id)}</button>)}
+            </AnswerPoint>
+            if (s.evidenceIds?.length === 0) return <AnswerPoint key={i} className="claim">
+              {s.text}<span className="cite" title="No Evidence Found">？</span>
+            </AnswerPoint>
+            if (!s.evidenceId) return <AnswerPoint key={i}>{s.text}</AnswerPoint>
             const source = evidenceFor(state, s.evidenceId)
             const status = sourceStatus(state, source.paperId)
             const jump = status === 'available' && papers.includes(source.paperId)
@@ -51,16 +72,16 @@ function AgentMessage({ m }: { m: ChatMessage }) {
                 {s.text}
                 <button className={`cite ${status !== 'available' ? 'gone' : ''}`} data-ev-anchor={anchor}
                   onClick={() => act.openEvidence(source.id, jump ? `read-${source.id}` : anchor, jump)}
-                  aria-label={tr('Show source {0}{1}', numbered[i], status === 'available' ? '' : ` · ${tr(status)}`)}>{numbered[i]}</button>
+                  aria-label={tr('Show source {0}{1}', citationNumbers.get(source.id)!, status === 'available' ? '' : ` · ${tr(status)}`)}>{citationNumbers.get(source.id)!}</button>
               </span>
             )
           })}
-        </p>
+        </div>
       )}
       {m.done && state.mainline?.saveAnswer && <button className="link-btn" onClick={()=>state.mainline?.saveAnswer?.(m)}>{tr('Save answer as note')}</button>}
       {m.done && run && (
         <div className="msg-foot">
-          <span className={`run-chip ${run.status}`}>{run.status === 'partial' ? tr('Partial') : tr('Done')}</span>
+          <span className="run-chip done">{tr('Done')}</span>
           <span>{count(tr, run.steps.length, 'step')} · {count(tr, tools, 'tool call')}</span>
           <button className="link-btn" onClick={() => act.showTrace(true, run.id)}>{tr('View trace')}</button>
         </div>
@@ -85,10 +106,10 @@ function Chat({ controls, selections = [], onSource }: {
 
   useEffect(() => { scrollWithin(endRef.current, '.chat-scroll', 'end') }, [messages.length, state.messages, selections.length])
 
-  const send = (t: string) => {
+  const send = async (t: string, fromComposer = false) => {
     if (!t.trim() || state.qaRunning || !canAsk) return
-    if (act.ask(t.trim()) === false) return
-    setText('')
+    const accepted = await act.ask(t.trim())
+    if (accepted && fromComposer) setText((current) => current === t ? '' : current)
   }
 
   const suggestions = (state.mainline
@@ -97,11 +118,11 @@ function Chat({ controls, selections = [], onSource }: {
 
   return (
     <section className="chat" aria-label={tr('Conversation')}>
-        <div className="session-title">
-          <Icon name="message" size={14} /> <span className="grow">{tr(session?.title ?? NEW_SESSION)}</span>
-          {messages.length > 0 && <button className="link-btn" onClick={() => act.newSession(currentTopic(state))}><Icon name="plus" size={13} />{' '}{tr('New session')}</button>}
-          {controls}
-        </div>
+      <div className="session-title">
+        <Icon name="message" size={14} /> <span className="grow">{tr(session?.title ?? NEW_SESSION)}</span>
+        {messages.length > 0 && <button className="link-btn" onClick={() => act.newSession(currentTopic(state))}><Icon name="plus" size={13} />{' '}{tr('New session')}</button>}
+        {controls}
+      </div>
       <div className="chat-scroll">
         {messages.length === 0 && selections.length === 0 && (
           <div className="chat-empty">
@@ -118,7 +139,7 @@ function Chat({ controls, selections = [], onSource }: {
           <div className="msg user"><p>{answer.question}</p></div>
           <div className="msg agent">
             <div className="msg-who"><span className="avatar">P</span> PaperTrace</div>
-            <p className="answer pt-reader-response">{answer.answer}</p>
+            <AnswerText text={answer.answer} />
             <button className="link-btn" onClick={() => onSource?.(answer)}>
               {paperFor(state, answer.source_version_id)?.short} · {tr('PDF page {0}', answer.page)}
             </button>
@@ -133,7 +154,7 @@ function Chat({ controls, selections = [], onSource }: {
             {suggestions.map((q) => {
               const blocked = state.mainline ? null : !papers.includes('qasper') ? 'qasper' : q.requires && !papers.includes(q.requires) ? q.requires : null
               return (
-                <button key={q.id} className="chip-btn" disabled={!!blocked || state.qaRunning || !canAsk} onClick={() => send(q.text)}
+                <button key={q.id} className="chip-btn" disabled={!!blocked || state.qaRunning || !canAsk} onClick={() => void send(q.text)}
                   title={blocked ? tr('Add {0} to the topic first', paperFor(state, blocked).short) : undefined}>
                   {tr(q.text)}{blocked && <small>{' '}{tr('· needs')}{' '}{paperFor(state, blocked).short}</small>}
                 </button>
@@ -144,10 +165,10 @@ function Chat({ controls, selections = [], onSource }: {
         <div className="composer">
           <textarea value={text} rows={2} placeholder={messages.length ? tr('Ask a follow-up…') : tr('Ask about these papers…')} aria-label={tr('Ask a follow-up')}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(text) } }} />
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(text, true) } }} />
           <div className="composer-bar">
             <span className="grow" />
-            <button className="send" disabled={state.qaRunning || !canAsk || !text.trim()} onClick={() => send(text)} aria-label={tr('Send')}><Icon name="arrowUp" size={16} /></button>
+            <button className="send" disabled={state.qaRunning || !canAsk || !text.trim()} onClick={() => void send(text, true)} aria-label={tr('Send')}><Icon name="arrowUp" size={16} /></button>
           </div>
         </div>
       </div>}
@@ -443,9 +464,10 @@ function Reader({ pdf }: { pdf?: PdfActions }) {
   )
 }
 
-function ReadingSplit({ live = false, chat, reader }: {
+function ReadingSplit({ live = false, selections, onSource, reader }: {
   live?: boolean
-  chat: (controls: ReactNode, revealPaper: () => void) => ReactNode
+  selections?: ReaderAnswer[]
+  onSource?: (answer: ReaderAnswer) => void
   reader: ReactNode
 }) {
   const { tr } = useLanguage()
@@ -464,7 +486,6 @@ function ReadingSplit({ live = false, chat, reader }: {
   const maxShare = .6
   const defaultShare = width ? (live ? .28 : 430 / width) : .4
   const share = Math.max(minShare, Math.min(maxShare, preferredShare ?? defaultShare))
-  const revealPaper = () => setCollapsed((current) => current === 'paper' ? undefined : current)
 
   useEffect(() => {
     if (!layout.current) return
@@ -483,12 +504,10 @@ function ReadingSplit({ live = false, chat, reader }: {
   return <div ref={layout} className={`read${dragging ? ' read--resizing' : ''}`}
     data-collapsed={collapsed} style={{ '--read-chat-width': `${share * 100}%` } as CSSProperties}>
     <div className="read-chat-pane" id={chatId} hidden={collapsed === 'chat'}>
-      {chat(<>
-        <button className="icon-btn sm" type="button" title={paperLabel} aria-label={paperLabel}
-          aria-controls={paperId} aria-expanded={collapsed !== 'paper'}
-          onClick={() => setCollapsed(collapsed === 'paper' ? undefined : 'paper')}>
-          <Icon name="panelRight" size={16} />
-        </button>
+      <Chat selections={selections} onSource={onSource && ((answer) => {
+        if (collapsed === 'paper') setCollapsed(undefined)
+        onSource(answer)
+      })} controls={<>
         {collapsed !== 'paper' && <button ref={toggleChat} className="icon-btn sm" type="button"
           title={chatLabel} aria-label={chatLabel} aria-controls={chatId} aria-expanded
           onClick={() => {
@@ -497,7 +516,12 @@ function ReadingSplit({ live = false, chat, reader }: {
           }}>
           <Icon name="sidebar" size={16} />
         </button>}
-      </>, revealPaper)}
+        <button className="icon-btn sm" type="button" title={paperLabel} aria-label={paperLabel}
+          aria-controls={paperId} aria-expanded={collapsed !== 'paper'}
+          onClick={() => setCollapsed(collapsed === 'paper' ? undefined : 'paper')}>
+          <Icon name="panelRight" size={16} />
+        </button>
+      </>} />
     </div>
     {collapsed === 'chat' && <div className="read-collapsed-chat">
       <button ref={restoreChat} className="icon-btn" type="button" title={chatLabel} aria-label={chatLabel}
@@ -571,11 +595,8 @@ function LiveReading({ topic, session }: { topic: string; session: string }) {
   }
 
   return <>
-    <ReadingSplit live chat={(controls, revealPaper) => <Chat controls={controls} selections={answers}
-      onSource={(answer) => {
-        revealPaper()
-        open(answer.source_version_id, answer.page, answer.rect)
-      }} />} reader={<Reader pdf={{ location, open, ask, find: () => setFinding(true) }} />} />
+    <ReadingSplit live selections={answers} onSource={(answer) => open(answer.source_version_id, answer.page, answer.rect)}
+      reader={<Reader pdf={{ location, open, ask, find: () => setFinding(true) }} />} />
     {finding && <FigureSearch topic={topic} versions={papers.map((paper) => paper.id)} names={names}
       onOpen={(figure) => open(figure.source_version_id, figure.page, figure.rect)}
       onAsk={(figure) => {
@@ -614,5 +635,5 @@ export function Read() {
   if (state.mainline && !state.mainline.demo) {
     return <LiveReading key={state.activeSessionId} topic={currentTopic(state)} session={state.activeSessionId} />
   }
-  return <ReadingSplit chat={(controls) => <Chat controls={controls} />} reader={<Reader />} />
+  return <ReadingSplit reader={<Reader />} />
 }

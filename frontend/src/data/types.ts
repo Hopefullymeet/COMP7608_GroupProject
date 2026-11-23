@@ -1,3 +1,4 @@
+import type { Reading } from '../api/contract'
 import type { RunConfiguration, Usage } from './serviceSettings'
 
 // Domain objects, named after the Technical Book (Topic, Session, Paper, Candidate,
@@ -115,6 +116,7 @@ export interface AnswerSegment {
   text: string
   evidenceId?: string
   evidenceIds?: string[]
+  readSources?: Reading['read_sources']
   tone?: 'scope'
 }
 

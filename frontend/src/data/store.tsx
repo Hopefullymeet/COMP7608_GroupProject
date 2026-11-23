@@ -715,18 +715,19 @@ function useActions(dispatch: React.Dispatch<Action>, getState: () => State) {
     refineDiscovery: () => runDiscovery(getState().discovery.question, true),
     decide: (candidateId: string, decision: Decision) => dispatch({ type: 'decide', candidateId, decision }),
 
-    ask(text: string) {
+    async ask(text: string) {
       const s = getState()
       const papers = papersOfTopic(s, DEMO_TOPIC)
       const script = [...QUESTIONS, SEED_QUESTION].find((q) => q.text === text)
-      if (!papers.length || (script?.requires && !papers.includes(script.requires))) return
-      if (script && !papers.includes('qasper')) return
+      if (!papers.length || (script?.requires && !papers.includes(script.requires))) return false
+      if (script && !papers.includes('qasper')) return false
       const config = prepareRun(papers)
       if (!config) return false
       const sessionId = getState().activeSessionId ?? newSession(DEMO_TOPIC)
       dispatch({ type: 'user-message', message: { id: id('msg'), sessionId, role: 'user', segments: [{ text }], done: true } })
       const runId = id('run')
       start(runId, questionScript(script?.id ?? 'free', text, runId, id('msg'), sessionId), config, sessionId)
+      return true
     },
     runComparison() {
       const config = prepareRun(['qasper', 'pubmedqa'])

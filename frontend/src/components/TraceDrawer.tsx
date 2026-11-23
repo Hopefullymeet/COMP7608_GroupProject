@@ -33,7 +33,7 @@ function RunCard({ run, open, onToggle }: { run: AgentRun; open: boolean; onTogg
           <small>{tr(run.task)}</small>
           <strong>{run.label}</strong>
         </span>
-        <span className={`run-chip ${run.status}`}>{run.limit ? tr('Paused') : run.status === 'running' ? <><Spinner />{' '}{tr('Running')}</> : run.status === 'partial' ? tr('Partial') : run.status==='failed'?tr('Failed'):run.status==='cancelled'?tr('Cancelled'):tr('Done')}</span>
+        <span className={`run-chip ${run.status === 'partial' ? 'done' : run.status}`}>{run.limit ? tr('Paused') : run.status === 'running' ? <><Spinner />{' '}{tr('Running')}</> : run.status === 'failed' ? tr('Failed') : run.status === 'cancelled' ? tr('Cancelled') : tr('Done')}</span>
       </button>
       {open && (
         <>
