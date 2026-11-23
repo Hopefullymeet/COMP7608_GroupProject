@@ -1,38 +1,49 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLanguage } from '../i18n'
 import { Icon } from './Icon'
 
-const greetings = {
-  'zh-CN': ['今天想研究什么？', '哪篇论文让你好奇？', '顺着这条引用，会读到什么？', '夜深了，再读一页？'],
-  en: ['What would you like to explore today?', 'Which paper caught your eye?', 'Where might this citation lead?', 'One more page tonight?'],
-}
+import { greetingsAt } from '../data/greetings'
 
 export function NewTopicEntry({ paused, onOpen }: { paused: boolean; onOpen: () => void }) {
   const { language, tr } = useLanguage()
-  const lines = greetings[language]
-  const [text, setText] = useState('')
+  const [lines, setLines] = useState(() => greetingsAt(new Date().getHours()))
+  useEffect(() => {
+    const sync = () => setLines(greetingsAt(new Date().getHours()))
+    const timer = window.setInterval(sync, 15000)
+    document.addEventListener('visibilitychange', sync)
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', sync) }
+  }, [])
+  const cursor = useRef({ pool: lines, line: 0 })
+  const [frame, setFrame] = useState({ line: 0, length: 0 })
+  const entry = lines[frame.line % lines.length]
+  const full = entry[language]
+  const text = full.slice(0, frame.length)
+  const source = text === full ? entry.source?.[language] : ''
   useEffect(() => {
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)')
     let timer: number
     function restart() {
       window.clearTimeout(timer)
+      if (cursor.current.pool !== lines) cursor.current = { pool: lines, line: 0 }
+      let line = cursor.current.line
       if (paused || document.hidden || motion.matches) {
-        setText(lines[0])
+        setFrame({ line, length: lines[line][language].length })
         return
       }
-      let line = 0
       let length = 0
       let erasing = false
       function tick() {
         length += erasing ? -1 : 1
-        setText(lines[line].slice(0, length))
+        const entry = lines[line]
+        const full = entry[language]
+        cursor.current.line = line
+        setFrame({ line, length })
         let delay = erasing ? 42 : 115
-        if (length === lines[line].length) {
+        if (length === full.length) {
           erasing = true
-          delay = 4000
+          delay = entry.source ? 6000 : 4000
         } else if (length === 0) {
-          const hour = new Date().getHours()
-          line = (line + 1) % (hour >= 20 || hour < 5 ? 4 : 3)
+          line = (line + 1) % lines.length
           erasing = false
           delay = 250
         }
@@ -48,9 +59,10 @@ export function NewTopicEntry({ paused, onOpen }: { paused: boolean; onOpen: () 
       motion.removeEventListener('change', restart)
       document.removeEventListener('visibilitychange', restart)
     }
-  }, [lines, paused])
+  }, [language, lines, paused])
   return <section className="new-topic-entry">
-    <h1 aria-label={lines[0]}><span aria-hidden="true">{text}<i /></span></h1>
+    <h1 aria-label={lines[0][language]}><span aria-hidden="true">{text}<i /></span></h1>
+    <div className="greeting-source">{source}</div>
     <button type="button" onClick={onOpen} aria-haspopup="dialog">
       <Icon name="plus" size={18} /><span>{tr('New topic')}</span><Icon name="arrowRight" size={17} />
     </button>
