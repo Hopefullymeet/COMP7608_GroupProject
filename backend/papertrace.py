@@ -1,6 +1,8 @@
 """Local PaperTrace v0.4 worker. Stdout is reserved for newline-delimited RPC."""
 
 import base64
+import csv
+import io
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 import datetime
@@ -28,7 +30,7 @@ from reader import Reader
 from wiki import CAPTURE_TASKS, CAPTURE_WRITES, TopicWiki, words
 from bibliography import (OPENALEX, PROVIDERS, PublicServiceError, arxiv_id, bibliography_records, doi, export_bibliography, identity_keys, imported_metadata,
                           download_open_pdf, lookup_target, metadata_from_provider, normalize_venue, openalex_search, selected_metadata)
-from venue_ranks import init_venue_ranks, issns, lookup_rankings
+from venue_ranks import SCHEMES, import_catalog, init_venue_ranks, issns, lookup_rankings
 
 
 BACKGROUND_RPC_METHODS = ("services.test", "library.preview_identifier", "library.preview_pdf", "candidate.decide")
@@ -147,7 +149,7 @@ class Worker:
         "candidate.decide", "reader.bookmark", "note.save", "library.import_pdf", "library.set_alias", "synthesis.review",
         "reader.mark_save", "reader.mark_delete", "reader.answer_save", "reader.mark_to_wiki",
         "services.save", "profile.save", "preset.save",
-        "library.commit_identifier", "library.update_metadata", "workspace.archive", "workspace.unarchive", "library.organize",
+        "library.import_catalog", "library.commit_identifier", "library.update_metadata", "workspace.archive", "workspace.unarchive", "library.organize",
         "library.preview_bibliography", "library.commit_bibliography", "library.commit_zotero_attachment",
         "library.trash", "library.restore", "library.purge",
         "wiki.refresh", "wiki.chat", "wiki.edit", "wiki.clear_chat",
@@ -308,7 +310,7 @@ class Worker:
             operation = required(params, "operation_id")
             fingerprint = encode(params)
             if method in ("library.import_pdf", "draft.import", "services.save", "library.preview_bibliography",
-                          "library.commit_zotero_attachment"):
+                          "library.commit_zotero_attachment", "library.import_catalog"):
                 fingerprint = digest(fingerprint.encode("utf-8"))
             saved = self.saved_operation(method, operation, fingerprint)
             if saved is not None:
@@ -715,11 +717,28 @@ class Worker:
             target = self.paper_in_topic(params) if "paper_id" in params else None
             paper, linked = self.add_bibliographic_paper(topic, preview["metadata"], target)
             return {"paper_id": paper["paper_id"], **paper["source_versions"][0], "already_linked": linked}
+        if method == "library.import_catalog":
+            scheme, edition = required(params, "scheme"), required(params, "edition").strip()
+            content, year = required(params, "content"), params.get("year")
+            if scheme not in SCHEMES or type(year) is not int or len(content.encode()) > 8_000_000:
+                raise invalid("Check the catalog scheme, year and file size.")
+            if self.db.execute("SELECT 1 FROM venue_catalogs WHERE scheme=? AND edition=?", (scheme, edition)).fetchone():
+                raise invalid("This catalog edition is already installed.")
+            rows = csv.DictReader(io.StringIO(content.lstrip("\ufeff")))
+            if not {"venue","venue_type","value"}.issubset(rows.fieldnames or []):
+                raise invalid("CSV requires venue, venue_type and value columns.")
+            try:
+                count = import_catalog(self.db, scheme, edition, year, required(params,"source_url"),
+                    ({k:(v or "").strip() for k,v in row.items() if k} for row in rows), transaction=False)
+            except (ValueError, csv.Error) as error:
+                raise invalid(str(error)) from None
+            return {"count": count}
         if method == "library.metadata":
             year = params.get("edition_year")
             if year is not None and (type(year) is not int or not 1900 <= year <= 9999):
                 raise invalid("Enter a valid catalog year.")
-            return self.paper_details(self.paper_in_topic(params), year)
+            paper = self.paper_in_topic(params) if "topic_id" in params else self.get("paper", required(params, "paper_id"))
+            return self.paper_details(paper, year)
         if method == "library.update_metadata":
             return self.update_metadata(params)
         if method in ("library.list", "library.catalog"):

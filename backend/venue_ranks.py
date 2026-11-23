@@ -2,6 +2,7 @@
 
 import argparse
 import csv
+from contextlib import nullcontext
 from html.parser import HTMLParser
 import json
 from pathlib import Path
@@ -68,6 +69,23 @@ def init_venue_ranks(db):
                                                    PRIMARY KEY(key, row_id));
         CREATE INDEX IF NOT EXISTS venue_rank_row ON venue_rank_keys(row_id);
     """)
+
+
+    # Small, explicitly scoped offline snapshots for the library's vision venues.
+    venues = [
+        ("IEEE Conference on Computer Vision and Pattern Recognition", "CVPR|IEEE/CVF Conference on Computer Vision and Pattern Recognition|IEEE/CVF Computer Vision and Pattern Recognition Conference", "A"),
+        ("International Conference on Computer Vision", "ICCV|IEEE International Conference on Computer Vision|IEEE/CVF International Conference on Computer Vision", "A"),
+        ("European Conference on Computer Vision", "ECCV", "B"),
+    ]
+    for scheme, edition, year, url in (
+        ("ccf", "2022 · CV 摘选", 2022, "https://www.ccf.org.cn/Academic_Evaluation/AI/"),
+        ("icore", "CORE2023 · CV 摘选", 2023, "https://portal.core.edu.au/conf-ranks/?search=vision&source=CORE2023"),
+    ):
+        if not db.execute("SELECT 1 FROM venue_catalogs WHERE scheme=?", (scheme,)).fetchone():
+            import_catalog(db, scheme, edition, year, url, [
+                {"venue": name, "aliases": aliases, "venue_type": "conference", "value": grade if scheme == "ccf" else "A*"}
+                for name, aliases, grade in venues
+            ])
 
 
 def issns(value):
@@ -207,7 +225,7 @@ def catalog_records(paths, format_, scheme, edition):
             yield from csv_records(path, format_, scheme)
 
 
-def import_catalog(db, scheme, edition, year, source_url, rows, *, label="", metric="", venue_types=()):
+def import_catalog(db, scheme, edition, year, source_url, rows, *, label="", metric="", venue_types=(), transaction=True):
     if not re.fullmatch(r"[a-z][a-z0-9_-]{0,49}", scheme) or not edition.strip() or not 1900 <= year <= 9999:
         raise ValueError("Specify a scheme ID, edition and year.")
     if scheme == "cas" and year > 2025:
@@ -217,7 +235,7 @@ def import_catalog(db, scheme, edition, year, source_url, rows, *, label="", met
     if not label or metric not in ("quartile", "rank", "index") or not venue_types or set(venue_types) - set(BOTH):
         raise ValueError("Custom schemes need a label, metric and at least one venue type.")
     count = 0
-    with db:
+    with db if transaction else nullcontext():
         db.execute("""DELETE FROM venue_rank_keys WHERE row_id IN
                       (SELECT row_id FROM venue_rank_rows WHERE scheme=? AND edition=?)""", (scheme, edition))
         db.execute("DELETE FROM venue_rank_rows WHERE scheme=? AND edition=?", (scheme, edition))

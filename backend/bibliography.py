@@ -99,9 +99,21 @@ def identity_keys(record):
     ) if key}
 
 
+BIB_FIELDS = ("item_type", "translated_title", "publisher", "place", "date", "volume", "issue", "pages",
+              "article_number", "part_number", "part_title", "series", "series_title", "series_text",
+              "journal_abbreviation", "citation_key", "url", "accessed", "pmid", "pmcid", "archive",
+              "archive_location", "library_catalog", "call_number", "rights", "extra", "date_added", "date_modified")
+
+
+def date_parts(parts):
+    if isinstance(parts, list) and parts and isinstance(parts[0], list):
+        return "-".join(str(n).zfill(2) for n in parts[0][:3] if type(n) is int)
+    return ""
+
+
 def selected_metadata(record):
     return {key: record[key] for key in ("title", "authors", "year", "venue", "doi", "arxiv_id", "source_id",
-                                        "metadata_url", "provider", "issns", "venue_type", "publication_track")
+                                        "metadata_url", "provider", "issns", "venue_type", "publication_track", *BIB_FIELDS)
             if key in record}
 
 
@@ -141,6 +153,12 @@ def metadata_from_provider(provider, identifier):
                               for a in row.get("author") or []],
                   "year": next(iter(dates[0]), None), "venue": venue,
                   "metadata_url": f"https://doi.org/{identifier}"}
+        result.update({k: v for k, v in {
+            "item_type": row.get("type"), "publisher": row.get("publisher"), "volume": row.get("volume"),
+            "issue": row.get("issue"), "pages": row.get("page"), "article_number": row.get("article-number"),
+            "date": date_parts(dates), "url": (row.get("resource") or {}).get("primary", {}).get("URL"),
+            "journal_abbreviation": next(iter(row.get("short-container-title") or []), ""),
+        }.items() if isinstance(v, str) and v})
         if row.get("type") == "journal-article":
             result.update(venue_type="journal", issns=row.get("ISSN") or [])
         if row.get("type") == "proceedings-article":
@@ -388,6 +406,9 @@ def bibtex_records(content):
         if fields.get("archiveprefix", fields.get("eprinttype", "")).lower() == "arxiv":
             identifier = arxiv_id(fields.get("eprint", ""))
         records.append({
+            **{key: display(fields[src]) for src, key in (("volume", "volume"), ("number", "issue"),
+               ("pages", "pages"), ("publisher", "publisher"), ("address", "place"), ("issn", "ISSN"),
+               ("series", "series"), ("date", "date")) if fields.get(src)},
             "title": display(fields.get("title", "")), "container-title": display(venue or ""),
             "author": [{"literal": display(str(author))} for author in entry.persons.get("author", [])],
             "abstract": display(fields.get("abstract", "")), "DOI": display(fields.get("doi", "")),
@@ -423,6 +444,8 @@ def ris_records(content):
 
             year = re.match(r"\d{4}", first("PY", "Y1", "DA"))
             records.append({
+                "volume": first("VL"), "issue": first("IS"), "pages": "-".join(filter(None,(first("SP"), first("EP")))),
+                "publisher": first("PB"), "place": first("CY"), "ISSN": first("SN"), "date": first("DA","Y1","PY"),
                 "title": first("TI", "T1", "CT"), "container-title": first("JF", "JO", "JA", "T2"),
                 "author": [{"literal": a} for a in (entry.get("AU") or entry.get("A1") or [])],
                 "abstract": first("AB", "N2"), "DOI": first("DO"), "URL": first("UR"),
@@ -457,6 +480,21 @@ def imported_metadata(row, format_):
             if isinstance(name, str) and name.strip():
                 authors.append(name.strip()[:300])
     meta = {"title": title.strip(), "authors": authors, "provider": {"csl-json": "CSL JSON", "ris": "RIS", "bibtex": "BibTeX", "zotero-rdf": "Zotero RDF"}[format_]}
+    for key in BIB_FIELDS:
+        value = row.get(key)
+        if isinstance(value, (str, int)) and str(value).strip():
+            meta[key] = str(value).strip()[:4000]
+    for src, key in (("type", "item_type"), ("page", "pages"), ("URL", "url"), ("container-title-short", "journal_abbreviation"),
+                     ("publisher-place", "place"), ("collection-title", "series"), ("PMID", "pmid"), ("PMCID", "pmcid")):
+        if isinstance(row.get(src), str) and row[src]:
+            meta.setdefault(key, row[src][:2000])
+    for src, key in (("issued", "date"), ("accessed", "accessed")):
+        if isinstance(row.get(src), dict) and (value := date_parts(row[src].get("date-parts"))):
+            meta.setdefault(key, value)
+    if raw_codes := row.get("ISSN"):
+        codes = re.findall(r"\b\d{4}-?\d{3}[\dXx]\b", str(raw_codes))
+        if codes:
+            meta["issns"] = list(dict.fromkeys(codes))
     venue = row.get("container-title")
     if isinstance(venue, str) and venue.strip():
         meta["venue"] = venue.strip()[:300]
@@ -493,6 +531,8 @@ ZOTERO_NS = {
     "dc": "http://purl.org/dc/elements/1.1/",
     "dcterms": "http://purl.org/dc/terms/",
     "bib": "http://purl.org/net/biblio#",
+    "prism": "http://prismstandard.org/namespaces/1.2/basic/",
+    "vcard": "http://nwalsh.com/rdf/vCard#",
     "foaf": "http://xmlns.com/foaf/0.1/",
     "link": "http://purl.org/rss/1.0/modules/link/",
     "z": "http://www.zotero.org/namespaces/export#",
@@ -632,7 +672,23 @@ def zotero_rdf_records(content):
             if available:
                 item["relative_path"] = path
             attachments.append(item)
+        org = next(iter(related(node, "dc:publisher")), None)
+        address = next(iter(related(org, "vcard:adr")), None) if org is not None else None
+        series = next((v for v in related(venue if venue is not None else node, "dcterms:isPartOf")
+                       if kind(v,"bib","Series")), None)
         records.append({
+            "item_type": item_type, "date": text(node,"dc:date"), "volume": text(venue,"prism:volume") or text(node,"prism:volume"),
+            "issue": text(venue,"prism:number") or text(node,"prism:number"), "pages": text(node,"bib:pages"),
+            "ISSN": " ".join(v for v in identifiers if re.match(r"ISSN\b",v,re.I)),
+            "URL": next((v for v in identifiers if v.startswith(("https://","http://"))), ""),
+            "journal_abbreviation": text(venue,"dcterms:alternative"), "publisher": text(org,"foaf:name"),
+            "place": text(address,"vcard:locality"), "accessed": text(node,"dcterms:dateSubmitted"),
+            "rights": text(node,"dc:rights"), "extra": text(node,"dc:description"),
+            "series": text(series,"dc:title"), "series_text": text(series,"dc:description"), "series_title": text(series,"dcterms:alternative"),
+            "archive_location": text(node,"dc:coverage"), "call_number": next((text(v,"rdf:value") for v in related(node,"dc:subject") if kind(v,"dcterms","LCC")), ""),
+            **{k: text(node,"z:"+tag) for k,tag in (("archive","archive"),("library_catalog","libraryCatalog"),
+                ("date_added","dateAdded"),("date_modified","dateModified"),("translated_title","titleTranslation"),
+                ("part_number","partNumber"),("part_title","partTitle"),("article_number","articleNumber"),("citation_key","citationKey"))},
             "title": text(node, "dc:title"), "author": authors,
             "type": {"journalArticle": "article-journal", "conferencePaper": "paper-conference"}.get(item_type),
             "container-title": text(venue, "dc:title") or text(conference, "dc:title"),

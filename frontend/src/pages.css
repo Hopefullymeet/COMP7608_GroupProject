@@ -502,3 +502,25 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
   .role-columns { grid-template-columns:1fr; gap:12px; }
   .role-form header .role-columns { gap:2px; }
 }
+
+.library-page .lib-tabs { background: transparent; border-radius: 0; gap: 1rem; padding: 0; border-bottom: 1px solid var(--line); }
+.library-page .lib-tabs button { border-radius: 0; background: transparent; box-shadow: none; padding: .55rem .65rem; border-bottom: 2px solid transparent; }
+.library-page .lib-tabs button.on { border-color: var(--accent); }
+.library-page .lib-grid { grid-template-columns: minmax(0,2fr) minmax(280px,1fr); }
+.lib-main { min-width: 0; }
+.library-search .field-search { flex: 1; min-width: 150px; }
+.library-page .lib-list { background: transparent; border: 0; border-radius: 0; }
+.lib-chips .tag { padding: 0; background: none; color: var(--ink-3); }
+.lib-chips .tag + .tag::before { content: '· '; }
+.library-page .lib-detail { border: 0; border-left: 1px solid var(--line); border-radius: 0; box-shadow: none; }
+.lib-detail > details { border-top: 1px solid var(--line); padding: .65rem 0; }
+.lib-detail summary { cursor: pointer; }
+.bibliographic-fields { display: grid; grid-template-columns: minmax(65px,auto) minmax(0,1fr); gap: .45rem .75rem; }
+.bibliographic-fields dt { color: var(--ink-3); }
+.bibliographic-fields dd { margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
+@media (max-width: 780px) { .library-page .lib-grid { grid-template-columns: 1fr; } .library-page .lib-detail { border-left: 0; } }
+
+.catalog-import { display: grid; gap: .6rem; margin-block: .6rem; }
+.catalog-import label { display: grid; gap: .25rem; }
+.catalog-import input, .catalog-import select { min-width: 0; max-width: 100%; }
+.library-search + .lib-tools:empty { display: none; }

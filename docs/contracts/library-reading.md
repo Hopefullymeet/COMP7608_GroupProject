@@ -92,3 +92,7 @@ BibTeX 使用桌面 worker 中的 Pybtex。缺解析依赖时，接口返回 `BI
 附件清单含 `attachment_id`、`name`、`status`，只有可匹配的相对路径附 `relative_path`。客户端只在用户选中的导出文件夹内查找这些文件；没有匹配时可让用户另选 PDF。可从论文当前所属的任一主题为已确认的条目调用 `library.commit_zotero_attachment`，传入 `operation_id`、`topic_id`、`preview_id`、`item_id`、`attachment_id`、Base64 `content`，返回与 PDF 入库相同的字段。该接口从提交的 PDF 字节入库，RDF 中的路径只用于匹配提示。已嵌入 PDF 的批注通过 [reader.embedded_marks](pdf-reader.md) 读取。
 
 同一个导出文件重放会复用原论文、收藏夹主题及条目笔记。收藏夹尚按导出批次记录；修改后再次导出时可按 DOI 或 arXiv 复用论文。当前支持条目附属笔记及 PDF 附件，独立笔记、非 PDF 附件和 Zotero 双向同步另列验收。 [Zotero 格式说明](https://www.zotero.org/support/kb/field_mappings) · [导出时嵌入 PDF 批注](https://www.zotero.org/support/kb/annotations_in_database)
+
+The library inspector displays populated bibliographic fields from the selected source. The import dialog previews Zotero RDF, CSL JSON, RIS and BibTeX before committing reviewed entries. A catalog paper can be inspected without a topic ID.
+
+`library.import_catalog` accepts an operation ID, scheme, distinct edition, year, HTTPS source URL and UTF-8 CSV content (up to 8 MB). Required columns are venue, venue_type and value. Optional columns include aliases, issns, category and source_url. The bundled CCF and CORE excerpts cover CVPR, ICCV and ECCV only.

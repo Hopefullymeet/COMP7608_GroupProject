@@ -15,6 +15,8 @@ type ImportRow = {
   id: string
   label: string
   file?: Attachment
+  bibliography?: File
+  itemId?: string
   identifier?: string
   preview?: Preview
   result?: string
@@ -99,7 +101,28 @@ export function PaperImportDialog({ topics, initialTopic, initialTitle = '', ini
       for (const row of entries) {
         amend(row.id, { error: undefined })
         try {
-          if (row.file) {
+          if (row.bibliography) {
+            const formats: Record<string, string> = { rdf: 'zotero-rdf', json: 'csl-json', ris: 'ris', bib: 'bibtex' }
+            const format = formats[row.bibliography.name.split('.').pop()?.toLowerCase() || '']
+            const batch = await workspace.write('library.preview_bibliography', {
+              topic_id: topicId, format, content: await row.bibliography.text(),
+            })
+            if (!batch.items.length) throw new Error(tr('No bibliography entries found'))
+            const reviewed = batch.items.map((item) => ({
+              id: crypto.randomUUID(), label: item.metadata?.title || row.label, itemId: item.item_id,
+              preview: item.status === 'ready' && item.metadata ? { preview_id: batch.preview_id, metadata: item.metadata } : undefined,
+              error: item.status === 'ready' ? undefined : item.reason || item.status,
+            }))
+            setRows((old) => old.flatMap((entry) => entry.id === row.id ? reviewed : [entry]))
+          } else if (row.itemId && row.preview) {
+            const batch = await workspace.write('library.commit_bibliography', {
+              topic_id: topicId, preview_id: row.preview.preview_id, item_ids: [row.itemId],
+            })
+            const item = batch.items[0]
+            if (!item?.paper_id) throw new Error(item?.reason || tr('Import failed'))
+            amend(row.id, { result: item.status === 'already_linked' ? 'Already in library' : 'Imported' })
+            if (item.source_version_id) onImported?.(item.paper_id, item.source_version_id)
+          } else if (row.file) {
             const value = await workspace.write('library.import_pdf', {
               topic_id: topicId, paper_id: paperId, ...await pdfInput(row.file),
             })
@@ -150,6 +173,13 @@ export function PaperImportDialog({ topics, initialTopic, initialTitle = '', ini
       <button type="button" className="topic-drop" disabled={processing} onClick={() => void pickPdfs(!paperId).then(queueFiles)}>
         <Icon name="paperclip" size={16} /><span>{tr('Drop PDF files here, or click to choose')}</span>
       </button>
+      {!paperId && <label className="rename-field">{tr('Import bibliography')}
+        <input type="file" accept=".rdf,.json,.ris,.bib" disabled={processing} onChange={(event) => {
+          const file = event.currentTarget.files?.[0]
+          if (file) setRows((old) => [...old, { id: crypto.randomUUID(), label: file.name, bibliography: file }])
+          event.currentTarget.value = ''
+        }} />
+      </label>}
       {!paperId && <div className="paper-import-ids">
         <textarea className="text-field" rows={2} aria-label={tr('Paste DOI or arXiv IDs')} placeholder={tr('Paste DOI or arXiv IDs')}
           value={input} disabled={processing} onChange={(event) => setInput(event.currentTarget.value)} />
@@ -163,7 +193,7 @@ export function PaperImportDialog({ topics, initialTopic, initialTitle = '', ini
         {row.result && <p role="status">{tr(row.result)}</p>}
         {row.error && <p role="alert">{tr(row.error)}</p>}
         <div className="lib-tools">
-          {row.error && <button className="link-btn" disabled={processing || (!topic && !title.trim())}
+          {row.error && (!row.itemId || row.preview) && <button className="link-btn" disabled={processing || (!topic && !title.trim())}
             onClick={() => void process([row])}>{tr('Retry')}</button>}
           {row.preview && !row.result && !row.error && <button className="link-btn" disabled={processing}
             onClick={() => void process([row])}>{tr('Add to topic')}</button>}
