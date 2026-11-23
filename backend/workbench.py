@@ -31,6 +31,10 @@ class Workbench:
         for (version,) in previous:
             source = host.get("source", version)
             if source["paper_id"] == paper_id or not paper_id:
+                if host.db.execute("SELECT 1 FROM records WHERE kind = 'trashed_paper' AND id = ?",
+                                   (source["paper_id"],)).fetchone():
+                    raise LiteratureError("IDENTITY_CONFLICT", "Restore the matching paper from Trash first.",
+                                          "review_import", -32010)
                 entry = host.get("paper", source["paper_id"])
                 if topic not in entry["topic_ids"]:
                     entry["topic_ids"].append(topic)

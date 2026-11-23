@@ -279,7 +279,9 @@ class CitationWorkspace:
             return
         parsed = parse_pdf_index(row[0], extract_pdf(row[0]))
         with self.host.lock, db:
-            if not db.execute("SELECT 1 FROM citation_index WHERE version_id = ?", (version,)).fetchone():
+            if db.execute("""SELECT 1 FROM pdf_files WHERE version_id = ?
+                             AND NOT EXISTS (SELECT 1 FROM citation_index WHERE version_id = ?)""",
+                          (version, version)).fetchone():
                 save_index(db, version, parsed)
 
     def sources(self, topic, versions=None):
@@ -845,7 +847,9 @@ class CitationWorkspace:
                         if anchor["topic_id"] != topic:
                             continue
                         a = anchor["value"]
-                        source = self.host.get("paper", a["paper_id"])
+                        source = json.loads(self.host.db.execute(
+                            "SELECT data FROM records WHERE id = ? AND kind IN ('paper', 'trashed_paper', 'purged_paper')",
+                            (a["paper_id"],)).fetchone()[0])
                         row = self.host.db.execute("SELECT data FROM citation_index WHERE version_id = ?",
                                                    (a["source_version_id"],)).fetchone()
                         meta = json.loads(row[0]) if row else {}
