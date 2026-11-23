@@ -221,7 +221,11 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
       <div className="wiki-column">
         {wiki.map_nodes && <WikiMap wiki={wiki} title={title} edit={edit} Source={Source}/>}
         {wiki.map_nodes && !!Object.keys(wiki.pending_removals ?? {}).length && <p>{tr('Pending deletion')} · {Object.values(wiki.pending_removals!).join(' / ')}</p>}
-        <details open={wiki.map_nodes ? undefined : true}><summary>{tr('Wiki')}</summary>
+        {!!wiki.integrity_issues?.length && <details><summary>{tr('Links to review')}</summary><ul>{wiki.integrity_issues.map((label,i)=><li key={i}>{label}</li>)}</ul></details>}
+        {!!wiki.history?.length && <details><summary>{tr('Update history')}</summary>{wiki.history.map((event,i)=><section key={i}>
+          <time>{new Date(event.created).toLocaleString()}</time><ul>{event.changes.map(c=><li key={c.id}>{tr(c.op==='add'?'Added':c.op==='remove'?'Removed':'Updated')} · {c.title}</li>)}</ul>
+        </section>)}</details>}
+        <details open={wiki.map_nodes ? undefined : true}><summary>{tr('Topic overview')}</summary>
         {generating ? <FlippingBook label={tr('Generating')} />
           : !summarized ? <section className="wiki-empty">
             <span className="wiki-empty-icon" aria-hidden="true"><Icon name="book" size={30} /></span>
@@ -315,7 +319,7 @@ export function WikiPage() {
   const topic = state.topics.find(t => t.id === selected)
   return (
     <div className="page wiki-page">
-      <PageHead icon="book" title={tr('Wiki')} sub={tr('Long-term memory for the whole topic')}
+      <PageHead icon="wiki" title={tr('Wiki')} sub={tr('Long-term memory for the whole topic')}
         onBack={topic ? () => select('') : undefined}>
         {topic && <HeaderContext text={topic.title} />}
       </PageHead>

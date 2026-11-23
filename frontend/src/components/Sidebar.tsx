@@ -9,7 +9,7 @@ import { errorText } from '../api/contract'
 
 const PAGES: { page: Page; icon: string; label: string }[] = [
   { page: 'library', icon: 'library', label: 'Library' },
-  { page: 'wiki', icon: 'book', label: 'Wiki' },
+  { page: 'wiki', icon: 'wiki', label: 'Wiki' },
   { page: 'check', icon: 'shield', label: 'Citation check' },
   { page: 'settings', icon: 'settings', label: 'Models & services' },
 ]

@@ -73,6 +73,9 @@ class TopicWiki:
         self.identifier = identifier
         self.now = now
         self.running = set()
+        self.worker.db.execute("""CREATE TABLE IF NOT EXISTS wiki_history (
+            id INTEGER PRIMARY KEY, topic TEXT NOT NULL, created TEXT NOT NULL, changes TEXT NOT NULL)""")
+        self.worker.db.execute("CREATE INDEX IF NOT EXISTS wiki_history_topic ON wiki_history(topic,id)")
 
     # ---------- topic material ----------
 
@@ -189,7 +192,22 @@ class TopicWiki:
                 "thread": [], "pending_reply": False, "fingerprint": "", "observed": [], "captured_since": 0}
 
     def store(self, wiki):
-        self.worker.put("topic_wiki", wiki["topic_id"], wiki)
+        topic = wiki["topic_id"]
+        old = self.load(topic)
+        def index(data):
+            items = {e["entry_id"]: (e["text"], e["anchor_ids"]) for e in data["entries"]}
+            items.update({n["id"]: (n["title"], n["parent"], n["anchors"]) for n in data.get("map_nodes", {}).values()})
+            if data.get("headline") or data.get("map_title"):
+                items["root"] = (data.get("map_title") or data["headline"], data.get("summary", []))
+            return items
+        before, after = index(old), index(wiki)
+        changes = [{"op": "remove" if key not in after else "add" if key not in before else "update",
+                    "id": key, "title": (after.get(key) or before[key])[0]}
+                   for key in sorted(before.keys() | after.keys()) if before.get(key) != after.get(key)]
+        if changes:
+            self.worker.db.execute("INSERT INTO wiki_history(topic,created,changes) VALUES(?,?,?)",
+                                   (topic, self.now(), json.dumps(changes, ensure_ascii=False)))
+        self.worker.put("topic_wiki", topic, wiki)
 
     def reading_context(self, topic, question):
         wiki = self.capture(topic)
@@ -389,6 +407,12 @@ class TopicWiki:
         hidden = ("fingerprint", "generator", "observed", "captured_since")
         result = {k: v for k, v in wiki.items() if k not in hidden}
         result["map_sources"] = self.map_sources(topic, wiki.get("map_nodes", {}))
+        result["history"] = [{"created": created, "changes": json.loads(changes)} for created, changes in
+                             self.worker.db.execute("SELECT created,changes FROM wiki_history WHERE topic=? ORDER BY id DESC LIMIT 20", (topic,))]
+        nodes = wiki.get("map_nodes", {})
+        result["integrity_issues"] = [node["title"] for node in nodes.values()
+                                      if (node["parent"] and node["parent"] not in nodes) or
+                                      any(a not in result["map_sources"] for a in node["anchors"])]
         result.update(
             sources={"papers": len(material["papers"]), "notes": len(material["notes"]),
                      "answers": len(material["answers"]), "findings": len(material["findings"])},

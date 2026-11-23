@@ -88,3 +88,9 @@ type Wiki = {
 `wiki.edit` 接受 `map_add`（在指定节点下添加）、`map_rename` 和 `map_remove`。删除需传 `confirmed: true`，默认将子节点上移，传 `subtree: true` 同时删除下级。原论文与证据独立保存。模型建议删除或更改中心标题时，由 Wiki 内的 `map_accept` 或 `map_dismiss` 处理。
 
 `topic.list` 可以返回 `wiki_unread` 和产生更新的会话任务 ID `wiki_turns`。进入对应主题地图后用 `map_seen` 标为已读。会话只展示更新提示，后续讨论留在 Wiki。
+
+### Wiki 的维护约定
+
+沿用 [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) 的做法。PDF 和图片作为原始来源独立保存。每个主题的 Wiki 持续整理观点，研究地图是其中一个浏览视图。问答应先利用已有条目，再以原文核查具体判断。
+
+每次保存时将发生变化的条目、节点或概述记入本地追加日志。读取、重复保存和展开地图不会产生内容日志。`wiki.get.history` 返回最近 20 次内容更新，已有主题从升级后的首次变更开始记录。`integrity_issues` 列出父节点或证据链接失效的节点。含义相近的观点合并、跨页矛盾与论文换版后的语义复核需要独立验收。
