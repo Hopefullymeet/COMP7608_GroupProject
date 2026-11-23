@@ -2,13 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import { useLanguage } from '../i18n'
 import { Icon } from './Icon'
 
-import { greetingsAt } from '../data/greetings'
+import { periods, periodAt, mascotFrames } from '../data/greetings'
 
 export function NewTopicEntry({ paused, onOpen }: { paused: boolean; onOpen: () => void }) {
   const { language, tr } = useLanguage()
-  const [lines, setLines] = useState(() => greetingsAt(new Date().getHours()))
+  const [period, setPeriod] = useState(() => periodAt(new Date().getHours()))
+  const [variant] = useState(() => Math.floor(Math.random() * 2))
+  const lines = periods[period]
+  const pose = mascotFrames[period] + variant
   useEffect(() => {
-    const sync = () => setLines(greetingsAt(new Date().getHours()))
+    const sync = () => setPeriod(periodAt(new Date().getHours()))
     const timer = window.setInterval(sync, 15000)
     document.addEventListener('visibilitychange', sync)
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', sync) }
@@ -63,6 +66,10 @@ export function NewTopicEntry({ paused, onOpen }: { paused: boolean; onOpen: () 
     }
   }, [language, lines, paused])
   return <section className="new-topic-entry">
+    <span aria-hidden="true" className="greeting-otter" style={{
+      backgroundImage: `url(${import.meta.env.BASE_URL}otters/greetings.webp)`,
+      backgroundPosition: `${(pose % 4) * 100 / 3}% ${Math.floor(pose / 4) * 50}%`,
+    }} />
     <h1 aria-label={lines[0][language]}><span aria-hidden="true">{text}<i /></span></h1>
     <div className="greeting-source">{source}</div>
     <button type="button" onClick={onOpen} aria-haspopup="dialog">

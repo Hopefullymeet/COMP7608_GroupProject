@@ -524,3 +524,9 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .catalog-import label { display: grid; gap: .25rem; }
 .catalog-import input, .catalog-import select { min-width: 0; max-width: 100%; }
 .library-search + .lib-tools:empty { display: none; }
+
+.audit-chooser:has(.illustrated-chooser) { max-width: 52rem; margin-block-start: clamp(36px, 13vh, 140px); }
+.audit-chooser:has(.illustrated-chooser + h3) { margin-block-start: clamp(24px, 6vh, 62px); }
+.illustrated-chooser { display: grid; grid-template-columns: minmax(100px, 0.65fr) minmax(0, 1.35fr); align-items: center; gap: clamp(18px, 4vw, 60px); }
+.chooser-otter { display: block; width: 100%; max-height: 250px; object-fit: contain; }
+.chooser-topics { min-width: 0; }

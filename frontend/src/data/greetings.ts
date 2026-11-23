@@ -5,7 +5,7 @@ function line(zh: string, en: string, sourceZh?: string, sourceEn?: string): Gre
 
 const restGreeting = line('夜深了，早点休息。', 'It’s late. Get some rest.')
 
-const periods = {
+export const periods = {
   morning: [
     line('早上好，今天想研究什么？', 'Good morning. What are you curious about?'),
     line('半亩方塘一鉴开，天光云影共徘徊。', 'A pond opens like a mirror; sky and clouds linger there.', '朱熹《观书有感》', 'Zhu Xi · Reflections on Reading (translation)'),
@@ -45,11 +45,13 @@ const periods = {
     line('下一次翻开论文，想从哪里接着读？', 'Where would you like to pick up next time?'),
   ],
 }
-export function greetingsAt(hour: number): Greeting[] {
-  if (hour < 2) return periods.midnight
-  if (hour < 5) return periods.predawn
-  if (hour < 9) return periods.morning
-  if (hour < 13) return periods.day
-  if (hour < 18) return periods.afternoon
-  return periods.evening
+export function periodAt(hour: number): keyof typeof periods {
+  if (hour < 2) return 'midnight'
+  if (hour < 5) return 'predawn'
+  if (hour < 9) return 'morning'
+  if (hour < 13) return 'day'
+  if (hour < 18) return 'afternoon'
+  return 'evening'
 }
+
+export const mascotFrames = { morning: 0, day: 2, afternoon: 4, evening: 6, midnight: 8, predawn: 10 }
