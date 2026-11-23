@@ -316,7 +316,9 @@ code { font: 12px/1.45 var(--mono); }
 .chat-bottom {
   position: absolute; z-index: 2; inset-block-end: 0;
   inset-inline: var(--conversation-gutter);
-  padding-block-end: clamp(10px, 2cqw, 22px); pointer-events: none;
+  --dock-gap: clamp(10px, 2cqw, 22px);
+  padding-block-end: var(--dock-gap); pointer-events: none;
+  background: linear-gradient(var(--bg), var(--bg)) bottom / 100% var(--dock-gap) no-repeat;
 }
 .chat-bottom > * { pointer-events: auto; }
 .chat-bottom .composer {
