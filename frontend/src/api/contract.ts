@@ -88,7 +88,7 @@ export type Methods = WikiMethods & ReaderMethods & SynthesisMethods & LibraryMe
   'session.rename': [Write & InSession & { title: string }, InSession & { title: string }]
   'session.list': [InTopic, { items: Session[] }]
   'session.create': [Write & InTopic, InSession]
-  'session.get': [InSession, { turns: Turn[]; active_task_id?: Id; reader?: { source_version_id: Id } & ReadingPosition }]
+  'session.get': [InSession, { title?: string; turns: Turn[]; active_task_id?: Id; reader?: { source_version_id: Id } & ReadingPosition }]
   'discovery.latest': [InTopic, { search_id?: Id; active_task_id?: Id;task_id?:Id }]
   'discovery.get': [InSearch, Discovery]
   'discovery.steps': [ForTask, { steps: Step[] }]

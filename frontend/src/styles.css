@@ -316,12 +316,14 @@ code { font: 12px/1.45 var(--mono); }
 .chat-bottom {
   position: absolute; z-index: 2; inset-block-end: 0;
   inset-inline: var(--conversation-gutter);
+  --composer-radius: 14px;
   --dock-gap: clamp(10px, 2cqw, 22px);
   padding-block-end: var(--dock-gap); pointer-events: none;
-  background: linear-gradient(var(--bg), var(--bg)) bottom / 100% var(--dock-gap) no-repeat;
+  background: linear-gradient(var(--bg), var(--bg)) bottom / 100% calc(var(--dock-gap) + var(--composer-radius)) no-repeat;
 }
 .chat-bottom > * { pointer-events: auto; }
 .chat-bottom .composer {
+  border-radius: var(--composer-radius);
   display: grid; grid-template-columns: minmax(0, 1fr) auto;
   gap: 4px 10px; align-items: end; padding: 7px 8px 7px 15px;
   background: var(--surface);

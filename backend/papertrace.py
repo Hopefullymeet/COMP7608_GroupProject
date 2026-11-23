@@ -22,7 +22,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
 
 from credentials import deepseek_api_key, system_key, store
-from dsh import AGENT_POLICY, ANSWER_LAYOUT, Dsh, DshFailure, ENDPOINT, MODEL, read_json_answer
+from dsh import AGENT_POLICY, ANSWER_LAYOUT, TITLE_INSTRUCTION, Dsh, DshFailure, ENDPOINT, MODEL, read_json_answer
 from literature import LiteratureError, MAX_VERSIONS, body_passage_starts, digest, init_corpus
 from workbench import Workbench
 from citations import CitationWorkspace, init_citations
@@ -517,13 +517,15 @@ class Worker:
             return {"items": [
                 {"session_id": s["session_id"], "updated_at": s["updated_at"], "has_turns": bool(s["turns"]),
                  **({"title": s["title"]} if "title" in s else
-                    {"title": s["turns"][0]["question"]} if s["turns"] else {})}
+                    {"title": local_session_title(s["turns"][0]["question"])} if s["turns"] else {})}
                 for s in self.rows("session") if s["topic_id"] == topic and not s.get("archived")
             ]}
         if method == "session.get":
             session = self.session(params)
             active = self.active("reading_qa", session["session_id"])
             result = {"turns": session["turns"]}
+            if session.get("title"):
+                result["title"] = session["title"]
             if active:
                 result["active_task_id"] = active["task_id"]
             if "reader" in session:
@@ -978,7 +980,7 @@ class Worker:
         items = [{"id": tid, "kind": "topic", "title": title} for tid, title in topics.items()]
         for session in self.rows("session"):
             if session.get("archived") and session["topic_id"] not in topics:
-                title = session.get("title") or (session["turns"][0]["question"] if session["turns"] else "New session")
+                title = session.get("title") or (local_session_title(session["turns"][0]["question"]) if session["turns"] else "New session")
                 items.append({"id": session["session_id"], "kind": "session", "title": title})
         return {"items": items}
 
@@ -1753,7 +1755,7 @@ class Worker:
         return [{"source_version_id": row["source_version_id"],
                  "read_scope": versions.get(row["source_version_id"], "none")} for row in selected]
 
-    def answer_with_model_endpoint(self, endpoint, model, key, question, sources, cancelled, preview=None, memory=None):
+    def answer_with_model_endpoint(self, endpoint, model, key, question, sources, cancelled, preview=None, memory=None, name_session=False):
         if not key:
             raise DshFailure("SERVICE_AUTH_FAILED", False, "configure_service")
         # Separate CJK text from adjacent terms such as HRI before querying SQLite FTS.
@@ -1819,6 +1821,8 @@ class Worker:
             {"id": pid, "title": versions[row["source_version_id"]]["title"], "text": row["text"]}
             for pid, row in seen.items()
         ]})}]
+        if name_session:
+            messages[0]["content"] += TITLE_INSTRUCTION
         payload = {
             "model": model, "messages": messages, "max_tokens": 3200, "stream": preview is not None,
         }
@@ -1951,6 +1955,8 @@ class Worker:
                     source["title"] = self.get("paper", source["paper_id"])["title"]
                     source["available_scope"] = ("full_text" if source.get("available_scope") == "full_text"
                                                  and selected["requested_scope"] == "full_text" else "abstract")
+                session = self.get("session", task["session_id"])
+                name_session = not session["turns"] and not session.get("title")
                 question = task["input"]["question"]
                 abstract_requested = (re.search(r"摘要|\babstracts?\b", question, re.I)
                                       and not re.search(r"(?:不要|不用|别|排除|跳过).{0,8}摘要|(?:skip|avoid|exclude|ignore).{0,12}abstract", question, re.I))
@@ -2000,9 +2006,9 @@ class Worker:
             if runtime is not None:
                 try:
                     if has_pdf:
-                        claims, seen, issue = runtime.answer_full_text(question, sources, signal, memory=memory, progress=record_tool)
+                        claims, seen, issue = runtime.answer_full_text(question, sources, signal, memory=memory, progress=record_tool, name_session=name_session)
                     else:
-                        claims, seen = runtime.answer(question, sources, signal, memory=memory, progress=record_tool)
+                        claims, seen = runtime.answer(question, sources, signal, memory=memory, progress=record_tool, name_session=name_session)
                 except DshFailure as error:
                     if not error.startup:
                         raise
@@ -2023,7 +2029,7 @@ class Worker:
             if used_endpoint:
                 claims, seen = self.answer_with_model_endpoint(
                     endpoint, task.get("dsh_model", MODEL),
-                    runtime.key if runtime is not None else deepseek_api_key(), question, sources, signal, preview, memory,
+                    runtime.key if runtime is not None else deepseek_api_key(), question, sources, signal, preview, memory, name_session,
                 )
             with self.lock:
                 task = self.get("task", task_id)
@@ -2057,7 +2063,8 @@ class Worker:
                                 if re.search(r"[\u3400-\u9fff]", question) else
                                 "Only abstracts were available. Add the full papers to verify these claims against the body.")
                         sentences.append({"text": note, "anchor_ids": [], "assessment": "evidence_not_established"})
-                    events = self.persist_reading(task, message_id, sentences, reads, issue=issue, streamed=streamed)
+                    events = self.persist_reading(task, message_id, sentences, reads, issue=issue, streamed=streamed,
+                                                  title=claims[0].get("session_title") if claims else None)
                 self.send_events(events)
         except DshFailure as error:
             self.fail_dsh(task_id, error.issue, error.seen)
@@ -2199,7 +2206,7 @@ class Worker:
             "kind": "tool", "title": "Read saved abstract", "detail": "Checked the local fixture passage.",
         })
 
-    def persist_reading(self, task, message_id, sentences, reads, step=None, issue=None, streamed=False):
+    def persist_reading(self, task, message_id, sentences, reads, step=None, issue=None, streamed=False, title=None):
         input_ = task["input"]
         answer = {"scope_id": task["scope_id"], "message_id": message_id, "read_sources": reads, "sentences": sentences}
         if "figures" in task:
@@ -2207,6 +2214,8 @@ class Worker:
         session = self.get("session", task["session_id"])
         if session.get("access", "edit") == "edit":
             self.remember_request(input_["question"])
+        if not session["turns"] and not session.get("title"):
+            session["title"] = title or local_session_title(input_["question"], task.get("figure_lookup_only"))
         session["turns"].append({"task_id": task["task_id"], "question": input_["question"], "answer": answer})
         session["updated_at"] = now()
         self.put("session", session["session_id"], session)
@@ -2233,6 +2242,20 @@ class Worker:
         self.runner.join()
         with self.lock:
             self.db.close()
+
+
+def local_session_title(question, figure_lookup=False):
+    """Compact label for offline figure searches and older, untitled sessions."""
+    text = " ".join(question.split()).strip("？?。.!！ ")
+    if re.fullmatch(r"你好呀?|您好|嗨|hello|hi|hey", text, re.I):
+        return "初次交流" if re.search(r"[\u3400-\u9fff]", text) else "Introductions"
+    chinese = bool(re.search(r"[\u3400-\u9fff]", text))
+    text = re.sub(r"^(?:请问|请帮我|帮我|我想知道|如何处理|如何|怎么|有没有|找一下|找找|请)+", "", text)
+    text = re.sub(r"^(?:could you |can you |please |how (?:do|can) (?:i|we) |find (?:me )?)", "", text, flags=re.I)
+    text = re.split(r"[，,。？！?！]", text)[0].strip() or question.strip()
+    if figure_lookup:
+        text = ("插图检索 · " if chinese else "Figure search · ") + text
+    return text[:26] if chinese else " ".join(text.split()[:9])[:72]
 
 
 def main():

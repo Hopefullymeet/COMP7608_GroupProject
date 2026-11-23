@@ -42,6 +42,25 @@ class EvidenceTest(unittest.TestCase):
         ])
         self.assertEqual(rows[1]["references"], [])
 
+    def test_first_answer_names_session_and_preserves_manual_title(self):
+        with tempfile.TemporaryDirectory() as directory, closing(Worker(Path(directory), lambda _: None)) as worker:
+            topic = worker.dispatch("topic.create", {"title": "Vision"}, [])
+            session = worker.dispatch("session.create", topic, [])
+            self.assertNotIn("title", worker.dispatch("session.get", session, []))
+            for index, expected in enumerate(["Overlap stabilization", "Overlap stabilization", "My notes"]):
+                task = {**session, "task_id": str(index), "scope_id": "scope", "run_id": str(index),
+                        "kind": "reading_qa", "target": session["session_id"], "last_event_seq": 0,
+                        "input": {"question": "How can we stabilize the overlap?", "sources": []}}
+                if index == 2:
+                    worker.dispatch("session.rename", {**session, "title": expected}, [])
+                rows = read_json_answer(json.dumps({"session_title": "New suggestion" if index else expected,
+                                        "sentences": [{"text": "Example result.", "evidence": []}]}), {})
+                with worker.db:
+                    worker.persist_reading(task, str(index), [{"text": rows[0]["text"], "anchor_ids": []}],
+                                           [], title=rows[0]["session_title"])
+                self.assertEqual(worker.dispatch("session.get", session, [])["title"], expected)
+                self.assertEqual(worker.dispatch("session.list", topic, [])["items"][0]["title"], expected)
+
     def test_malformed_citations_do_not_discard_valid_claims(self):
         seen = {"p1": {"text": "The passage states a direct result."}}
         response = {"sentences": [None, {"text": "A claim without evidence."}, {

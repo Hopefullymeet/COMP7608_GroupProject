@@ -304,7 +304,7 @@ export function MainlineProvider({
   async function refreshSession(wanted: typeof selected.current, resume = true) {
     const sessionId = wanted.session
     if (!sessionId) return
-    const { turns, active_task_id, reader } = await api.call('session.get', {
+    const { turns, active_task_id, reader, title } = await api.call('session.get', {
       topic_id: wanted.topic,
       session_id: sessionId,
     })
@@ -313,7 +313,7 @@ export function MainlineProvider({
       ...state,
       messages: mergeAnswers(state.messages, sessionId, turns),
       sessions: state.sessions.map((s) =>
-        s.id === sessionId ? { ...s, hasTurns: turns.length > 0 } : s,
+        s.id === sessionId ? { ...s, title: title ?? s.title, hasTurns: turns.length > 0 } : s,
       ),
       ...(resume && reader && !state.readerPaperId && { readerPaperId: reader.source_version_id }),
     }))
