@@ -59,6 +59,7 @@ function RunCard({ run, open, onToggle }: { run: AgentRun; open: boolean; onTogg
               {config.sources.length > 0 && <p>{tr('Search sources:')}{' '}{config.sources.map((id) => SOURCE_NAMES[id]).join(', ')}</p>}
               <p>{tr('Budget:')}{' '}{limit(config.budget.calls)}{' '}{tr('calls ·')}{' '}{limit(config.budget.tokens)}{' '}{tr('tokens ·')}{' '}{limit(config.budget.minutes)}{' '}{tr('min · USD')}{' '}{limit(config.budget.cost)}</p>
             </>}
+            {prefs.usage === 'compact' && <span>{run.usage ? count(tr,run.usage.calls,'model call') + ' · ' + run.usage.tokens.toLocaleString() + ' tokens' : tr('Usage unavailable')}</span>}
             {prefs.usage === 'detailed' && run.estimate && <p>{tr('Estimated (demo):')}{' '}{usageLabel(tr, run.estimate)}</p>}
             {prefs.usage === 'detailed' && (run.usage ? <span>{state.mainline&&!state.mainline.demo?tr('Used'):tr('Used (demo)')} · {usageLabel(tr, run.usage)}</span>
               : state.mainline?<span>{count(tr, run.steps.length,'step')}{' '}{tr('· Usage unavailable')}</span> : <span>{count(tr, run.steps.length, 'step')} · ~{tokens.toLocaleString()}{' '}{tr('tokens ·')}{' '}{(ms / 1000).toFixed(1)}{' '}{tr('s')}{' '}<em>{tr('(mock)')}</em></span>)}

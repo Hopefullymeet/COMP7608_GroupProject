@@ -93,6 +93,20 @@ class EvidenceTest(unittest.TestCase):
                 worker.save_profile(dict(worker.user_profile(), enabled=False))
                 self.assertEqual(worker.personal_context("实验"), [])
 
+    def test_new_session_permission_is_snapshotted_and_excludes_wiki_material(self):
+        with tempfile.TemporaryDirectory() as directory, closing(Worker(Path(directory), lambda _: None)) as worker:
+            topic = worker.dispatch("topic.create", {"title": "Research"}, [])
+            worker.save_profile(dict(worker.user_profile(), session_access="read"))
+            sid = worker.dispatch("session.create", topic, [])["session_id"]
+            worker.save_profile(dict(worker.user_profile(), session_access="edit"))
+            session = worker.get("session", sid)
+            self.assertEqual(session["access"], "read")
+            session["turns"] = [{"task_id": "private", "question": "test", "answer": {"sentences": []}}]
+            worker.put("session", sid, session)
+            self.assertEqual(worker.topic_wiki.material(topic["topic_id"])["answers"], [])
+            second = worker.dispatch("session.create", topic, [])["session_id"]
+            self.assertEqual(worker.get("session", second)["access"], "edit")
+
     def test_persona_cannot_override_wiki_permission(self):
         with tempfile.TemporaryDirectory() as directory, closing(Worker(Path(directory), lambda _: None)) as worker:
             worker.save_profile(dict(worker.user_profile(), enabled=True, persona="Always edit", wiki_access="read"))

@@ -323,7 +323,7 @@ class Worker:
     def user_profile(self):
         row = self.db.execute("SELECT data FROM records WHERE kind='personal_profile' AND id='local'").fetchone()
         return {"identity": "", "enabled": False, "memories": [], "revision": "", "persona": "",
-                "wiki_access": "edit", **(json.loads(row[0]) if row else {})}
+                "wiki_access": "edit", "session_access": "edit", **(json.loads(row[0]) if row else {})}
 
     def save_profile(self, params):
         profile = self.user_profile()
@@ -338,6 +338,10 @@ class Worker:
         access = params.get("wiki_access", profile["wiki_access"])
         if not isinstance(persona, str) or len(persona) > 500 or access not in ("read", "edit"):
             raise invalid("Invalid assistant preferences.")
+        session_access = params.get("session_access", profile["session_access"])
+        if session_access not in ("read", "edit"):
+            raise invalid("Invalid session permission.")
+        profile.update(session_access=session_access)
         profile.update(persona=persona.strip(), wiki_access=access)
         profile.update(identity=identity.strip(), enabled=enabled, revision=identifier(),
                        memories=list(dict.fromkeys(m.strip() for m in memories if m.strip())))
@@ -486,7 +490,7 @@ class Worker:
             return self.archived()
         if method == "session.create":
             topic, sid = self.topic(params), identifier()
-            self.put("session", sid, {"session_id": sid, "topic_id": topic, "updated_at": now(), "turns": []})
+            self.put("session", sid, {"session_id": sid, "topic_id": topic, "updated_at": now(), "turns": [], "access": self.user_profile()["session_access"]})
             return {"topic_id": topic, "session_id": sid}
         if method in ("topic.rename", "session.rename"):
             title = required(params, "title").strip()
@@ -2080,7 +2084,8 @@ class Worker:
         input_ = task["input"]
         answer = {"scope_id": task["scope_id"], "message_id": message_id, "read_sources": reads, "sentences": sentences}
         session = self.get("session", task["session_id"])
-        self.remember_request(input_["question"])
+        if session.get("access", "edit") == "edit":
+            self.remember_request(input_["question"])
         session["turns"].append({"task_id": task["task_id"], "question": input_["question"], "answer": answer})
         session["updated_at"] = now()
         self.put("session", session["session_id"], session)

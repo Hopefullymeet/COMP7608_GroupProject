@@ -1,4 +1,5 @@
-import { options, setPreference, usePreferences } from '../data/preferences'
+import { Dialog } from '../components/PageHead'
+import { type Shortcut, applyPreferencesFile, options, setPreference, usePreferences } from '../data/preferences'
 import { version } from '../../src-tauri/tauri.conf.json'
 import { useState } from 'react'
 import { useLanguage } from '../i18n'
@@ -12,6 +13,10 @@ export function PersonalSettings() {
   const prefs = usePreferences()
   const profile = useRead('profile.get', {})
   const { write, busy, report } = useWorkspace()
+  const [config,setConfig] = useState<string>()
+  const [configError,setConfigError] = useState('')
+  const [recording,setRecording] = useState<Shortcut>()
+  const [shortcutError,setShortcutError] = useState(false)
   const labels = {
     appearance: ['Appearance','Light','Dark','Follow system'],
     font: ['Conversation font size','14 px','16 px','18 px','20 px'],
@@ -20,18 +25,51 @@ export function PersonalSettings() {
     replies: ['Completed replies','Show all','Fold earlier answers'],
     send: ['Send reading questions with','Enter','Ctrl / ⌘ + Enter'],
     busy: ['When the assistant is busy','Keep a draft','Queue next question'],
-    usage: ['Performance and usage','Detailed','Hide'],
-    links: ['External paper links','Open directly','Confirm before opening'],
+    usage: ['Performance and usage','Detailed','Compact','Hide'],
+    findKey: ['Find in PDF','Ctrl / ⌘ + F','Ctrl / ⌘ + G'],
+    settingsKey: ['Open settings','Ctrl / ⌘ + ,','Ctrl / ⌘ + .'],
+    links: ['External paper links','Open directly','Confirm before opening','In sidebar'],
   }
   return <section className="set-section"><h2>{tr('General settings')}</h2>
+    <label className="preference-row">{tr('New reading sessions')}<select disabled={!profile || busy} value={profile?.session_access ?? 'edit'}
+      onChange={e=>profile && void write('profile.save',{...profile,session_access:e.target.value as 'read'|'edit'}).catch(report)}>
+      <option value="edit">{tr('Allow Wiki and memory updates')}</option><option value="read">{tr('Save conversation only')}</option></select></label>
     <div className="preference-row"><label htmlFor="wiki-permission">{tr('Assistant edits in Wiki chat')}</label>
       <select id="wiki-permission" disabled={!profile || busy} value={profile?.wiki_access ?? 'edit'}
         onChange={e=>profile && void write('profile.save',{...profile,wiki_access:e.target.value as 'read'|'edit'}).catch(report)}>
         <option value="edit">{tr('Allow entry edits')}</option><option value="read">{tr('Answer only')}</option></select></div>
     <div className="preference-row"><span>{tr('Language')}</span><LanguagePicker/></div>
-    {(Object.keys(options) as (keyof typeof options)[]).map(key=><label className="preference-row" key={key}>
+    {(Object.keys(options) as (keyof typeof options)[]).map(key=>key === 'findKey' || key === 'settingsKey' ? <div className="preference-row" key={key}><span>{tr(labels[key][0])}</span>
+      <button className="ghost-btn" onClick={()=>{setRecording(key);setShortcutError(false)}} onBlur={()=>setRecording(undefined)}
+        onKeyDown={e=>{
+          if (recording !== key) return
+          e.stopPropagation()
+          if (e.key === 'Tab') return
+          e.preventDefault()
+          if (e.key === 'Escape') {setRecording(undefined);return}
+          if (['Meta','Control','Shift','Alt'].includes(e.key)) return
+          if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || !setPreference(key,e.key.toLowerCase())) {setShortcutError(true);return}
+          setRecording(undefined);setShortcutError(false)
+        }}>{recording === key ? tr(shortcutError ? 'Choose a different shortcut' : 'Press Ctrl / ⌘ and a key') : 'Ctrl / ⌘ + ' + prefs[key].toUpperCase()}</button></div> : <label className="preference-row" key={key}>
       {tr(labels[key][0])}<select value={prefs[key]} onChange={e=>setPreference(key,e.target.value)}>
         {options[key].map((value,i)=><option key={value} value={value}>{tr(labels[key][i+1])}</option>)}</select></label>)}
+    <button className="ghost-btn" onClick={()=>{setConfig(JSON.stringify(prefs,null,2));setConfigError('')}}>{tr('Edit interface configuration')}</button>
+    {config !== undefined && <Dialog title={tr('Interface configuration')} onClose={()=>setConfig(undefined)}>
+      <textarea aria-label={tr('Interface configuration')} className="text-field" rows={13} value={config} onChange={e=>setConfig(e.target.value)}/>
+      <label>{tr('Open configuration file')} <input type="file" accept=".json,application/json" onChange={async e=>{
+        const file=e.target.files?.[0]
+        if (!file) return
+        try {if (file.size>65536) throw new Error();setConfig(await file.text());setConfigError('')}
+        catch {setConfigError(tr('Check the settings JSON and available values.'))}
+      }}/></label>
+      {configError && <p role="alert">{configError}</p>}
+      <div className="dialog-actions"><button className="ghost-btn" onClick={()=>{
+        const url=URL.createObjectURL(new Blob([config],{type:'application/json'}))
+        const a=document.createElement('a');a.href=url;a.download='papertrace-interface.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
+      }}>{tr('Export JSON')}</button><button className="primary" onClick={()=>{
+        try {applyPreferencesFile(config);setConfig(undefined)} catch {setConfigError(tr('Check the settings JSON and available values.'))}
+      }}>{tr('Apply')}</button></div>
+    </Dialog>}
     <small className="fine">PaperTrace · {version}</small></section>
 }
 

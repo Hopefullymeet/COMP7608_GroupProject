@@ -30,12 +30,22 @@ export function App({ windowControls, pages, comparison, liveResearch }: { windo
     media.addEventListener('change', apply)
     return () => media.removeEventListener('change', apply)
   }, [prefs.appearance,prefs.font])
+  useEffect(() => {
+    function shortcut(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key === prefs.settingsKey) {
+        e.preventDefault()
+        setSettingsOpen(true)
+      }
+    }
+    window.addEventListener('keydown', shortcut)
+    return () => window.removeEventListener('keydown', shortcut)
+  }, [prefs.settingsKey])
   const r = state.route
   const waiting = state.runOrder.map((id) => state.runs[id]).find((run) => run.limit)
   return (
     <div onClickCapture={event => {
       const a = event.target instanceof Element && event.target.closest('a[href]')
-      if (prefs.links === 'confirm' && a instanceof HTMLAnchorElement && a.target === '_blank' && /^https?:$/.test(a.protocol) && !a.hasAttribute('data-confirmed')) {
+      if (prefs.links !== 'open' && a instanceof HTMLAnchorElement && a.target === '_blank' && /^https?:$/.test(a.protocol) && !a.hasAttribute('data-confirmed')) {
         event.preventDefault(); setLink(a.href)
       }
     }} className={windowControls ? 'app app--desktop' : 'app'}>
@@ -54,7 +64,12 @@ export function App({ windowControls, pages, comparison, liveResearch }: { windo
       {settingsOpen && <Dialog title={tr('Settings')} onClose={() => setSettingsOpen(false)} panelClass="settings-window">
         {pages?.settings ?? <Settings />}
       </Dialog>}
-      {link && <Dialog title={tr('Open external link?')} onClose={()=>setLink(undefined)}>
+      {link && prefs.links === 'sidebar' && <aside className="external-preview" aria-label={tr('External paper links')}>
+        <div><a href={link} data-confirmed target="_blank" rel="noreferrer">{tr('Open in browser')}</a>
+        <button className="ghost-btn" onClick={()=>setLink(undefined)}>{tr('Close')}</button></div>
+        <iframe key={link} src={link} title={tr('External paper links')} sandbox="allow-scripts allow-forms" referrerPolicy="no-referrer"/>
+      </aside>}
+      {link && prefs.links === 'confirm' && <Dialog title={tr('Open external link?')} onClose={()=>setLink(undefined)}>
         <p>{link}</p><a className="primary" data-confirmed href={link} target="_blank" rel="noreferrer" onClick={()=>setLink(undefined)}>{tr('Open')}</a>
       </Dialog>}
       <TraceDrawer />

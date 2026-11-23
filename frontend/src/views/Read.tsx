@@ -6,7 +6,7 @@ import { QUESTIONS } from '../data/scripts'
 import { quoteOffsets } from '../components/quoteRange'
 import { EvidencePopover } from '../components/EvidencePopover'
 import { Icon, Spinner } from '../components/Icon'
-import { scrollWithin } from '../components/util'
+import { useAnswerScroll } from '../components/useAnswerScroll'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { createPortal } from 'react-dom'
 import { Dialog, HeaderActions } from '../components/PageHead'
@@ -47,7 +47,9 @@ function ClaimSources({ ids, sentence, numbers }: { ids: string[]; sentence: num
 function AgentMessage({ m }: { m: ChatMessage }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
-  const run = m.runId ? state.runs[m.runId] : undefined
+  const runId = m.runId ?? m.wikiTask
+  const run = runId ? state.runs[runId] : undefined
+  const prefs = usePreferences()
   const lastStep = run?.steps[run.steps.length - 1]
   const tools = run?.steps.filter((s) => s.kind === 'tool').length ?? 0
   const papers = papersOfTopic(state, currentTopic(state))
@@ -61,11 +63,17 @@ function AgentMessage({ m }: { m: ChatMessage }) {
   const AnswerPoint = state.mainline ? 'p' : 'span'
 
   return (
-    <div className="msg agent">
+    <div className="msg agent" data-answer-id={m.id}>
       <div className="msg-who">
         <span className="avatar">P</span> PaperTrace
         {!m.done && <span className="working"><Spinner /> {tr(lastStep?.title ?? 'Planning…')}</span>}
       </div>
+      {run && run.steps.length > 0 && <details key={String(m.done) + prefs.collapse} open={!m.done || prefs.collapse === 'never'} className="chat-work-steps">
+        <summary>{count(tr,run.steps.length,'step')}</summary>
+        <ol>{run.steps.map(step=><li key={step.id}>{tr(step.title)}
+          {prefs.steps === 'detailed' && <>{step.call && <code>{step.call}</code>}{step.detail && <p>{tr(step.detail)}</p>}</>}
+        </li>)}</ol>
+      </details>}
       {m.segments.length > 0 && (
         <div className="answer">
           {m.segments.map((s, i) => {
@@ -144,7 +152,6 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
   const prefs = usePreferences()
   const [queued,setQueued] = useState<{session:string;question:string}>()
   const [text, setText] = useState('')
-  const endRef = useRef<HTMLDivElement>(null)
   const session = state.sessions.find((s) => s.id === state.activeSessionId)
   const messages = state.messages.filter((m) => m.sessionId === session?.id)
   const asked = new Set(messages.filter((m) => m.role === 'user').map((m) => m.segments[0]?.text))
@@ -152,7 +159,11 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
   const readable = papers.filter((id) => paperFor(state, id).stored !== 'metadata')
   const canAsk = !state.mainline || readable.length > 0
 
-  useEffect(() => { scrollWithin(endRef.current, '.chat-scroll', 'end') }, [messages.length, state.messages, selections.length])
+  const last = messages[messages.length - 1]
+  const agent = last?.role === 'agent' ? last : undefined
+  const turn = agent?.wikiTask ?? agent?.runId ?? agent?.id
+  const scroll = useAnswerScroll(session?.id, agent && !agent.done ? turn : last?.role === 'user' && last.id.startsWith('user:') ? last.id.slice(5) : undefined,
+    agent?.done ? turn : undefined, agent?.id, agent?.done ? '' : agent?.segments.map(s => s.text).join('') ?? '')
 
   const send = async (t: string, fromComposer = false) => {
     if (!t.trim() || state.qaRunning || !canAsk) return
@@ -200,7 +211,7 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
         {messages.length > 0 && <button className="icon-btn sm" title={tr('New session')} aria-label={tr('New session')} onClick={() => act.newSession(currentTopic(state))}><Icon name="plus" size={15} /></button>}
         {controls}
       </>, actions)}
-      <div className="chat-scroll">
+      <div className="chat-scroll" ref={scroll.panel} onScroll={scroll.onScroll}>
         {messages.length === 0 && selections.length === 0 && (
           <div className="chat-empty">
             <h2>{tr('Start a fresh reading question')}</h2>
@@ -210,7 +221,7 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
         {messages.map((m) =>
           m.role === 'user'
             ? <div key={m.id} className="msg user"><p>{m.segments[0]?.text}</p></div>
-            : prefs.replies === 'latest' && m.done && messages.slice(messages.indexOf(m)+1).some(next=>next.role==='agent' && next.done)
+            : prefs.collapse === 'finished' && prefs.replies === 'latest' && m.done && messages.slice(messages.indexOf(m)+1).some(next=>next.role==='agent' && next.done)
               ? <details key={m.id}><summary>{tr('Earlier answer')}</summary><AgentMessage m={m}/></details>
               : <AgentMessage key={m.id} m={m} />,
         )}
@@ -224,7 +235,7 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
             </button>
           </div>
         </div>)}
-        <div ref={endRef} />
+        <div ref={scroll.space} aria-hidden="true" style={{ flexShrink: 0 }} />
       </div>
 
       {(state.mainline ? readable.length > 0 : papers.length > 0) && <div className="chat-bottom">

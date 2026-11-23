@@ -88,7 +88,7 @@ class TopicWiki:
                  for n in host.rows("note") if n["topic_id"] == topic][:30]
         answers = []
         for session in host.rows("session"):
-            if session["topic_id"] != topic or session.get("archived"):
+            if session["topic_id"] != topic or session.get("archived") or session.get("access") == "read":
                 continue
             for turn in session["turns"]:
                 sentences = [{"text": clip(s["text"]), "anchor_ids": s["anchor_ids"]}

@@ -1,3 +1,4 @@
+import { usePreferences } from '../data/preferences'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { pdfQuoteRange } from '../components/quoteRange'
@@ -408,6 +409,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
     bookmarkTimer.current = setTimeout(saveBookmark, 450)
   }
 
+  const {findKey} = usePreferences()
   function openFind() {
     showFind(true)
     requestAnimationFrame(() => findInput.current?.focus())
@@ -417,7 +419,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
     if (!document) return
     function findShortcut(e: KeyboardEvent) {
       if (frame.current?.closest('[hidden]')) return
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' &&
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === findKey &&
           (frame.current?.parentElement?.contains(window.document.activeElement) || window.document.activeElement === window.document.body)) {
         e.preventDefault()
         openFind()
@@ -425,7 +427,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
     }
     window.addEventListener('keydown', findShortcut)
     return () => window.removeEventListener('keydown', findShortcut)
-  }, [document])
+  }, [document,findKey])
 
   useEffect(() => {
     if (!document || !findOpen || !term.trim()) { setMatches(undefined); return }

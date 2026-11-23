@@ -474,3 +474,10 @@ html, body, #root {overflow:hidden;overscroll-behavior:none}
 .wiki-history-columns {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
 .wiki-history-columns h4 {margin:8px 0}.wiki-history-columns ul {padding-inline-start:18px;margin-top:4px}
 @media(max-width:600px){.wiki-history-columns{gap:8px}}
+.external-preview { position:absolute; inset:40px 0 0 auto; width:min(520px,48vw); z-index:12; display:flex; flex-direction:column; background:var(--surface,#fff); border-inline-start:1px solid var(--line,#ddd); }
+.external-preview > div { display:flex; align-items:center; justify-content:space-between; padding:12px; }
+.external-preview iframe { border:0; width:100%; flex:1; background:white; }
+.chat-work-steps { color:var(--ink-3); font-size:0.88em; margin:6px 0; }
+.chat-work-steps summary { cursor:pointer; }
+.chat-work-steps code { display:block; white-space:pre-wrap; }
+.chat-scroll { overflow-anchor:none; }

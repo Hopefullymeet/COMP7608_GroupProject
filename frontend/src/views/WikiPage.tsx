@@ -1,3 +1,4 @@
+import { useAnswerScroll } from '../components/useAnswerScroll'
 import { confirmAction } from '../components/confirmAction'
 import { useLanguage, type Translate } from '../i18n'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
@@ -129,7 +130,7 @@ function EntryRow({ entry, onEdit, disabled, Source }: {
 function Message({ message }: { message: WikiMessage }) {
   const { tr } = useLanguage()
   return (
-    <div className={'wiki-msg ' + message.role}>
+    <div className={'wiki-msg ' + message.role} data-answer-id={message.message_id}>
       <div className="wiki-bubble">{message.text}</div>
       {!!message.changes?.length && <ul className="wiki-changes" aria-label={tr('Wiki updated')}>
         <li className="wiki-changes-head"><Icon name="book" size={12} />{' '}{tr('Wiki updated')}</li>
@@ -152,7 +153,6 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
   const [adding, setAdding] = useState<string>()
   const [working, setWorking] = useState(false)
   const autoRefreshed = useRef(false)
-  const threadEnd = useRef<HTMLDivElement>(null)
   const scope = { topic_id: topicId }
 
   const load = useCallback(() => call('wiki.get', { topic_id: topicId }).then(setWiki, (e) => setError(errorText(e))),
@@ -191,12 +191,10 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
       void refresh()
     }
   })
-  const threadLength = wiki?.thread.length ?? 0
-  const scrolled = useRef(false)
-  useEffect(() => {
-    if (!scrolled.current) { scrolled.current = threadLength > 0; return }
-    threadEnd.current?.scrollIntoView({ block: 'end' })
-  }, [threadLength, wiki?.pending_reply])
+  const latest = wiki?.thread.at(-1)
+  const question = latest?.role === 'user' ? latest : wiki?.thread.at(-2)
+  const scroll = useAnswerScroll(topicId, wiki?.pending_reply ? question?.message_id : undefined,
+    latest?.role === 'assistant' ? question?.message_id : undefined, latest?.message_id, '')
 
   async function send(event: FormEvent) {
     event.preventDefault()
@@ -224,7 +222,7 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
     plural(answers, '{0} question', '{0} questions'), plural(findings, '{0} finding', '{0} findings')].join(' · ')
 
   return <>
-    <div className="wiki-scroll">
+    <div className="wiki-scroll" ref={scroll.panel} onScroll={scroll.onScroll}>
       <div className="wiki-column">
         {wiki.map_nodes && <WikiDirectory wiki={wiki} title={title} edit={edit} Source={Source} refresh={()=>void refresh()} busy={busy || working}/>}
         {directory && issue && <p className="wiki-issue" role="alert">{issue}</p>}
@@ -297,7 +295,7 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
           </div>}
           {issue && !generating && wiki.thread.at(-1)?.role === 'user' && <p className="wiki-issue" role="alert">{issue}</p>}
         </section>}
-        <div ref={threadEnd} />
+        <div ref={scroll.space} aria-hidden="true" />
       </div>
     </div>
 
