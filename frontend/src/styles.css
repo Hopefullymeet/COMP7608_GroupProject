@@ -529,5 +529,3 @@ html, body, #root {overflow:hidden;overscroll-behavior:none}
 .work-step-group blockquote { border-left: 2px solid var(--line); margin: .5rem 0 .5rem 1rem; padding-left: .7rem; }
 .work-step-group p { margin: .25rem 0; }
 
-.greeting-otter { display: block; width: 76px; aspect-ratio: 9 / 8; margin: 0 auto 10px; background-size: 400% 300%; background-repeat: no-repeat; }
-.new-topic-entry:has(.greeting-otter) h1 { align-items: center; }
