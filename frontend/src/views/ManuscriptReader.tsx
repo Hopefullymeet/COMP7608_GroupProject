@@ -103,7 +103,7 @@ export function ManuscriptReader({ topic, draft, version, report, name, onAsk, o
           }}>
             <small>{mark ? tr('Current citation {0}', mark.label || sentence?.text || '') : tr('Current audit report')}</small>
             {mark && <button type="button" className="link-btn" onClick={close}>{tr('Use whole report')}</button>}
-            <textarea aria-label={tr('Ask about this audit')} placeholder={tr('Ask about this audit')}
+            <textarea className="text-field" aria-label={tr('Ask about this audit')} placeholder={tr('Ask about this audit')}
               value={question} maxLength={2000} onChange={e => setQuestion(e.target.value)}/>
             <button className="primary" disabled={busy || !question.trim() || !report}>{tr('Ask')}</button>
             {!report && <p>{tr('A report is needed to answer audit questions.')}</p>}
