@@ -21,6 +21,7 @@ pnpm --dir frontend install --frozen-lockfile
 ### 2. 打包便携版
 
 ```powershell
+$env:VITE_PAPERTRACE_TRANSPORT='rpc'
 pnpm --dir frontend desktop:build --config src-tauri/tauri.portable.conf.json
 ```
 
@@ -51,7 +52,7 @@ pnpm --dir frontend desktop:build --config src-tauri/tauri.portable.conf.json
 
 ## 走查样例
 
-1. Home 点 **Try the demo**，在 Discover 确认检索范围，将 PubMedQA 加入主题。Read & ask 选择版本、提问、点出处，在原文旁保存笔记。侧栏可回到最近会话。
+1. Home 点 **Try the demo**，在 Discover 确认检索范围，将 PubMedQA 加入主题。Read & ask 直接提问，默认以当前主题库中所有有摘要或正文的文献为来源。点出处定位原文，在原文旁保存笔记。侧栏可回到最近会话。
 2. Library 选择同一主题，点 **Import papers** 导入两份演示材料；重复导入进入人工复核。选择论文可查看文件版本、标签和主题归属。移入回收站前可查看影响，恢复后重新可读。
 3. 主题的 Compare 页选择两篇论文并确认维度，查看每格的依据或缺口，可修订后保存为笔记。Evidence wiki 选择来源笔记并生成草稿，在差异预览中选定变更后采纳。
 4. Citation check 打开样例稿件或粘贴 Markdown，选择句子和目标材料后运行独立回查。审阅意见与改稿分别保存。预览措辞和引用，生成新稿版本，再运行回查。稿件、报告、比较 CSV、笔记、书目和证据可从此页导出。

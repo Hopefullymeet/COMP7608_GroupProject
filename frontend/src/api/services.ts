@@ -6,6 +6,8 @@ export type Model = {
   endpoint: string
   local: boolean
   credential_configured: boolean
+  credential_store?: boolean
+  credential_stored?: boolean
 }
 export type Service = {
   id: string
@@ -15,7 +17,8 @@ export type Service = {
   status: string
   fields: string[]
 }
-export type Budget = { calls: number; tokens: number; minutes: number; cost: number }
+export type Budget = Record<'calls' | 'tokens' | 'minutes' | 'cost', number | null>
+export const unlimitedBudget: Budget = { calls: null, tokens: null, minutes: null, cost: null }
 export type Config = {
   revision: string
   model_id: string
@@ -52,7 +55,10 @@ export type ServiceMethods = {
   'services.get': [Record<string, never>, Config]
   'services.save': [Write & Omit<Config, 'revision'> & { base_revision: string }, Config]
   'services.test': [Write & { id: string }, { ok: boolean; message: string }]
-  'services.credentials': [Write & { id: string }, { configured: boolean }]
+  'services.credentials': [
+    { id: string } & ({ action: 'save'; api_key: string } | { action: 'delete' }),
+    { configured: boolean; stored: boolean },
+  ]
   'access.list': [Record<string, never>, { offers: Offer[]; grants: Grant[] }]
   'access.grant': [Write & { offer_id: string }, Grant]
   'access.revoke': [Write & { grant_id: string }, { revoked: boolean }]
@@ -67,7 +73,7 @@ export const defaultConfig = (): Config => ({
   revision: 'initial',
   model_id: 'compatible',
   ask_before_overage: true,
-  budget: { calls: 12, tokens: 24000, minutes: 5, cost: 1 },
+  budget: { ...unlimitedBudget },
   models: [
     {
       id: 'compatible',

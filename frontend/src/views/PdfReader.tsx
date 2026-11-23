@@ -188,7 +188,7 @@ async function readOutline(pdf: PDFDocumentProxy) {
 }
 
 export default function PdfReader({ topic, version, page, target, onAsk, onFind, onWiki, onPaperInfo, session, resume }: {
-  topic: string; version: string; page: number; target?: Rect
+  topic: string; version: string; page?: number; target?: Rect
   session?: string; resume?: boolean
   onAsk: (selection: Selection) => void; onFind?: () => void; onWiki: () => void; onPaperInfo?: (mode: 'scan' | 'analysis') => void
 }) {
@@ -202,7 +202,7 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
   const [zoom, setZoom] = useState(1)
   const [aspectRatio, setAspectRatio] = useState(0)
   const [ratios, setRatios] = useState<Record<number, number>>({})
-  const [current, setCurrent] = useState(page)
+  const [current, setCurrent] = useState(page ?? 1)
   const [renderRange, setRenderRange] = useState([1, 3])
   const [jumpValue, setJumpValue] = useState<string>()
   const [annotationsOpen, setAnnotationsOpen] = useState(false)
@@ -229,7 +229,7 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
       .catch(() => { if (live) setSavedPosition({}) })
     return () => { live = false }
   }, [api, topic, version, session, resume, restored])
-  const initialJump = useRef<{ page: number; target?: Rect }>()
+  const initialJump = useRef<{ page?: number; target?: Rect }>()
   const more = useRef<HTMLDetailsElement>(null)
   const pageList = useRef<HTMLDivElement>(null)
   const [tool, setTool] = useState<Tool>('select')
@@ -302,6 +302,16 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
 
   useLayoutEffect(() => {
     if (!document || !width || !frame.current) return
+    if (page !== undefined && (initialJump.current?.page !== page || initialJump.current?.target !== target)) {
+      initialJump.current = { page, target }
+      jump(Math.max(1, Math.min(document.numPages, page)), target)
+      if (session) setRestored(true)
+      return
+    }
+    if (page === undefined && initialJump.current?.page !== undefined) {
+      initialJump.current = undefined
+      setHighlight(undefined)
+    }
     if (session && resume && !restored) {
       if (!savedPosition) return
       if (savedPosition.page) {
@@ -317,10 +327,7 @@ export default function PdfReader({ topic, version, page, target, onAsk, onFind,
       setRestored(true)
       return
     }
-    if (initialJump.current?.page !== page || initialJump.current?.target !== target) {
-      initialJump.current = { page, target }
-      jump(Math.max(1, Math.min(document.numPages, page)), target)
-    } else syncPageWindow(frame.current)
+    syncPageWindow(frame.current)
   }, [document, page, target, width, session, resume, restored, savedPosition])
 
   useLayoutEffect(() => {

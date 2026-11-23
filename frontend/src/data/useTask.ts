@@ -122,17 +122,20 @@ export function useTask(api: Client, onFinished: (task: string, result: Finished
       }
     } finally { pending.current = false; setBusy(false) }
   }
-  const prepare = (input: TaskInput) => exclusive(async () => {
-    const params = { ...input, operation_id: operation() }
-    const result = await retryWrite(() => api.call('task.prepare', params))
-    setConfirmation({ input, ...result, startKey: operation() })
-  })
-  const start = () => confirmation && exclusive(async () => {
-    const params = { ...confirmation.input, confirmation_id: confirmation.confirmation_id, operation_id: confirmation.startKey }
+  async function startPrepared(prepared: Confirmation) {
+    const params = { ...prepared.input, confirmation_id: prepared.confirmation_id, operation_id: prepared.startKey }
     const started = await retryWrite(() => api.call('task.start', params))
     setConfirmation(undefined)
     attach(started.task_id, started)
+  }
+  const prepare = (input: TaskInput, { startImmediately = false } = {}) => exclusive(async () => {
+    const params = { ...input, operation_id: operation() }
+    const result = await retryWrite(() => api.call('task.prepare', params))
+    const prepared = { input, ...result, startKey: operation() }
+    if (startImmediately) await startPrepared(prepared)
+    else setConfirmation(prepared)
   })
+  const start = () => confirmation && exclusive(() => startPrepared(confirmation))
   const cancel = () => task && exclusive(async () => {
     const params = { task_id: task, operation_id: operation() }
     await retryWrite(() => api.call('task.cancel', params))

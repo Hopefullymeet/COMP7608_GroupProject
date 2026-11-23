@@ -11,6 +11,7 @@ import re
 import sys
 from textwrap import wrap
 
+from dsh import ENDPOINT
 from literature import LiteratureError, digest
 
 CAPTION = re.compile(r"^(figure|fig\.?|table)\s*([A-Z]?\d+[a-z]?)\s*[:.]", re.I)
@@ -547,7 +548,7 @@ class Reader:
             raise LiteratureError("MODEL_UNAVAILABLE", "Configure DeepSeek Harness for text questions.", "configure_service")
         return version, page, question
 
-    def translation_plan(self, topic, params, model):
+    def translation_plan(self, topic, params, model, endpoint):
         version = params.get("source_version_id")
         language = params.get("target_language")
         if not isinstance(version, str) or not isinstance(language, str) or not re.fullmatch(
@@ -573,6 +574,8 @@ class Reader:
                 region(rect)
         engine = pdf_engine()
         plans = []
+        # Preserve existing cached translations for the default provider.
+        provider = [model] if endpoint == ENDPOINT else [model, endpoint]
         with engine.open(stream=content, filetype="pdf") as document:
             for number in pages:
                 page = document[number - 1]
@@ -584,7 +587,7 @@ class Reader:
                 units = [{"id": f"{number}:{index}:{part}", "source": text, "rects": boxes}
                          for index, (body, boxes) in enumerate(blocks, 1)
                          for part, text in enumerate(wrap(body, width=1750), 1)]
-                key = digest(json.dumps([topic, version, number, selection, language.lower(), glossary, model, units],
+                key = digest(json.dumps([topic, version, number, selection, language.lower(), glossary, *provider, units],
                                         sort_keys=True, ensure_ascii=False).encode("utf-8"))
                 plans.append({"page": number, "units": units, "key": key})
         if sum(len(u["source"]) for plan in plans for u in plan["units"]) > 48_000:
@@ -618,7 +621,7 @@ class Reader:
         version, model = params["source_version_id"], task["dsh_model"]
         try:
             with self.host.lock:
-                plans = self.translation_plan(topic, params, model)
+                plans = self.translation_plan(topic, params, model, task.get("dsh_endpoint", ENDPOINT))
                 if [plan["key"] for plan in plans] != task["translation_keys"]:
                     raise LiteratureError("CONFIRMATION_REQUIRED", "The source changed. Confirm the task again.", "confirm_task")
             runtime = self.host.dsh_for_task(task)

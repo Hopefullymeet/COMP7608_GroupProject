@@ -22,7 +22,7 @@ function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
   )
 }
 
-function BudgetInput({ field, value, onCommit }: { field: typeof BUDGET[number]; value: number; onCommit: (value: number) => void }) {
+function BudgetInput({ field, value, onCommit }: { field: typeof BUDGET[number]; value: number | null; onCommit: (value: number | null) => void }) {
   const { tr } = useLanguage()
   const [draft, setDraft] = useState<string | null>(null)
   const [error, setError] = useState(false)
@@ -31,9 +31,9 @@ function BudgetInput({ field, value, onCommit }: { field: typeof BUDGET[number];
   function commit() {
     if (draft === null) return
     const raw = draft.trim()
-    const parsed = Number(raw)
-    const valid = (field.integer ? /^\d+$/ : /^\d+(?:\.\d+)?$|^\.\d+$/).test(raw)
-      && Number.isFinite(parsed) && parsed <= Number.MAX_SAFE_INTEGER
+    const parsed = raw === '' ? null : Number(raw)
+    const valid = parsed === null || ((field.integer ? /^\d+$/ : /^\d+(?:\.\d+)?$|^\.\d+$/).test(raw)
+      && Number.isFinite(parsed) && parsed <= Number.MAX_SAFE_INTEGER)
     if (!valid) {
       setError(true)
       return
@@ -47,7 +47,7 @@ function BudgetInput({ field, value, onCommit }: { field: typeof BUDGET[number];
     <div className="budget">
       <label htmlFor={id}>{tr(field.label)}</label>
       <input id={id} aria-label={tr(field.label) + ' ' + tr(field.unit)}
-        inputMode={field.integer ? 'numeric' : 'decimal'} value={draft ?? value}
+        inputMode={field.integer ? 'numeric' : 'decimal'} value={draft ?? value ?? ''} placeholder={tr('Unlimited')}
         aria-invalid={error} aria-describedby={error ? id + '-error' : undefined}
         onChange={(e) => { setDraft(e.target.value); setError(false) }}
         onBlur={commit} onKeyDown={(e) => {
@@ -56,7 +56,7 @@ function BudgetInput({ field, value, onCommit }: { field: typeof BUDGET[number];
         }} />
       <small>{tr(field.unit)}</small>
       {error && <small className="set-error" id={id + '-error'} role="alert">
-        {field.integer ? tr('Enter a whole number of 0 or more.') : tr('Enter a number of 0 or more.')}{' '}{tr('Using')}{' '}{value}.
+        {field.integer ? tr('Enter a whole number of 0 or more.') : tr('Enter a number of 0 or more.')}{' '}{tr('Using')}{' '}{value ?? tr('Unlimited')}.
       </small>}
     </div>
   )
@@ -167,7 +167,7 @@ export function Settings() {
         <section className="set-section">
           <div className="set-intro">
             <h2>{tr('Task budget')}</h2>
-            <p>{tr('Limits apply to new demo tasks. Zero allows no usage for that item.')}</p>
+            <p>{tr('Leave a limit blank for unlimited usage.')}</p>
           </div>
           <div className="set-body">
             <div className="budget-grid">

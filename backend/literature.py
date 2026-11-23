@@ -3,11 +3,13 @@
 import base64
 import binascii
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 
 
 MAX_PDF = 16 * 1024 * 1024
@@ -80,21 +82,65 @@ def pdf_content(params):
 
 
 def extract_pdf(content):
+    command = [poppler("pdftotext"), "-enc", "UTF-8", "-", "-"]
     try:
         completed = subprocess.run(
-            [poppler("pdftotext"), "-enc", "UTF-8", "-", "-"],
-            input=content, capture_output=True, timeout=10, check=True,
+            command, input=content, capture_output=True, timeout=10, check=True,
         )
-    except FileNotFoundError:
-        raise LiteratureError("PDF_TOOLS_MISSING", "Install Poppler to import PDFs.", "configure_service") from None
-    except (subprocess.SubprocessError, OSError):
-        raise LiteratureError("PDF_READ_FAILED", "Could not extract text from this PDF.") from None
+    except (subprocess.SubprocessError, OSError) as failure:
+        return extract_with_pypdf(content, isinstance(failure, FileNotFoundError))
     pages = completed.stdout.decode("utf-8", errors="replace").split("\f")
     if pages[-1] == "":
         pages.pop()
     if len(pages) > 150 or sum(map(len, pages)) > 2_000_000:
-        raise LiteratureError("PDF_TOO_LARGE", "Choose a paper with at most 150 pages of extractable text.")
+        raise pdf_too_large()
     return pages
+
+
+def pdf_too_large():
+    return LiteratureError("PDF_TOO_LARGE", "Choose a paper with at most 150 pages of extractable text.")
+
+
+def extract_with_pypdf(content, poppler_missing):
+    try:
+        parsed = subprocess.run(
+            [sys.executable, "-B", str(Path(__file__).resolve())],
+            input=content, capture_output=True, timeout=10,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (subprocess.SubprocessError, OSError):
+        raise LiteratureError("PDF_READ_FAILED", "Could not extract text from this PDF.") from None
+    if parsed.returncode == 0:
+        return json.loads(parsed.stdout)
+    if parsed.returncode == 3:
+        message = ("Install Poppler or pypdf to import PDFs." if poppler_missing else
+                   "The installed PDF text tool failed. Install pypdf or use a working Poppler version.")
+        raise LiteratureError("PDF_TOOLS_MISSING", message, "configure_service")
+    if parsed.returncode == 4:
+        raise pdf_too_large()
+    raise LiteratureError("PDF_READ_FAILED", "Could not extract text from this PDF.")
+
+
+def pypdf_main():
+    from io import BytesIO
+
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        return 3
+    reader = PdfReader(BytesIO(sys.stdin.buffer.read()))
+    if len(reader.pages) > 150:
+        return 4
+    pages = []
+    total = 0
+    for page in reader.pages:
+        text = page.extract_text()
+        total += len(text)
+        if total > 2_000_000:
+            return 4
+        pages.append(text)
+    sys.stdout.buffer.write(json.dumps(pages, ensure_ascii=False).encode("utf-8"))
+    return 0
 
 
 def make_passages(version, pages):
@@ -267,3 +313,7 @@ def entry_anchors(entry):
         return entry["anchor_ids"]
     return [aid for claim in entry["claims"] for contribution in claim["contributions"]
             for aid in (*contribution["anchor_ids"], *contribution.get("attribution_anchor_ids", []))]
+
+
+if __name__ == "__main__":
+    sys.exit(pypdf_main())

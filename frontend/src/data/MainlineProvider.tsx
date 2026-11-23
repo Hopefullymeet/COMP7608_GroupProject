@@ -20,7 +20,6 @@ import type {
   Finished,
   HistoryRun,
   Step,
-  TaskInput,
   Turn,
   Abstract,
 } from '../api/contract'
@@ -129,7 +128,6 @@ export function MainlineProvider({
   children: React.ReactNode
 }) {
   const workspace = useWorkspace()
-  const [readVersions, selectVersions] = useState<string[]>([])
   const [files, setFiles] = useState<(Picked & { pdf?: File | string })[]>([])
   const { tr } = useLanguage()
   const selection = useRef<{ source_version_id: string; passage_id: string; quote: string }>()
@@ -317,7 +315,7 @@ export function MainlineProvider({
     if (finished.status === 'completed' || finished.status === 'partial')
       void refreshSession(selected.current, false).catch(reveal)
   })
-  const confirmation = discovering.confirmation ? discovering : reading.confirmation ? reading : null
+  const confirmation = discovering.confirmation ? discovering : null
   const activeTask = view.route.view === 'topic' && view.route.tab === 'discover' ? discovering : reading
   const busy = working || discovering.busy || reading.busy || Boolean(confirmation)
 
@@ -434,6 +432,7 @@ export function MainlineProvider({
       selected.current = { topic: topicId, session: nextSession, epoch: previous.epoch + 1 }
       readerRequest.current++
       reading.detach()
+      selection.current = undefined
       setDraft('')
       setLoadingSession(Boolean(nextSession))
     }
@@ -444,7 +443,6 @@ export function MainlineProvider({
       setSavedTrace(undefined)
       setRound(0)
       setLoadingSearch(true)
-      selectVersions([])
       setSearchQuestion(title ?? view.topics.find((item) => item.id === topicId)?.title ?? '')
     }
     const switchingToDiscover = view.route.view === 'topic' && view.route.tab !== tab && tab === 'discover'
@@ -499,8 +497,9 @@ export function MainlineProvider({
       .catch(reveal)
   }
 
-  function create(text: string) {
-    const title = text.trim() || files[0]?.name
+  function create(name: string, text = '') {
+    const question = text.trim()
+    const title = name.trim() || question || files[0]?.name
     if (!title || !ready) return
     void status(async () => {
       if (creation.current?.title !== title)
@@ -525,7 +524,7 @@ export function MainlineProvider({
       )
       creation.current = undefined
       rememberSession(topicId, session_id)
-      openTopic(topicId, !demo && files.length ? 'synthesis' : 'discover', session_id, title)
+      openTopic(topicId, !demo && files.length ? 'synthesis' : 'discover', session_id, question || title)
       if (demo && files.length) {
         await workspace.prepare({ kind: 'paper_import', input: { topic_id: topicId, files: files.map((f) => f.file_id) } })
       } else if (files.length) {
@@ -672,28 +671,20 @@ export function MainlineProvider({
 
   function ask(text: string): false | undefined {
     if (busy || loadingSession || !session || reading.task) return false
-    const version = [view.readerPaperId, ...view.library].find(
-      (id) => view.library.includes(id) && papers[id]?.stored !== 'metadata',
-    )
-    if (!version) return false
+    const passage = selection.current
     void status(async () => {
       const { items } = await api.call('library.list', { topic_id: topic })
-      const selectedIds = readVersions.length ? readVersions : [version]
-      const sources = selectedIds.flatMap((id) =>
-        items.flatMap((p) =>
-          p.source_versions
-            .filter((v) => v.source_version_id === id && v.available_scope !== 'metadata')
-            .map((v) => ({
-              paper_id: p.paper_id,
-              source_version_id: id,
-              requested_scope:
-                v.available_scope === 'full_text' ? ('full_text' as const) : ('abstract' as const),
-            })),
-        ),
+      const sources = items.flatMap((paper) =>
+        paper.source_versions
+          .filter((version) => version.available_scope !== 'metadata')
+          .map((version) => ({
+            paper_id: paper.paper_id,
+            source_version_id: version.source_version_id,
+            requested_scope: version.available_scope === 'full_text' ? ('full_text' as const) : ('abstract' as const),
+          })),
       )
       const [first, ...rest] = sources
-      if (!first || sources.length !== selectedIds.length)
-        throw new Error('The selected versions have changed. Choose the reading scope again.')
+      if (!first) throw new Error(tr('No readable papers in this topic.'))
       setDraft(text)
       await reading.prepare({
         topic_id: topic,
@@ -701,11 +692,11 @@ export function MainlineProvider({
         kind: 'reading_qa',
         input: {
           question: text,
-          ...(selection.current &&
-            selectedIds.includes(selection.current.source_version_id) && { selection: selection.current }),
+          ...(passage && sources.some((source) => source.source_version_id === passage.source_version_id) &&
+            { selection: passage }),
           sources: [first, ...rest],
         },
-      })
+      }, { startImmediately: true })
     })
   }
 
@@ -858,8 +849,6 @@ export function MainlineProvider({
     mainline: {
       demo,
       pages: ['library', 'wiki', 'check', 'settings'],
-      readVersions,
-      selectVersions,
       addCandidates: (ids) =>
         void status(async () => {
           if (!search) return
@@ -1064,7 +1053,6 @@ export function MainlineProvider({
   const taskError = activeTask.error || activeTask.connectionError || activeTask.status
   const [dismissed, dismiss] = useState('')
   const notice = error || (taskError !== dismissed ? taskError : '')
-  const taskInput: TaskInput | undefined = confirmation?.confirmation?.input
   return (
     <StoreContext.Provider value={{ state, act }}>
       {children}
@@ -1080,11 +1068,7 @@ export function MainlineProvider({
       )}
       {confirmation?.confirmation && (
         <Dialog title={tr('Confirm data transfer')} onClose={confirmation.dismiss}>
-          <p className="dialog-text">
-            {taskInput?.kind === 'reading_qa'
-              ? tr('Review the destinations before asking.')
-              : tr('Review the destinations before searching.')}
-          </p>
+          <p className="dialog-text">{tr('Review the destinations before searching.')}</p>
           <ScopeDetails scope={confirmation.confirmation} />
           {confirmation.confirmation.transfers.map((transfer, index) => (
             <p className="dialog-text" key={index}>

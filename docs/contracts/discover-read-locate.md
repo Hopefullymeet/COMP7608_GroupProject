@@ -74,7 +74,7 @@ type AbstractAnchor = {
 ```
 
 - 主题、会话创建后立即可读。列表先显示最近创建的项。发现任务归属主题，每个主题只允许一个在途 Discover。问答归属会话，每个会话只允许一个在途问答。`discovery.latest` 返回最近提交结果的检索 ID 和在途任务 ID，缺哪项就省略哪项。`session.get` 按提交顺序返回已保存的问答及在途任务 ID。
-- `task.prepare` 展示要发送的数据类别、端点和用途，同时绑定输入、材料版本、会话上下文与服务配置。用户同意后，才带确认单 ID 调用 `task.start`。确认单只用于一次成功启动；绑定内容变更须重新确认。相同 `operation_id` 的已接受启动优先重放。任务内补搜和读取沿用已确认范围。
+- `task.prepare` 返回要发送的数据类别、端点和用途，同时绑定输入、材料版本、会话上下文与服务配置。发现任务在用户确认数据去向后调用 `task.start`，主题会话问答由发送操作直接触发准备和启动。确认单只用于一次成功启动；绑定内容变更须重新准备。相同 `operation_id` 的已接受启动优先重放。任务内补搜和读取沿用确认单范围。
 - `library.list` 省略主题时返回个人库，指定主题时只返回该主题的论文。每篇论文一条，版本按新到旧排列。首版整表返回，分页随 Library 规模评估。
 
 ### 1.2 检索与候选
@@ -194,6 +194,8 @@ Add 后用 `discovery.get` 读回最新状态。旧任务结果仍保留 `pendin
 ```
 
 ### 2.3 阅读问答
+
+提交主题会话问题时，客户端通过 `library.list` 读取该主题的当前文献库，把有摘要或正文的版本作为 `sources`。发送即启动本次问答，客户端在 `task.prepare` 成功后使用返回的 `confirmation_id` 调用 `task.start`。
 
 ```jsonl
 {"jsonrpc":"2.0","id":"r9","method":"task.prepare","params":{"operation_id":"op-r9","topic_id":"t1","session_id":"s1","kind":"reading_qa","input":{"question":"PubMedQA 提供给模型的上下文是什么？","sources":[{"paper_id":"p1","source_version_id":"v1","requested_scope":"abstract"}]}}}

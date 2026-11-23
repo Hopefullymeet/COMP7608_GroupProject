@@ -1,5 +1,6 @@
 import base64
 import importlib.util
+from io import BytesIO
 import json
 import os
 from pathlib import Path
@@ -12,10 +13,12 @@ import threading
 import time
 import unittest
 from unittest.mock import patch
+from urllib.error import HTTPError
 from uuid import uuid4
 
 from papertrace import Worker
-from dsh import read_json_answer
+from credentials import WindowsStore
+from dsh import Dsh, ENDPOINT, read_json_answer
 from bibliography import PublicServiceError, bibliography_records
 from literature import LiteratureError
 from test_literature import sample_pdf
@@ -37,6 +40,125 @@ class EvidenceTest(unittest.TestCase):
             {"passage": seen["p1"], "quote": "The conclusion is excluded."}
         ])
         self.assertEqual(rows[1]["references"], [])
+
+
+class CredentialTest(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "win32", "Windows npm layout is required")
+    def test_desktop_finds_installed_harness_without_environment_override(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"APPDATA": directory}), patch(
+            "dsh.which", return_value=None
+        ):
+            for name in ("PAPERTRACE_AGENT_CLI", "PAPERTRACE_DSH_CLI"):
+                os.environ.pop(name, None)
+            root = Path(directory) / "npm/node_modules/@deepseek-ai/dsh"
+            cli = root / "lib/bin.js"
+            tools = root / "node_modules/@deepseek-ai/dsh-tools/lib/index.js"
+            for path in (cli, tools):
+                path.parent.mkdir(parents=True)
+                path.touch()
+            configured = Dsh.configured(directory)
+            self.assertEqual(configured.cli, cli.resolve())
+            self.assertEqual(configured.tools_entry(), tools.resolve())
+            os.environ["PAPERTRACE_AGENT_CLI"] = str(Path(directory) / "explicit.js")
+            self.assertEqual(Dsh.configured(directory).cli, Path(os.environ["PAPERTRACE_AGENT_CLI"]).resolve())
+
+    def test_model_runtime_prefers_system_credential_and_snapshots_it(self):
+        runtime = Dsh("node", __file__, None, ".", use_system_credential=True)
+        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "test-fallback"}), patch(
+            "credentials.system_key", return_value="test-system-key"
+        ) as read:
+            model_runtime = runtime.for_model("test-model", "https://model.example.org/v1")
+            read.return_value = None
+            self.assertEqual(runtime.key, "test-fallback")
+            self.assertEqual(model_runtime.key, "test-system-key")
+            self.assertEqual(runtime.endpoint, ENDPOINT)
+            self.assertEqual(model_runtime.endpoint, "https://model.example.org/v1")
+
+    def test_connection_uses_saved_endpoint_model_and_key_without_harness(self):
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "papertrace.Dsh.configured", return_value=None
+        ), patch("papertrace.deepseek_api_key", return_value=None) as key, patch("papertrace.build_opener") as opener:
+            worker = Worker(Path(directory), lambda _: None)
+            try:
+                settings = worker.services_config()
+                provider = settings["models"][0]
+                provider.update(endpoint="https://example.invalid/v1/", model="test-model")
+                with worker.db:
+                    worker.save_services({**settings, "base_revision": settings["revision"]})
+                self.assertFalse(worker.test_service({"id": provider["id"], "operation_id": "no-key"})["ok"])
+                opener.assert_not_called()
+                key.return_value = "test-local-key"
+                send = opener.return_value.open
+                send.return_value = BytesIO(b'{"object":"chat.completion","choices":[{"message":{"content":"OK"}}]}')
+                test = {"id": provider["id"], "operation_id": "success"}
+                self.assertTrue(worker.test_service(test)["ok"])
+                self.assertTrue(worker.test_service(test)["ok"])
+                send.assert_called_once()
+                request = send.call_args.args[0]
+                self.assertEqual(request.full_url, "https://example.invalid/v1/chat/completions")
+                self.assertEqual(request.get_header("Authorization"), "Bearer test-local-key")
+                self.assertEqual(json.loads(request.data)["model"], "test-model")
+                send.side_effect = HTTPError(request.full_url, 401, "Unauthorized", {}, None)
+                result = worker.test_service({**test, "operation_id": "invalid-key"})
+                self.assertFalse(result["ok"])
+                self.assertIn("rejected the API key", result["message"])
+            finally:
+                worker.close()
+
+    def test_save_and_remove_credentials_on_supported_platforms_without_recording_key(self):
+        for platform in ("win32", "darwin"):
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory() as directory, patch.dict(
+                os.environ, {"DEEPSEEK_API_KEY": "test-fallback"}
+            ), patch("papertrace.Dsh.configured", return_value=None), patch("papertrace.store") as vault, patch(
+                "papertrace.system_key", return_value=None
+            ) as key:
+                messages = []
+                worker = Worker(Path(directory), messages.append)
+                try:
+                    with patch("papertrace.sys.platform", platform):
+                        model = worker.services_config()["models"][0]
+                        self.assertTrue(model["credential_store"])
+                        self.assertTrue(model["credential_configured"])
+                        self.assertFalse(model["credential_stored"])
+                        request = {"jsonrpc": "2.0", "id": "credential", "method": "services.credentials"}
+                        save = {**request, "params": {"id": model["id"], "action": "save", "api_key": "test-key"}}
+                        vault.return_value.read.return_value = None
+                        worker.process(save)
+                        self.assertEqual(messages[-1]["error"]["data"]["reason"], "CREDENTIAL_STORE_FAILED")
+                        vault.return_value.save.reset_mock()
+                        vault.return_value.read.return_value = "test-key"
+                        worker.process(save)
+                        self.assertEqual(messages[-1]["result"], {"configured": True, "stored": True})
+                        vault.assert_called_with(platform)
+                        vault.return_value.save.assert_called_once_with("test-key")
+                        key.return_value = "test-key"
+                        self.assertTrue(worker.services_config()["models"][0]["credential_stored"])
+                        vault.return_value.read.return_value = None
+                        worker.process({**request, "params": {"id": model["id"], "action": "delete"}})
+                        self.assertEqual(messages[-1]["result"], {"configured": True, "stored": False})
+                        vault.return_value.delete.assert_called_once()
+                        self.assertNotIn("test-key", json.dumps(messages))
+                        self.assertEqual(worker.db.execute("SELECT COUNT(*) FROM operations").fetchone()[0], 0)
+                finally:
+                    worker.close()
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows DPAPI is required")
+    def test_windows_credentials_survive_vault_access_denial_and_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "deepseek.dpapi"
+            for key in ("papertrace-test-first", "papertrace-test-replacement"):
+                vault = WindowsStore(path)
+                with patch.object(vault.api, "CredWriteW", return_value=0), patch(
+                    "credentials.c.get_last_error", return_value=5
+                ):
+                    vault.save(key)
+                self.assertNotIn(key.encode(), path.read_bytes())
+                self.assertEqual(WindowsStore(path).read(), key)
+            with patch.object(vault.api, "CredDeleteW", return_value=0), patch(
+                "credentials.c.get_last_error", return_value=5
+            ):
+                vault.delete()
+            self.assertIsNone(WindowsStore(path).read())
 
 
 class Client:
@@ -126,18 +248,24 @@ class ContractTest(unittest.TestCase):
 
     def test_service_configuration_uses_the_desktop_contract(self):
         config = self.client.result("services.get")
+        self.assertEqual(config["budget"], dict.fromkeys(("calls", "tokens", "minutes", "cost")))
         provider = config["model_id"]
         self.assertEqual(config["models"][0]["id"], provider)
+        self.assertEqual(config["models"][0]["endpoint"], ENDPOINT)
         self.assertNotIn("key", config["models"][0])
         request = {k: v for k, v in config.items() if k != "revision"}
         request.update(base_revision=config["revision"], operation_id="save-model")
         request["models"][0]["model"] = "example-research-model"
-        tampered = {**request, "models": [{**request["models"][0], "endpoint": "https://example.invalid"}]}
-        self.assertEqual(self.client.call("services.save", **tampered)["error"]["data"]["reason"],
-                         "SETTINGS_READ_ONLY")
+        for endpoint in ("https://user:secret@example.invalid", "https://example.invalid/v1?q=1",
+                         "file:///tmp/api", "https://example.invalid:70000", "https://example.invalid#"):
+            invalid_endpoint = {**request, "models": [{**request["models"][0], "endpoint": endpoint}]}
+            self.assertEqual(self.client.call("services.save", **invalid_endpoint)["error"]["data"]["reason"],
+                             "INVALID_PARAMS")
+        request["models"][0]["endpoint"] = " https://example.invalid/v1/ "
         saved = self.client.result("services.save", **request)
         self.assertNotEqual(saved["revision"], config["revision"])
         self.assertEqual(saved["models"][0]["model"], "example-research-model")
+        self.assertEqual(saved["models"][0]["endpoint"], "https://example.invalid/v1")
         self.assertEqual(self.client.result("services.save", **request), saved)
         self.assertEqual(
             self.client.call("services.save", **{**request, "operation_id": "old-revision"})["error"]["data"]["reason"],
@@ -147,6 +275,17 @@ class ContractTest(unittest.TestCase):
         self.assertEqual(self.client.result("services.save", **unchanged), saved)
         self.restart()
         self.assertEqual(self.client.result("services.get"), saved)
+        budget = {**saved["budget"], "calls": 0, "cost": 1.5}
+        budget_request = {**unchanged, "operation_id": "save-budget", "budget": budget, "ask_before_overage": False}
+        invalid_budget = {**budget_request, "budget": {**budget, "tokens": 1.5}, "operation_id": "invalid-budget"}
+        self.assertEqual(self.client.call("services.save", **invalid_budget)["error"]["data"]["reason"], "INVALID_PARAMS")
+        updated = self.client.result("services.save", **budget_request)
+        self.assertNotEqual(updated["revision"], saved["revision"])
+        self.assertEqual(updated["budget"], budget)
+        self.assertFalse(updated["ask_before_overage"])
+        self.assertEqual(updated["models"], saved["models"])
+        self.restart()
+        self.assertEqual(self.client.result("services.get"), updated)
 
     def test_archive_restores_topic_and_only_its_active_sessions_after_restart(self):
         topic, session = self.context()

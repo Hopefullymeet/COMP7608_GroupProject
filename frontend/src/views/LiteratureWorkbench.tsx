@@ -50,6 +50,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
   topicId: string; initialView?: 'outline' | 'wiki'
 }) {
   const { tr } = useLanguage()
+  const { state } = useStore()
   const scope = { topic_id: topicId }
   const workspace = useWorkspace()
   const library = useRead('library.list', scope)
@@ -65,7 +66,8 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
   const visual = useRead('visual.capabilities', {}, !workspace.demo)
   const [exported, setExported] = useState<{ name: string; text: string }[]>([])
   const refs = useRead('literature.refs', { ...scope, source_version_id: referenceVersion, direction }, !!referenceVersion)
-  const [question, setQuestion] = useState('')
+  const [draftQuestion, setQuestion] = useState<string>()
+  const question = draftQuestion ?? state.topics.find((topic) => topic.id === topicId)?.title ?? ''
   const [choices, setChoices] = useState<Record<string, string | undefined>>({})
   const [resultId, setResultId] = useState('')
   const [checked, setChecked] = useState<string[]>([])

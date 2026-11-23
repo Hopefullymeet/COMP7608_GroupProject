@@ -30,7 +30,7 @@ RIS 和 CSL JSON 由标准库读取。书目预览和提交均可离线进行。
 
 ## 配置文本模型
 
-当前文本模型提供方为 DeepSeek。先构建仓库首页链接的运行时版本，将 `PAPERTRACE_AGENT_CLI` 指向构建生成的 `apps/cli/lib/bin.js`，`PAPERTRACE_AGENT_NODE` 指向 Node.js 24.9 或更新版本。通过启动环境提供 `DEEPSEEK_API_KEY`。
+当前文本模型提供方为 DeepSeek。Windows 会自动发现 npm 全局安装的 `@deepseek-ai/dsh`，显式设置 `PAPERTRACE_AGENT_CLI` 时优先使用指定入口。先构建仓库首页链接的运行时版本，将 `PAPERTRACE_AGENT_CLI` 指向构建生成的 `apps/cli/lib/bin.js`，`PAPERTRACE_AGENT_NODE` 指向 Node.js 24.9 或更新版本。Windows 和 macOS 用户可在「模型和服务 → 管理系统凭据」保存或移除 API 密钥。密钥保存在 Windows 凭据库或 macOS 钥匙串的 `PaperTrace/DeepSeek` 项中。若 Windows 凭据管理器拒绝访问，应用会使用当前用户的 Windows DPAPI 将密钥加密保存到 `%LOCALAPPDATA%/PaperTrace/deepseek.dpapi`。没有系统凭据时，应用读取启动环境中的 `DEEPSEEK_API_KEY`。
 
 ```sh
 (
@@ -46,7 +46,7 @@ RIS 和 CSL JSON 由标准库读取。书目预览和提交均可离线进行。
 
 从仓库根目录运行。请将示例中的运行时路径换成你的构建路径。
 
-默认模型为 `deepseek-flash`。问答确认对话框显示官方端点及发送内容。每条模型任务使用独立进程和临时目录。摘要问答读取本轮确认的摘要。全文任务可以检索和补读本轮选定的论文。引用需要在本轮实际读过的段落中逐字找到，语义支撑仍由模型判断。取消只中断当前任务进程。凭证通过环境继承，不写入工作区。
+默认模型为 `deepseek-flash`，默认端点为 `https://api.deepseek.com`。在「模型与服务」中可修改 OpenAI 兼容基础地址，例如 `https://provider.example/v1`，应用会在基础地址后追加 `/chat/completions`。「测试连接」直接请求已保存的端点并显示结果。问答等 Agent 任务使用 Harness，确认对话框显示实际端点及发送内容。每条模型任务使用独立进程和临时目录。摘要问答读取本轮确认的摘要。全文任务可以检索和补读本轮选定的论文。引用需要在本轮实际读过的段落中逐字找到，语义支撑仍由模型判断。取消只中断当前任务进程。密钥通过环境传给模型进程，不写入工作区。
 
 在首页输入研究问题（例如 `Which scientific QA datasets use paper abstracts?`）。提交后点 **Find papers**，确认范围并启动，选择 PubMedQA 加入主题。进入 **Read & ask**，询问 `What context does PubMedQA use?`，再点回答中的来源。退出并用同一工作区重开，核对主题、文献和历史回答。
 
@@ -62,6 +62,8 @@ pnpm --dir frontend test
 ## 用一组论文搭提纲
 
 安装 Poppler，确保 `pdftotext` 与 `pdftoppm` 可调用。启动桌面 RPC 模式并配置文本模型后，创建主题，进入 **Synthesize**，拖入 PDF 或点 **Add PDFs**。可选择 2–12 篇论文；单个 PDF 上限 16 MB、150 页。当前从 PDF 提取已有文字，扫描版需要先做 OCR。
+
+如果 `pdftotext` 缺失或运行失败，文字提取会回退到 pypdf。可在运行 worker 的 Python 环境中执行 `python -m pip install pypdf`。PDF 页面的后端图片渲染继续使用 `pdftoppm`。
 
 提出想写的研究问题并确认发送范围。生成后点击观点下的 **Source** 在右侧打开保存的 PDF 页。**Review for Wiki** 可逐项勾选采纳，证据仍可从 **Topic Wiki** 回到原文。某篇论文换版时，在该论文旁选择 **Add version**，Wiki 会提示复核依赖旧版的项目。
 

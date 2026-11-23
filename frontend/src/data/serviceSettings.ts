@@ -1,12 +1,7 @@
+import type { Budget } from '../api/services'
+
 export type ModelProvider = 'anthropic' | 'compatible' | 'local'
 export type SearchSourceId = 'openalex' | 's2' | 'arxiv'
-
-export interface TaskBudget {
-  calls: number
-  tokens: number
-  minutes: number
-  cost: number
-}
 
 export interface Usage {
   calls: number
@@ -20,7 +15,7 @@ export interface RunConfiguration {
   destination: string
   sources: SearchSourceId[]
   paperIds: string[]
-  budget: TaskBudget
+  budget: Budget
   askBeyond: boolean
   local: boolean
 }
@@ -34,7 +29,7 @@ export interface Settings {
   model: ModelProvider
   models: Record<ModelProvider, ModelConfig>
   tested: Partial<Record<ModelProvider, true>>
-  budget: TaskBudget
+  budget: Budget
   askBeyond: boolean
   sources: Record<SearchSourceId, boolean>
 }
@@ -68,11 +63,11 @@ export function addUsage(a: Usage, b: Usage): Usage {
   return { calls: a.calls + b.calls, tokens: a.tokens + b.tokens, ms: a.ms + b.ms, cost: a.cost + b.cost }
 }
 
-export function budgetLimit(usage: Usage, budget: TaskBudget) {
+export function budgetLimit(usage: Usage, budget: Budget) {
   const exceeded = []
-  if (usage.calls > budget.calls) exceeded.push('model calls')
-  if (usage.tokens > budget.tokens) exceeded.push('tokens')
-  if (usage.ms > budget.minutes * 60_000) exceeded.push('time')
-  if (Math.round(usage.cost * 1_000_000) / 1_000_000 > budget.cost) exceeded.push('spend')
+  if (budget.calls !== null && usage.calls > budget.calls) exceeded.push('model calls')
+  if (budget.tokens !== null && usage.tokens > budget.tokens) exceeded.push('tokens')
+  if (budget.minutes !== null && usage.ms > budget.minutes * 60_000) exceeded.push('time')
+  if (budget.cost !== null && Math.round(usage.cost * 1_000_000) / 1_000_000 > budget.cost) exceeded.push('spend')
   return exceeded.join(', ')
 }

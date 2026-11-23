@@ -24,6 +24,7 @@ function RunCard({ run, open, onToggle }: { run: AgentRun; open: boolean; onTogg
   const tokens = run.steps.reduce((n, s) => n + (s.tokens ?? 0), 0)
   const ms = run.steps.reduce((n, s) => n + (s.ms ?? 0), 0)
   const config = run.configuration
+  const limit = (value: number | null) => value?.toLocaleString() ?? tr('Unlimited')
   return (
     <div className="run" id={`run-${run.id}`}>
       <button className="run-head" onClick={onToggle} aria-expanded={open}>
@@ -54,7 +55,7 @@ function RunCard({ run, open, onToggle }: { run: AgentRun; open: boolean; onTogg
             {config && <>
               <p>{config.model} · {tr(config.destination)}</p>
               {config.sources.length > 0 && <p>{tr('Search sources:')}{' '}{config.sources.map((id) => SOURCE_NAMES[id]).join(', ')}</p>}
-              <p>{tr('Budget:')}{' '}{count(tr, config.budget.calls, 'call')} · {config.budget.tokens.toLocaleString()}{' '}{tr('tokens ·')}{' '}{config.budget.minutes}{' '}{tr('min · $')}{config.budget.cost}</p>
+              <p>{tr('Budget:')}{' '}{limit(config.budget.calls)}{' '}{tr('calls ·')}{' '}{limit(config.budget.tokens)}{' '}{tr('tokens ·')}{' '}{limit(config.budget.minutes)}{' '}{tr('min · USD')}{' '}{limit(config.budget.cost)}</p>
             </>}
             {run.estimate && <p>{tr('Estimated (demo):')}{' '}{usageLabel(tr, run.estimate)}</p>}
             {run.usage ? <span>{state.mainline&&!state.mainline.demo?tr('Used'):tr('Used (demo)')} · {usageLabel(tr, run.usage)}</span>
