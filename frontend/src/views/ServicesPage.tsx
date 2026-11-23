@@ -1,6 +1,7 @@
+import { PersonalSettings, RoleSettings } from './PersonalSettings'
 import { useLanguage, type Message } from '../i18n'
 import { useEffect, useState } from 'react'
-import { Dialog, PageHead } from '../components/PageHead'
+import { Dialog } from '../components/PageHead'
 import { Icon } from '../components/Icon'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import type { Config, Model, Offer, ServiceMethods } from '../api/services'
@@ -460,23 +461,45 @@ function AccessAndBackup() {
 }
 export function ServicesPage() {
   const { tr } = useLanguage()
+  const [tab,setTab]=useState('general')
   const config = useRead('services.get', {})
   const { demo, refresh } = useWorkspace()
   useEffect(() => {
     const id = setInterval(refresh, 8000)
     return () => clearInterval(id)
   }, [refresh])
-  return (
-    <div className="page">
-      <PageHead
-        title={tr('Models & services')}
-        icon="settings"
-        sub={tr('Model destinations, tools and workspace access')}
-      />
-      <div className="page-body scroll settings">
-        {config && <SettingsForm key={config.revision} config={config} />}
-        {demo && <AccessAndBackup />}
-      </div>
+  const sections = [
+    ['general', 'settings', 'General settings'],
+    ['model', 'globe', 'Model'],
+    ['preset', 'trace', 'Customize roles'],
+  ] as const
+  return <div className="settings-layout">
+    <nav aria-label={tr('Settings')}>{sections.map(([id, icon, label]) =>
+      <button key={id} className={'side-item' + (tab === id ? ' active' : '')}
+        aria-pressed={tab === id} onClick={() => setTab(id)}><Icon name={icon} size={16}/>{tr(label)}</button>)}</nav>
+    <div className="settings-content scroll">
+      {tab === 'general' && <PersonalSettings/>}
+      {tab === 'model' && config && <SettingsForm key={config.revision} config={config}/>}
+      {tab === 'model' && demo && <AccessAndBackup/>}
+      {tab === 'preset' && <RoleSettings/>}
     </div>
-  )
+  </div>
+}
+
+export function FirstRunSettings() {
+  const { tr } = useLanguage()
+  const config = useRead('services.get', {})
+  const [stage, setStage] = useState(() => localStorage.getItem('papertrace.role-intro.v1'))
+  function finish() {
+    const next = ready ? 'done' : 'api-deferred'
+    localStorage.setItem('papertrace.role-intro.v1',next)
+    setStage(next)
+  }
+  if (stage === 'done' || !config) return null
+  const ready = config.models.some(m => m.id === config.model_id && (m.local || m.credential_configured))
+  if (!ready && stage === 'api-deferred') return null
+  return <Dialog title={tr(ready ? 'Set up your research assistant' : 'Connect your model')} onClose={finish} panelClass="first-run-settings">
+    {ready ? <RoleSettings onSaved={finish}/> : <SettingsForm key={config.revision} config={config}/>}
+    <button className="link-btn" onClick={finish}>{tr('Set up later')}</button>
+  </Dialog>
 }

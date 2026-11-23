@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useReducer, useRef, type ReactNode } from 'react'
-import { runTask, type ScriptItem } from './runtime'
+import { estimateRun, runTask, type ScriptItem } from './runtime'
 import { compareScript, discoveryScript, questionScript, QUESTIONS, SEED_QUESTION } from './scripts'
 import { DEFAULT_QUESTION, DEMO_TOPIC, EVIDENCE, PAPERS, SEED_SESSION, SESSIONS, TOPICS } from './fixtures'
 import { checkScript } from './workspaceScripts'
@@ -55,6 +55,7 @@ export interface State {
   cited: string[]
   noted: string[]
   activeEvidence: { id: string; anchor: string; scroll: boolean; region?: import('../api/reader').Selection['rect']; pdfPage?: number } | null
+  trace: { open: boolean; focus: string | null }
   readerPaperId: string
   dropped: string[]
   homeRevision: number
@@ -85,6 +86,7 @@ export const baseState: State = {
   cited: [],
   noted: NOTE_SEED,
   activeEvidence: null,
+  trace: { open: false, focus: null },
   readerPaperId: 'qasper',
   dropped: [],
   homeRevision: 0,
@@ -121,6 +123,7 @@ type Action =
   | { type: 'evidence-open'; id: string; anchor: string; scroll: boolean }
   | { type: 'evidence-close' }
   | { type: 'toggle'; list: 'cited' | 'noted'; id: string }
+  | { type: 'trace'; open: boolean; focus?: string | null }
   | { type: 'reader'; paperId: string }
   | { type: 'drop'; names: string[] }
   | { type: 'undrop'; index: number }
@@ -225,8 +228,10 @@ function applyEvent(s: State, e: TaskEvent): State {
   switch (e.type) {
     case 'run':
       return { ...s, runs: { ...s.runs, [e.run.id]: e.run }, runOrder: [e.run.id, ...s.runOrder] }
-    case 'step':
-      return s
+    case 'step': {
+      const run = s.runs[e.runId]
+      return run ? { ...s, runs: { ...s.runs, [run.id]: { ...run, steps: [...run.steps, e.step] } } } : s
+    }
     case 'angle':
       return { ...s, angles: upsert(s.angles, e.angle) }
     case 'candidate': {
@@ -306,7 +311,7 @@ function reducer(s: State, a: Action): State {
         qaRunning: Object.values(runs).some((r) => r.task === 'Question' && r.status === 'running'),
         externalGrant: s.externalGrant && runs[s.externalGrant.runId] ? s.externalGrant : null,
         route: active && !nextId && s.route.view === 'topic' && s.route.tab === 'read' ? { view: 'home' } : s.route,
-        activeEvidence: null }
+        activeEvidence: null, trace: { open: false, focus: null } }
     }
     case 'topic-delete': {
       const topics = s.topics.filter((t) => t.id !== a.id)
@@ -330,12 +335,12 @@ function reducer(s: State, a: Action): State {
     }
     case 'home-new':
       return { ...s, route: { view: 'home' }, dropped: [], homeRevision: s.homeRevision + 1,
-        activeSessionId: null, activeEvidence: null }
+        activeSessionId: null, activeEvidence: null, trace: { open: false, focus: null } }
     case 'topic-create':
       return { ...s, topics: [a.topic, ...s.topics], sessions: [...s.sessions, a.session],
         messages: [...s.messages, a.message], activeSessionId: a.session.id, dropped: [],
         route: { view: 'topic', topicId: a.topic.id, tab: 'read' },
-        activeEvidence: null }
+        activeEvidence: null, trace: { open: false, focus: null } }
     case 'navigate': {
       const next = { ...s, route: a.route, activeEvidence: null }
       if (a.route.view === 'topic' && a.route.tab === 'read') {
@@ -401,6 +406,8 @@ function reducer(s: State, a: Action): State {
       if (!list.includes(a.id) && !evidenceAvailable(s, a.id)) return s
       return { ...s, [a.list]: list.includes(a.id) ? list.filter((x) => x !== a.id) : [...list, a.id] }
     }
+    case 'trace':
+      return { ...s, trace: { open: a.open, focus: a.focus === undefined ? s.trace.focus : a.focus } }
     case 'reader':
       return { ...s, readerPaperId: a.paperId, activeEvidence: null }
     case 'drop':
@@ -498,7 +505,12 @@ function reducer(s: State, a: Action): State {
       const run = grant && s.runs[grant.runId]
       if (!grant || grant.requestId !== a.requestId || run?.status !== 'running'
         || grant.paperIds.some((id) => !s.library.includes(id))) return s
-      return { ...s, externalGrant: { ...grant, status: 'received' } }
+      return applyEvent({ ...s, externalGrant: { ...grant, status: 'received' } }, {
+        type: 'step', runId: run.id, step: {
+          id: a.requestId, kind: 'observe', title: 'Simulated read-only helper responded',
+          detail: 'Suggested reviewing the selected papers. No request was sent and no research records changed.',
+        },
+      })
     }
   }
 }
@@ -549,6 +561,7 @@ function useActions(dispatch: React.Dispatch<Action>, getState: () => State) {
   }
 
   const start = (taskId: string, items: ScriptItem[], configuration: RunConfiguration, sessionId?: string) => {
+    const estimate = estimateRun(items, configuration.local)
     const terminal = items.at(-1)?.event
     const stop = (limit: string) => {
       tasks.current[taskId]?.cancel()
@@ -556,11 +569,12 @@ function useActions(dispatch: React.Dispatch<Action>, getState: () => State) {
       dispatch({ type: 'event', event: { type: 'done', runId: taskId, status: 'partial',
         summary: `Stopped at the task budget (${limit}). Work completed so far is retained.`,
         messageId: terminal?.type === 'done' ? terminal.messageId : undefined, interrupted: true } })
+      dispatch({ type: 'trace', open: true, focus: taskId })
     }
     const playback = runTask(taskId, items, configuration, (n, usage) => {
       const event = n.params.event
       dispatch({ type: 'event', runId: taskId, usage,
-        event: event.type === 'run' ? { ...event, run: { ...event.run, configuration } } : event })
+        event: event.type === 'run' ? { ...event, run: { ...event.run, configuration, estimate } } : event })
       if (event.type === 'done') delete tasks.current[taskId]
     }, (limit) => {
       if (configuration.askBeyond) dispatch({ type: 'run-limit', runId: taskId, limit })
@@ -681,6 +695,7 @@ function useActions(dispatch: React.Dispatch<Action>, getState: () => State) {
     closeEvidence: () => dispatch({ type: 'evidence-close' }),
     toggleCite: (evId: string) => dispatch({ type: 'toggle', list: 'cited', id: evId }),
     toggleNote: (evId: string) => dispatch({ type: 'toggle', list: 'noted', id: evId }),
+    showTrace: (open: boolean, focus?: string | null) => dispatch({ type: 'trace', open, focus }),
     setReader: (paperId: string) => dispatch({ type: 'reader', paperId }),
     drop: (names: string[]) => dispatch({ type: 'drop', names }),
     undrop: (index: number) => dispatch({ type: 'undrop', index }),
@@ -745,3 +760,5 @@ export function useStore(): Store {
   if (!s) throw new Error('useStore outside StoreProvider')
   return s
 }
+
+export const anyRunning = (s: State) => Object.values(s.runs).some((r) => r.status === 'running')

@@ -11,6 +11,8 @@ export function Compare() {
   const { state, act } = useStore()
   const cmp = state.comparison
   const ready = PAIR.every((id) => papersOfTopic(state, DEMO_TOPIC).includes(id))
+  const run = state.runOrder.map((id) => state.runs[id]).find((r) => r.task === 'Comparison')
+  const lastStep = run?.steps[run.steps.length - 1]
 
   if (!ready && cmp.status === 'idle') {
     return (
@@ -34,7 +36,8 @@ export function Compare() {
         <div className="disc-actions">
           {ready && (cmp.status === 'idle' || (cmp.status === 'done' && !cmp.verdict)) &&
             <button className="primary" onClick={() => act.runComparison()}><Icon name="columns" size={15} /> {cmp.status === 'idle' ? tr('Compare papers') : tr('Run comparison again')}</button>}
-          {cmp.status === 'running' && <span className="status-line"><Spinner /> {tr('Comparing papers…')}</span>}
+          {cmp.status === 'running' && <span className="status-line"><Spinner /> {lastStep?.title ?? tr('Planning…')}</span>}
+          {run && <button className="link-btn" onClick={() => act.showTrace(true, run.id)}>{run.steps.length}{' '}{tr('steps · view trace')}</button>}
         </div>
       </section>
 

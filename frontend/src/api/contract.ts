@@ -10,13 +10,13 @@ export type Id = string
 export type NonEmpty<T> = [T, ...T[]]
 export type Scope = 'abstract' | 'full_text'
 export type Version = { source_version_id: Id; available_scope: 'metadata' | Scope; pdf_available?: boolean }
-export type Topic = { topic_id: Id; title: string }
+export type Topic = { topic_id: Id; wiki_unread?:boolean; wiki_turns?:string[]; title: string }
 export type Session = { session_id: Id; title?: string;updated_at?:string;has_turns?:boolean }
 export type LibraryItem = { paper_id: Id; title: string; alias?: string; topic_ids: Id[]; source_versions: NonEmpty<Version> }
 export type Action = 'pending' | 'hold' | 'exclude' | 'add'
 export type Decision = Exclude<Action, 'add'> | 'added'
 export type Candidate = {
-  pdf_urls?: string[]; pdf_status?: 'saved' | 'unavailable'; pdf_issue?: string
+  pdf_urls?: string[]; pdf_status?: 'saved' | 'unavailable'
   candidate_id: Id; title: string; authors: string[]; doi?: string; year?: number
   provider?: string; source_id?: string
   venue?: { name: string; source: string }; metadata_url: string; abstract?: string
@@ -38,7 +38,7 @@ export type Evidence = {
     location: { view: 'abstract'; precision: 'paragraph'; passage_id: Id; text_excerpt: string } }
 }
 export type Reading = {
-  scope_id: Id; message_id: Id; read_sources: { source_version_id: Id; read_scope: 'none' | Scope }[]
+  figures?: import('./reader').PdfObject[]; scope_id: Id; message_id: Id; read_sources: { source_version_id: Id; read_scope: 'none' | Scope }[]
   sentences: NonEmpty<{ text: string } & (
     { assessment: 'supported'; anchor_ids: NonEmpty<Id> } |
     { assessment: 'evidence_not_established'; anchor_ids: [] }
@@ -47,7 +47,7 @@ export type Reading = {
 export type Turn = { task_id: Id; question: string; answer: Reading }
 export type MainTask = { topic_id: Id } & (
   { kind: 'discovery'; input: { query: string; filters?: { year_from?: number; year_to?: number; venue?:string } } | { previous_search_id: Id } } |
-  { kind: 'reading_qa'; session_id: Id; input: { question: string; selection?: { source_version_id: Id; passage_id: Id; quote:string }; sources: NonEmpty<Source> } }
+  { kind: 'reading_qa'; session_id: Id; input: { figure_lookup_only?: boolean; figure_search_incomplete?: boolean; figure_refs?: {version: string; id: string}[]; question: string; selection?: { source_version_id: Id; passage_id: Id; quote:string }; sources: NonEmpty<Source> } }
 )
 export type WorkspaceTask = ResumeTask | ImportTask | ResearchTask | CitationTask | SynthesisTask | ReaderTask
 export type TaskInput = MainTask | WorkspaceTask
@@ -60,13 +60,17 @@ export type Finished =
   | { status: 'partial'; result: Result; issue: Issue }
   | { status: 'failed'; issue: Issue }
   | { status: 'cancelled'; result?: Result }
-export type HistoryRun={task_id:Id;run_id:Id;kind:TaskInput['kind'];label:string;status:'queued'|'running'|Finished['status'];started_at:string;topic_id?:Id;session_id?:Id;
-  steps:{kind:'plan'|'tool'|'observe'|'decide'|'stop';title:string;detail:string}[];usage?:{calls:number;tokens:number;ms:number;cost:number};checkpoint_id?:Id}
+export type ReadingActivity = {
+  query?: string; version?: string; paper?: string
+  passages?: { source_version_id: string; paper: string; passage_id: string; page?: number; ordinal?: number; excerpt: string }[]
+}
+export type HistoryRun={task_id:Id;run_id:Id;kind:TaskInput['kind'];label:string;status:'queued'|'running'|Finished['status'];started_at:string;finished_at?:string;topic_id?:Id;session_id?:Id;
+  steps:{kind:'plan'|'tool'|'observe'|'decide'|'stop';title:string;detail:string;activity?:ReadingActivity}[];usage?:{calls:number;tokens:number;ms:number;cost:number};checkpoint_id?:Id}
 export type Snapshot = { task_id: Id; run_id: Id; last_event_seq: number } & (
   { status: 'queued' | 'running' } | Finished
 )
 export type EventBody =
-  | { type: 'task.progress'; payload: { stage: string; message: string } }
+  | { type: 'task.progress'; payload: { stage: string; message: string; activity?: ReadingActivity } }
   | { type: 'task.finished'; payload: Finished }
   | { type: 'discovery.step'; payload: Step }
   | { type: 'answer.delta'; payload: { text: string } }
@@ -84,13 +88,13 @@ export type Methods = WikiMethods & ReaderMethods & SynthesisMethods & LibraryMe
   'session.rename': [Write & InSession & { title: string }, InSession & { title: string }]
   'session.list': [InTopic, { items: Session[] }]
   'session.create': [Write & InTopic, InSession]
-  'session.get': [InSession, { turns: Turn[]; active_task_id?: Id; reader?: { source_version_id: Id } & ReadingPosition }]
+  'session.get': [InSession, { title?: string; turns: Turn[]; active_task_id?: Id; reader?: { source_version_id: Id } & ReadingPosition }]
   'discovery.latest': [InTopic, { search_id?: Id; active_task_id?: Id;task_id?:Id }]
   'discovery.get': [InSearch, Discovery]
   'discovery.steps': [ForTask, { steps: Step[] }]
   'candidate.decide': [Write & InSearch & { candidate_id: Id; decision: Action }, { candidate_id: Id } & (
     { decision: Exclude<Decision, 'added'> } |
-    (Version & { decision: 'added'; paper_id: Id; link_status: 'linked' | 'already_linked'; pdf_status?: 'saved' | 'unavailable' })
+    (Version & { decision: 'added'; paper_id: Id; link_status: 'linked' | 'already_linked' })
   )]
   'library.list': [{ topic_id?: Id }, { items: LibraryItem[] }]
   'source.read_abstract': [InTopic & { source_version_id: Id }, Abstract]

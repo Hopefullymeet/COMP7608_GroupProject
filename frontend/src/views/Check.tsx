@@ -117,6 +117,7 @@ export function Check() {
   const previous = c.history.find((snapshot) => snapshot.version === version)
   const shown = previous ?? c
   const running = c.status === 'running'
+  const run = c.runId ? state.runs[c.runId] : undefined
   const rows = shown.sentences.map((sentence, index) => {
     const finding = previous ? shown.findings[sentence.id] : currentFinding(state, manuscript, sentence)
     const decision = shown.reviewed[sentence.id]
@@ -160,9 +161,9 @@ export function Check() {
 
   return (
     <div className="page">
-      <PageHead icon="shield" title={tr('Citation check')} sub={tr('Checks each claim in your draft against its cited sources.')}>
+      <PageHead icon="shield" title={tr('Citation check')} sub={tr('Checks each claim in your draft against its cited sources.')} trace>
         {running
-          ? <span className="status-line" role="status"><Spinner /> {tr('Checking citations…')}</span>
+          ? <span className="status-line" role="status"><Spinner /> {run?.steps.at(-1)?.title ?? tr('Planning…')}</span>
           : <button className="primary" onClick={() => { setVersion(0); setFilter('all'); act.runCheck(manuscriptId) }}>
               <Icon name="shield" size={15} /> {c.status === 'idle' ? tr('Check citations') : tr('Check again')}
             </button>}

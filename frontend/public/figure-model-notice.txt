@@ -1,0 +1,6 @@
+PaperTrace figure retrieval uses Chinese-CLIP by OFA-Sys.
+https://github.com/OFA-Sys/Chinese-CLIP
+https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16
+Quantized ONNX conversion: Xenova/chinese-clip-vit-base-patch16
+Revision: f26904860903e70e050b8f48255e5f48401816e9
+Inference runtime: Microsoft ONNX Runtime (MIT).

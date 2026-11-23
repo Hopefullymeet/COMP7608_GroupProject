@@ -14,9 +14,16 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.5",
+    "@tesseract.js-data/chi_sim": "1.0.0",
+    "@tesseract.js-data/eng": "1.0.0",
+    "idb-keyval": "6.3.0",
+    "marked": "18.0.11",
+    "onnxruntime-web": "1.20.1",
     "pdfjs-dist": "5.7.284",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "tesseract.js": "6.0.1",
+    "tesseract.js-core": "6.0.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.12.5",

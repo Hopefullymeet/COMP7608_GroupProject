@@ -151,6 +151,36 @@ def make_passages(version, pages):
                    " ".join(words[start:start + 160]))
 
 
+def body_passage_starts(rows):
+    """Offsets before the body, preserving original passage IDs and first-page body text."""
+    joined = " ".join(text for _, _, text in rows)
+    abstract = re.search(r"(?:\b(?:Abstract|ABSTRACT)\b|摘\s*要)\s*[:：—-]?", joined)
+    if not abstract:
+        return {}
+    end = re.search(r"(?:\b(?:[1I][.．]?\s+)?(?:Introduction|Materials and Methods|Methodology)\b|引言|绪论|研究方法)",
+                    joined[abstract.end():], re.I)
+    boundary = abstract.end() + end.end() if end else len(joined)
+    # An unrecognised heading should not erase the following page.
+    if not end:
+        length = 0
+        abstract_page = None
+        for _, page, text in rows:
+            if abstract_page is not None and page != abstract_page:
+                boundary = length
+                break
+            length += len(text) + 1
+            if length > abstract.start():
+                abstract_page = page
+    offset = 0
+    starts = {}
+    for pid, _, text in rows:
+        if offset >= boundary:
+            break
+        starts[pid] = min(len(text), boundary - offset)
+        offset += len(text) + 1
+    return starts
+
+
 def render_pdf_page(content, page):
     try:
         rendered = subprocess.run(

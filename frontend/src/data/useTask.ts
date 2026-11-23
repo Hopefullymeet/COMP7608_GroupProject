@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { errorText, RpcError } from '../api/contract'
-import type { Client, Finished, Start, TaskInput, Transfer } from '../api/contract'
+import type { Client, Finished, Start, Step, HistoryRun, TaskInput, Transfer } from '../api/contract'
 
-type Preview = { text: string; progress: string }
-const empty: Preview = { text: '', progress: '' }
+type Preview = { text: string; steps: Step[]; tools: HistoryRun['steps']; progress: string }
+const empty: Preview = { text: '', steps: [], tools: [], progress: '' }
 type Confirmation = { budget?:import('../api/services').Budget;source_versions?:string[]; input: TaskInput; confirmation_id: string; transfers: Transfer[]; startKey: string }
 export const operation = () => crypto.randomUUID()
 
@@ -73,7 +73,13 @@ export function useTask(api: Client, onFinished: (task: string, result: Finished
             tracker.run = event.run_id
             tracker.cursor = event.event_seq
             switch (event.type) {
-              case 'task.progress': setPreview((state) => ({ ...state, progress: event.payload.message })); break
+              case 'task.progress': {
+                const { stage, message, activity } = event.payload
+                setPreview(state => ({ ...state, progress: message, tools: stage.startsWith('tool.')
+                  ? [...state.tools, { kind: 'tool', title: stage.slice(5), detail: message, activity }] : state.tools }))
+                break
+              }
+              case 'discovery.step': setPreview((state) => ({ ...state, steps: [...state.steps, event.payload] })); break
               case 'answer.delta': setPreview((state) => ({ ...state, text: state.text + event.payload.text })); break
               case 'task.finished': done(event.payload); break
             }

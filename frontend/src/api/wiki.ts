@@ -7,6 +7,7 @@ export type WikiKind = 'focus' | 'paper' | 'finding' | 'preference' | 'open_ques
 export type WikiOrigin = 'qa' | 'pdf' | 'paper' | 'note' | 'finding' | 'summary' | 'chat' | 'user'
 export type WikiEntry = {
   entry_id: string
+  home_receipt?: {model:string;run_id:string;created:string;reason:string;text:string}
   kind: WikiKind
   text: string
   anchor_ids: string[]
@@ -26,6 +27,16 @@ export type Wiki = {
   topic_id: string
   revision: string
   status: 'empty' | 'generating' | 'ready' | 'failed'
+  map_nodes?: Record<string, {id:string;parent:string;title:string;anchors:string[]}>
+  map_sources?: Record<string, {title:string;quote:string;page?:number;scope?:string;section?:string}>
+  map_proposals?: Record<string,{action:string;entry_id:string;text:string}>
+  history?: {created:string; changes:{id:string;op:string;title:string}[]}[]
+  integrity_issues?: string[]
+  home_points?: string[]
+  documents?: Record<string,{id:string;title:string;entries:string[]}[]>
+  map_title?: string
+  map_questions?: string[]
+  pending_removals?: Record<string,string>
   headline: string
   summary: string[]
   entries: WikiEntry[]
@@ -40,6 +51,7 @@ export type Wiki = {
   issue?: Issue
 }
 export type WikiEdit =
+  | { action: 'map_add'|'map_remove'|'map_rename'|'map_seen'|'map_accept'|'map_dismiss'; entry_id:string; text?:string; confirmed?:boolean; subtree?:boolean }
   | { action: 'add'; text: string; kind?: WikiKind }
   | { action: 'update'; entry_id: string; text: string }
   | { action: 'remove' | 'pin' | 'unpin'; entry_id: string }

@@ -12,6 +12,7 @@ use std::{
 };
 use tauri::ipc::Channel;
 
+const AGENT_POLICY: &[u8] = include_bytes!("../../../backend/agent.md");
 const WORKER: &[u8] = include_bytes!("../../../backend/papertrace.py");
 const LITERATURE: &[u8] = include_bytes!("../../../backend/literature.py");
 const WORKBENCH: &[u8] = include_bytes!("../../../backend/workbench.py");
@@ -22,6 +23,9 @@ const READER: &[u8] = include_bytes!("../../../backend/reader.py");
 const DSH: &[u8] = include_bytes!("../../../backend/dsh.py");
 const CREDENTIALS: &[u8] = include_bytes!("../../../backend/credentials.py");
 const BIBLIOGRAPHY: &[u8] = include_bytes!("../../../backend/bibliography.py");
+const PDF_ENGINE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/pdf-engine.whl"));
+const ICORE_CATALOG: &[u8] = include_bytes!("../../../backend/icore-public.csv");
+const CCF_CATALOG: &[u8] = include_bytes!("../../../backend/ccf-public.csv");
 const VENUE_RANKS: &[u8] = include_bytes!("../../../backend/venue_ranks.py");
 type Reply = Result<Value, String>;
 
@@ -54,15 +58,19 @@ impl Worker {
         READER.hash(&mut hash);
         LITERATURE.hash(&mut hash);
         WORKBENCH.hash(&mut hash);
+        AGENT_POLICY.hash(&mut hash);
         WIKI.hash(&mut hash);
         RESEARCH_TOOLS.hash(&mut hash);
         BIBLIOGRAPHY.hash(&mut hash);
+        PDF_ENGINE.hash(&mut hash);
+        ICORE_CATALOG.hash(&mut hash);
+        CCF_CATALOG.hash(&mut hash);
         VENUE_RANKS.hash(&mut hash);
         let runtime = directory.join("runtime").join(format!("{:016x}", hash.finish()));
         fs::create_dir_all(&runtime).map_err(|error| error.to_string())?;
         let script = runtime.join("papertrace.py");
         for (path, contents) in [
-            (&script, WORKER), (&runtime.join("dsh.py"), DSH),
+            (&runtime.join("agent.md"), AGENT_POLICY), (&script, WORKER), (&runtime.join("dsh.py"), DSH),
             (&runtime.join("credentials.py"), CREDENTIALS),
             (&runtime.join("literature.py"), LITERATURE), (&runtime.join("workbench.py"), WORKBENCH),
             (&runtime.join("wiki.py"), WIKI),
@@ -70,6 +78,9 @@ impl Worker {
             (&runtime.join("citations.py"), CITATIONS),
             (&runtime.join("reader.py"), READER),
             (&runtime.join("bibliography.py"), BIBLIOGRAPHY),
+            (&runtime.join("pdf-engine.whl"), PDF_ENGINE),
+            (&runtime.join("icore-public.csv"), ICORE_CATALOG),
+            (&runtime.join("ccf-public.csv"), CCF_CATALOG),
             (&runtime.join("venue_ranks.py"), VENUE_RANKS),
         ] {
             match fs::OpenOptions::new().write(true).create_new(true).open(path) {
@@ -229,7 +240,7 @@ impl Host {
         };
         let timeout = match method {
             "candidate.decide" => 240,
-            "library.preview_pdf" | "reader.pdf" => 90,
+            "library.preview_pdf" | "reader.pdf" | "visual.objects" => 90,
             _ => 20,
         };
         match receiver.recv_timeout(Duration::from_secs(timeout)) {

@@ -1,27 +1,101 @@
-import { useLanguage } from '../i18n'
-import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { NEW_SESSION, allEvidence, currentTopic, evidenceFor, paperFor, papersOfTopic, sourceStatus, useStore } from '../data/store'
+import { usePreferences } from '../data/preferences'
+import { count, useLanguage } from '../i18n'
+import { lazy, Suspense, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { allEvidence, currentTopic, evidenceFor, hasMessages, paperFor, papersOfTopic, sourceStatus, useStore } from '../data/store'
 import { QUESTIONS } from '../data/scripts'
 import { quoteOffsets } from '../components/quoteRange'
 import { EvidencePopover } from '../components/EvidencePopover'
 import { Icon, Spinner } from '../components/Icon'
-import { scrollWithin } from '../components/util'
+import { useAnswerScroll } from '../components/useAnswerScroll'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
-import { Dialog } from '../components/PageHead'
+import { createPortal } from 'react-dom'
+import { Dialog, HeaderActions } from '../components/PageHead'
+import { FigurePreview } from '../components/FigurePreview'
 import { FigureSearch } from '../components/FigureSearch'
 import { PublicationDetails } from '../components/PublicationDetails'
 import { AnswerText } from '../components/AnswerText'
 import { errorText } from '../api/contract'
 import type { ReaderAnswer, Rect, Selection } from '../api/reader'
-import type { ChatMessage, Paper, Passage } from '../data/types'
+import type { AgentRun, AgentStep, ChatMessage, Paper, Passage } from '../data/types'
 
 const PdfReader = lazy(() => import('./PdfReader'))
 
 type Location = { page: number; rect?: Rect }
 
-function AgentMessage({ m }: { m: ChatMessage }) {
+function ClaimSources({ ids, sentence, numbers }: { ids: string[]; sentence: number; numbers: Map<string, number> }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
+  const [index, setIndex] = useState(0)
+  const active = ids.indexOf(state.activeEvidence?.id ?? '')
+  const current = active >= 0 ? active : Math.min(index, ids.length - 1)
+  function open(at: number) {
+    setIndex(at)
+    act.openEvidence(ids[at], '', true)
+  }
+  return <span className="claim-sources">
+    <button className="cite" aria-label={tr('Show source {0} for sentence {1}', numbers.get(ids[current])!, sentence)}
+      onClick={() => open(current)}>{numbers.get(ids[current])}</button>
+    {ids.length > 1 && <>
+      <button className="cite" disabled={!current} title={tr('Previous supporting passage')} aria-label={tr('Previous supporting passage')}
+        onClick={() => open(current - 1)}>‹</button>
+      <small aria-live="polite">{current + 1}/{ids.length}</small>
+      <button className="cite" disabled={current === ids.length - 1} title={tr('Next supporting passage')} aria-label={tr('Next supporting passage')}
+        onClick={() => open(current + 1)}>›</button>
+    </>}
+  </span>
+}
+
+function WorkStep({ step }: { step: AgentStep }) {
+  const { tr } = useLanguage()
+  const activity = step.activity
+  const fragments = activity?.passages ?? []
+  const papers = [...new Set(fragments.map(p => p.paper))]
+  const result = step.detail?.match(/^(\d+) result\(s\)\.(?: ([\s\S]+))?$/)
+  const query = activity?.query || result?.[2]
+  const target = query || papers.join('、') || activity?.paper
+  const outcome = result ? tr('{0} results', result[1]) : step.detail && tr(step.detail)
+  const icon = step.title.includes('search') ? 'search' : step.title === 'paper_read' ? 'book' : 'tool'
+  const label = <><Icon name={icon} size={14} /> {tr(step.title)}{target && <> · {target}</>}</>
+  if (!fragments.length && !step.call && !activity?.paper)
+    return <li>{label}{outcome && <small> · {outcome}</small>}</li>
+  return <li><details><summary>{label}</summary>
+    {query && activity?.paper && <p>{activity.paper}</p>}
+    {outcome && <small>{outcome}</small>}
+    {step.call && <code>{step.call}</code>}
+    {fragments.map(fragment => <blockquote key={fragment.passage_id}>
+      <strong>{papers.length > 1 && fragment.paper + ' · '}
+        {fragment.page ? tr('PDF page {0}', fragment.page) : tr('Abstract')}
+        {fragment.ordinal != null && ' · ' + tr('Passage {0}', fragment.ordinal + 1)}
+      </strong>
+      <p>{fragment.excerpt}</p>
+    </blockquote>)}
+  </details></li>
+}
+
+function WorkSteps({ run, done }: { run: AgentRun; done: boolean }) {
+  const { tr } = useLanguage()
+  const prefs = usePreferences()
+  const seconds = run.durationSeconds
+  const duration = seconds == null ? '' : seconds < 60 ? tr('{0}s elapsed', seconds)
+    : tr('{0}m {1}s elapsed', Math.floor(seconds / 60), seconds % 60)
+  const status = { running: 'Working…', done: 'Done', partial: 'Partially completed', failed: 'Failed', cancelled: 'Cancelled' }[run.status]
+  const actions = [...new Set(run.steps.map(step => tr(step.title)))].join(' · ')
+  return <details key={String(done) + prefs.collapse} open={!done || prefs.collapse === 'never'} className="chat-work-steps">
+    <summary>{tr(status)}{duration && ' · ' + duration}</summary>
+    <details className="work-step-group" open={prefs.steps === 'detailed' || !done}>
+      <summary>{actions}</summary>
+      <ul>{run.steps.map(step => <WorkStep key={step.id} step={step} />)}</ul>
+    </details>
+  </details>
+}
+
+function AgentMessage({ m, onSource }: { m: ChatMessage; onSource?: (source: Pick<ReaderAnswer, 'source_version_id' | 'page' | 'rect'>) => void }) {
+  const { tr } = useLanguage()
+  const { state, act } = useStore()
+  const runId = m.runId ?? m.wikiTask
+  const run = runId ? state.runs[runId] : undefined
+  const lastStep = run?.steps[run.steps.length - 1]
+  const tools = run?.steps.filter((s) => s.kind === 'tool').length ?? 0
   const papers = papersOfTopic(state, currentTopic(state))
   const citationNumbers = new Map<string, number>()
   for (const segment of m.segments) {
@@ -33,14 +107,16 @@ function AgentMessage({ m }: { m: ChatMessage }) {
   const AnswerPoint = state.mainline ? 'p' : 'span'
 
   return (
-    <div className="msg agent">
-      <div className="msg-who">
-        <span className="avatar">P</span> PaperTrace
-        {!m.done && <span className="working"><Spinner /> {tr('Reading…')}</span>}
-      </div>
+    <div className="msg agent" data-answer-id={m.id}>
+      {!m.done && <div className="msg-who"><span className="working"><Spinner /> {tr(lastStep?.title ?? 'Planning…')}</span></div>}
+      {m.wikiTask && state.topics.find(t=>t.id===currentTopic(state))?.wikiTurns?.includes(m.wikiTask) && <small className="wiki-update"><Icon name="wiki" size={13}/>{tr('Wiki updated')}</small>}
+      {run && run.steps.length > 0 && <WorkSteps run={run} done={m.done} />}
+      {m.figures?.map(f => <FigurePreview key={f.object_id} topic={currentTopic(state)} item={f}
+        title={paperFor(state, f.source_version_id).short} open={onSource && (() => onSource(f))} />)}
       {m.segments.length > 0 && (
         <div className="answer">
           {m.segments.map((s, i) => {
+            if (s.tone === 'scope' && !s.readSources?.length && m.figures) return null
             if (s.tone === 'scope') return <div key={i} className="scope-note">
               <Icon name="eye" size={13} />
               {s.readSources?.length ? <div>
@@ -54,9 +130,7 @@ function AgentMessage({ m }: { m: ChatMessage }) {
               </div> : s.readSources ? tr('No sources read.') : s.text}
             </div>
             if (s.evidenceIds?.length) return <AnswerPoint key={i} className="claim">
-              {s.text}{[...new Set(s.evidenceIds)].map((id) => <button key={id} className="cite"
-                aria-label={tr('Show source {0} for sentence {1}', citationNumbers.get(id)!, i + 1)}
-                onClick={() => act.openEvidence(id, '', true)}>{citationNumbers.get(id)}</button>)}
+              {s.text}<ClaimSources ids={[...new Set(s.evidenceIds)]} sentence={i + 1} numbers={citationNumbers} />
             </AnswerPoint>
             if (s.evidenceIds?.length === 0) return <AnswerPoint key={i} className="claim">
               {s.text}<span className="cite" title="No Evidence Found">？</span>
@@ -78,6 +152,13 @@ function AgentMessage({ m }: { m: ChatMessage }) {
         </div>
       )}
       {m.done && state.mainline?.saveAnswer && <button className="link-btn" onClick={()=>state.mainline?.saveAnswer?.(m)}>{tr('Save answer as note')}</button>}
+      {m.done && run && (
+        <div className="msg-foot">
+          <span className="run-chip done">{tr('Done')}</span>
+          {run.steps.length > 0 && <span>{count(tr, run.steps.length, 'step')} · {count(tr, tools, 'tool call')}</span>}
+          <button className="link-btn" onClick={() => act.showTrace(true, run.id)}>{tr('View trace')}</button>
+        </div>
+      )}
     </div>
   )
 }
@@ -102,21 +183,93 @@ type AskRegion = (annotation: Annotation, question: string) => Promise<boolean>
 
 function Chat({ controls, selections = [], onSource, annotations, askRegion, blocked }: {
   annotations: Annotations; askRegion?: AskRegion; blocked?: string
-  controls: ReactNode; selections?: ReaderAnswer[]; onSource?: (answer: ReaderAnswer) => void
+  controls: ReactNode; selections?: ReaderAnswer[]; onSource?: (answer: Pick<ReaderAnswer, 'source_version_id' | 'page' | 'rect'>) => void
 }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
+  const actions = useContext(HeaderActions)
+  const prefs = usePreferences()
+  const [queued,setQueued] = useState<{session:string;question:string}>()
   const [text, setText] = useState('')
-  const endRef = useRef<HTMLDivElement>(null)
+  const [findingFigures, setFindingFigures] = useState(false)
   const session = state.sessions.find((s) => s.id === state.activeSessionId)
   const messages = state.messages.filter((m) => m.sessionId === session?.id)
   const asked = new Set(messages.filter((m) => m.role === 'user').map((m) => m.segments[0]?.text))
   const papers = papersOfTopic(state, currentTopic(state))
   const readable = papers.filter((id) => paperFor(state, id).stored !== 'metadata')
   const canAsk = !state.mainline || readable.length > 0
+  const hasComposer = state.mainline ? readable.length > 0 : papers.length > 0
+  const composerDock = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const field = annotations.input.current
+    if (!field) return
+    function fit() {
+      if (!field || !field.clientWidth) return
+      field.style.height = 'auto'
+      field.style.height = field.scrollHeight + 'px'
+    }
+    fit()
+    let width = field.clientWidth
+    const observer = new ResizeObserver(() => {
+      if (field.clientWidth !== width) {
+        width = field.clientWidth
+        fit()
+      }
+    })
+    observer.observe(field)
+    return () => observer.disconnect()
+  }, [text, hasComposer, annotations.input])
+  useLayoutEffect(() => {
+    const dock = composerDock.current
+    const chat = dock?.parentElement
+    if (!dock || !chat) return
+    const measure = () => chat.style.setProperty('--dock-height', dock.offsetHeight + 'px')
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(dock)
+    return () => {
+      observer.disconnect()
+      chat.style.removeProperty('--dock-height')
+    }
+  }, [hasComposer])
 
-  useEffect(() => { scrollWithin(endRef.current, '.chat-scroll', 'end') }, [messages.length, state.messages, selections.length])
+  const last = messages[messages.length - 1]
+  const agent = last?.role === 'agent' ? last : undefined
+  const turn = agent?.wikiTask ?? agent?.runId ?? agent?.id
+  const scroll = useAnswerScroll(session?.id, agent && !agent.done ? turn : last?.role === 'user' && last.id.startsWith('user:') ? last.id.slice(5) : undefined,
+    agent?.done ? turn : undefined, agent?.id, agent?.done ? '' : agent?.segments.map(s => s.text).join('') ?? '')
 
+  const turns = [
+    ...messages.filter(m => m.role === 'user').map(m => ({ id: m.id, label: m.segments[0]?.text ?? '' })),
+    ...selections.map(a => ({ id: 'selection:' + a.id, label: a.question })),
+  ]
+  const [visibleTurn, setVisibleTurn] = useState('')
+  const opened = useRef<string>()
+  function jumpToTurn(id: string) {
+    const panel = scroll.panel.current
+    const target = panel?.querySelector<HTMLElement>('[data-turn-id="' + CSS.escape(id) + '"]')
+    if (!target || !panel || !scroll.space.current) return
+    const inset = parseFloat(getComputedStyle(panel).paddingTop) || 0
+    const top = target.getBoundingClientRect().top - panel.getBoundingClientRect().top + panel.scrollTop - inset
+    const spacer = scroll.space.current
+    spacer.style.height = Math.ceil(Math.max(0, top + panel.clientHeight - panel.scrollHeight + spacer.offsetHeight)) + 'px'
+    panel.scrollTop = top
+    setVisibleTurn(id)
+  }
+  const latestTurn = turns.at(-1)?.id
+  useLayoutEffect(() => {
+    if (!latestTurn || !session || opened.current === session.id) return
+    opened.current = session.id
+    if (!state.qaRunning) jumpToTurn(latestTurn)
+  }, [session?.id, latestTurn, state.qaRunning])
+  function trackTurn() {
+    scroll.onScroll()
+    const panel = scroll.panel.current
+    if (!panel) return
+    const edge = panel.getBoundingClientRect().top + parseFloat(getComputedStyle(panel).paddingTop) + 2
+    const nodes = Array.from(panel.querySelectorAll<HTMLElement>('[data-turn-id]'))
+    setVisibleTurn((nodes.reverse().find(node => node.getBoundingClientRect().top <= edge) ?? nodes.at(-1))?.dataset.turnId ?? '')
+  }
   const send = async (t: string, fromComposer = false) => {
     if (!t.trim() || state.qaRunning || !canAsk) return
     const attached = fromComposer ? annotations.items : []
@@ -129,10 +282,32 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
       if (!await askRegion(region, question)) return
     } else {
       const first = attached.find(a => a.passage)
-      if (!await act.ask(question, first && { source_version_id: first.version, passage_id: first.passage!, quote: first.quote })) return
+      const { requestsFigure } = await import('../visual/retrieve')
+      setFindingFigures(requestsFigure(question))
+      try {
+        if (!await act.ask(question, first && { source_version_id: first.version, passage_id: first.passage!, quote: first.quote })) return
+      } finally { setFindingFigures(false) }
     }
     annotations.remove(attached)
     if (fromComposer) setText((current) => current === t ? '' : current)
+  }
+
+  const queuedRef = useRef(queued)
+  queuedRef.current = queued
+  useEffect(() => {
+    if (!queued || queuedRef.current !== queued) return
+    if (queued.session !== session?.id) { setQueued(undefined); return }
+    if (state.qaRunning || blocked || !canAsk) return
+    queuedRef.current = undefined
+    setQueued(undefined)
+    void act.ask(queued.question).then(ok => { if (!ok) setText(current => current || queued.question) })
+  }, [queued, session?.id, state.qaRunning, blocked, canAsk, act])
+  const canQueue = prefs.busy === 'queue' && !annotations.items.length && !queued && !!session
+  function submit() {
+    if (state.qaRunning && canQueue && session && text.trim()) {
+      setQueued({session:session.id, question:text.trim()}); setText(''); return
+    }
+    void send(text,true)
   }
 
   const suggestions = (state.mainline
@@ -141,12 +316,16 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
 
   return (
     <section className="chat" aria-label={tr('Conversation')}>
-      <div className="session-title">
-        <Icon name="message" size={14} /> <span className="grow">{tr(session?.title ?? NEW_SESSION)}</span>
-        {messages.length > 0 && <button className="link-btn" onClick={() => act.newSession(currentTopic(state))}><Icon name="plus" size={13} />{' '}{tr('New session')}</button>}
+      {actions && createPortal(<>
+        {messages.length > 0 && <button className="icon-btn sm" title={tr('New session')} aria-label={tr('New session')} onClick={() => act.newSession(currentTopic(state))}><Icon name="plus" size={15} /></button>}
         {controls}
-      </div>
-      <div className="chat-scroll">
+      </>, actions)}
+      <div className="chat-viewport">
+      {turns.length > 0 && <nav className="turn-rail" aria-label={tr('Conversation turns')}>
+        {turns.map(t => <button key={t.id} title={t.label} aria-label={t.label}
+          aria-current={visibleTurn === t.id ? 'location' : undefined} onClick={() => jumpToTurn(t.id)} />)}
+      </nav>}
+      <div className="chat-scroll" ref={scroll.panel} onScroll={trackTurn}>
         {messages.length === 0 && selections.length === 0 && (
           <div className="chat-empty">
             <h2>{tr('Start a fresh reading question')}</h2>
@@ -155,23 +334,25 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
         )}
         {messages.map((m) =>
           m.role === 'user'
-            ? <div key={m.id} className="msg user"><p>{m.segments[0]?.text}</p></div>
-            : <AgentMessage key={m.id} m={m} />,
+            ? <div key={m.id} data-turn-id={m.id} className="msg user"><p>{m.segments[0]?.text}</p></div>
+            : prefs.collapse === 'finished' && prefs.replies === 'latest' && m.done && messages.slice(messages.indexOf(m)+1).some(next=>next.role==='agent' && next.done)
+              ? <details key={m.id}><summary>{tr('Earlier answer')}</summary><AgentMessage m={m} onSource={onSource}/></details>
+              : <AgentMessage key={m.id} m={m} onSource={onSource} />,
         )}
         {selections.map((answer) => <div key={answer.id}>
-          <div className="msg user"><p>{answer.question}</p></div>
+          <div data-turn-id={'selection:' + answer.id} className="msg user"><p>{answer.question}</p></div>
           <div className="msg agent">
-            <div className="msg-who"><span className="avatar">P</span> PaperTrace</div>
             <AnswerText text={answer.answer} />
             <button className="link-btn" onClick={() => onSource?.(answer)}>
               {paperFor(state, answer.source_version_id)?.short} · {tr('PDF page {0}', answer.page)}
             </button>
           </div>
         </div>)}
-        <div ref={endRef} />
+        <div ref={scroll.space} aria-hidden="true" style={{ flexShrink: 0 }} />
       </div>
 
-      {(state.mainline ? readable.length > 0 : papers.length > 0) && <div className="chat-bottom">
+      </div>
+      {hasComposer && <div className="chat-bottom" ref={composerDock}>
         {suggestions.length > 0 && (
           <div className="suggest-row">
             {suggestions.map((q) => {
@@ -197,13 +378,15 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
               </div>)}
             </div>
           </div>}
+          {queued && <p role="status">{tr('Queued question')} · {queued.question} <button onClick={()=>setQueued(undefined)}>{tr('Cancel')}</button></p>}
+          {findingFigures && <div role="status" className="working"><Spinner /> {tr('Searching paper figures…')}</div>}
           {blocked && <p className="fine">{blocked}</p>}
-          <textarea ref={annotations.input} value={text} rows={2} placeholder={messages.length ? tr('Ask a follow-up…') : tr('Ask about these papers…')} aria-label={tr('Ask a follow-up')}
+          <textarea ref={annotations.input} value={text} rows={1} placeholder={messages.length ? tr('Ask a follow-up…') : tr('Ask about these papers…')} aria-label={tr('Ask a follow-up')}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(text, true) } }} />
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (prefs.send === 'enter' || e.metaKey || e.ctrlKey)) { e.preventDefault(); submit() } }} />
           <div className="composer-bar">
             <span className="grow" />
-            <button className="send" disabled={state.qaRunning || !canAsk || !!blocked || !text.trim()} onClick={() => void send(text, true)} aria-label={tr('Send')}><Icon name="arrowUp" size={16} /></button>
+            <button className="send" disabled={(state.qaRunning && !canQueue) || !canAsk || !!blocked || !text.trim()} onClick={submit} aria-label={tr('Send')}><Icon name="arrowUp" size={16} /></button>
           </div>
         </div>
       </div>}
@@ -434,7 +617,7 @@ function Reader({ pdf }: { pdf?: PdfActions }) {
       <div className="pt-reading-content">
       {pdf && withPdf ? <><Suspense fallback={<p className="pt-pdf-loading" role="status">{tr('Opening PDF…')}</p>}>
         <PdfReader key={paper.id} topic={currentTopic(state)} version={paper.id} page={currentLocation?.page}
-          session={state.activeSessionId ?? undefined} resume={!location && !state.activeEvidence}
+          session={state.activeSessionId ?? undefined} resume={!location}
           target={currentLocation?.rect} citation={citation}
           onAsk={(selection) => pdf.ask(paper.id, selection)} onFind={pdf.find} onPaperInfo={setMode}
           onWiki={() => act.navigate({ view: 'wiki', topicId: currentTopic(state) })} />
@@ -506,29 +689,32 @@ function Reader({ pdf }: { pdf?: PdfActions }) {
   )
 }
 
-function ReadingSplit({ live = false, selections, onSource, reader, annotations, askRegion, blocked }: {
+function ReadingSplit({ selections, onSource, reader, annotations, askRegion, blocked }: {
   annotations: Annotations; askRegion?: AskRegion; blocked?: string
-  live?: boolean
   selections?: ReaderAnswer[]
-  onSource?: (answer: ReaderAnswer) => void
+  onSource?: (answer: Pick<ReaderAnswer, 'source_version_id' | 'page' | 'rect'>) => void
   reader: ReactNode
 }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
   const layout = useRef<HTMLDivElement>(null)
-  const toggleChat = useRef<HTMLButtonElement>(null)
-  const restoreChat = useRef<HTMLButtonElement>(null)
   const drag = useRef<{ id: number; offset: number }>()
   const chatId = useId()
   const paperId = useId()
-  const [collapsed, setCollapsed] = useState<'chat' | 'paper'>()
+  const [collapsed, setCollapsed] = useState<'chat' | 'paper' | undefined>(() => {
+    const session = state.sessions.find(s => s.id === state.activeSessionId)
+    return session && (session.hasTurns || hasMessages(state, session.id)) || state.activeEvidence ? undefined : 'paper'
+  })
+  const [readerOpened, setReaderOpened] = useState(collapsed !== 'paper')
+  useEffect(() => {
+    if (collapsed !== 'paper') setReaderOpened(true)
+  }, [collapsed])
   const [dragging, setDragging] = useState(false)
   const [width, setWidth] = useState(0)
   const [preferredShare, setPreferredShare] = useState<number>()
   const minShare = width ? Math.min(240 / width, .4) : .4
   const maxShare = .6
-  const defaultShare = width ? (live ? .28 : 430 / width) : .4
-  const share = Math.max(minShare, Math.min(maxShare, preferredShare ?? defaultShare))
+  const share = Math.max(minShare, Math.min(maxShare, preferredShare ?? .5))
 
   useEffect(() => {
     if (!layout.current) return
@@ -563,12 +749,9 @@ function ReadingSplit({ live = false, selections, onSource, reader, annotations,
         if (collapsed === 'paper') setCollapsed(undefined)
         onSource(answer)
       })} controls={<>
-        {collapsed !== 'paper' && <button ref={toggleChat} className="icon-btn sm" type="button"
-          title={chatLabel} aria-label={chatLabel} aria-controls={chatId} aria-expanded
-          onClick={() => {
-            setCollapsed('chat')
-            requestAnimationFrame(() => restoreChat.current?.focus({ preventScroll: true }))
-          }}>
+        {collapsed !== 'paper' && <button className="icon-btn sm" type="button"
+          title={chatLabel} aria-label={chatLabel} aria-controls={chatId} aria-expanded={collapsed !== 'chat'}
+          onClick={() => setCollapsed(current => current === 'chat' ? undefined : 'chat')}>
           <Icon name="sidebar" size={16} />
         </button>}
         <button className="icon-btn sm" type="button" title={paperLabel} aria-label={paperLabel}
@@ -578,15 +761,6 @@ function ReadingSplit({ live = false, selections, onSource, reader, annotations,
         </button>
       </>} />
     </div>
-    {collapsed === 'chat' && <div className="read-collapsed-chat">
-      <button ref={restoreChat} className="icon-btn" type="button" title={chatLabel} aria-label={chatLabel}
-        aria-controls={chatId} aria-expanded={false} onClick={() => {
-          setCollapsed(undefined)
-          requestAnimationFrame(() => toggleChat.current?.focus({ preventScroll: true }))
-        }}>
-        <Icon name="sidebar" size={16} />
-      </button>
-    </div>}
     {!collapsed && <div className="read-divider" role="separator" tabIndex={0} aria-orientation="vertical"
       aria-label={tr('Resize paper pane')} title={tr('Drag to resize the paper pane')}
       aria-controls={paperId} aria-valuemin={Math.round((1 - maxShare) * 100)}
@@ -618,7 +792,7 @@ function ReadingSplit({ live = false, selections, onSource, reader, annotations,
         event.preventDefault()
         setPreferredShare(Math.max(minShare, Math.min(maxShare, next)))
       }} />}
-    <div className="read-paper-pane" id={paperId} hidden={collapsed === 'paper'}>{reader}</div>
+    <div className="read-paper-pane" id={paperId} hidden={collapsed === 'paper'}>{(readerOpened || collapsed !== 'paper') && reader}</div>
   </div>
 }
 
@@ -647,7 +821,7 @@ function LiveReading({ topic, session, annotations }: { topic: string; session: 
   }
 
   return <>
-    <ReadingSplit live annotations={annotations}
+    <ReadingSplit annotations={annotations}
       blocked={annotations.items.filter(a => a.selection?.medium === 'image').length > 1 ? tr('Send one image region at a time.') :
         annotations.items.some(a => a.selection?.medium === 'image') && !vision?.vision ? tr('Configure a local vision model to ask about images.') : undefined}
       askRegion={async (a, question) => {

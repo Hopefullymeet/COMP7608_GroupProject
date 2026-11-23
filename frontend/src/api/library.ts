@@ -53,7 +53,8 @@ export type PaperMetadata = {
   title: string; authors: string[]; year?: number | null; venue?: string; doi?: string; arxiv_id?: string
   issns?: string[]; venue_type?: 'journal' | 'conference' | 'preprint' | ''; publication_track?: 'regular' | 'other' | ''
 }
-export type MetadataRecord = PaperMetadata & { source_id?: string; provider?: string; metadata_url?: string }
+export type MetadataRecord = PaperMetadata & Partial<Record<
+  'item_type' | 'translated_title' | 'publisher' | 'place' | 'date' | 'volume' | 'issue' | 'pages' | 'article_number' | 'part_number' | 'part_title' | 'series' | 'series_title' | 'series_text' | 'journal_abbreviation' | 'citation_key' | 'url' | 'accessed' | 'pmid' | 'pmcid' | 'archive' | 'archive_location' | 'library_catalog' | 'call_number' | 'rights' | 'extra' | 'date_added' | 'date_modified', string>> & { source_id?: string; provider?: string; metadata_url?: string }
 export type VenueRankings = {
   venue_type: 'journal' | 'conference' | 'preprint' | 'unknown'; venue_source?: string
   items: {
@@ -65,12 +66,18 @@ export type VenueRankings = {
   }[]
 }
 type PaperDetails = {
-  paper_id: string; revision: string; manual_fields: (keyof PaperMetadata)[]; metadata: MetadataRecord; rankings: VenueRankings
+  paper_id: string; revision: string; manual_fields: (keyof PaperMetadata)[]; metadata: MetadataRecord; choices?: MetadataRecord[]; rankings: VenueRankings
 }
 export type LibraryMethods = {
   'file.pick': [{ purpose: 'papers' | 'draft' | 'backup' }, { files: Picked[] }]
   'library.set_alias': [Write & { topic_id: string; paper_id: string; alias: string }, { paper_id: string; alias: string }]
   'library.catalog': [Record<string, never>, Catalog]
+  'library.preview_bibliography': [Write & { topic_id: string; format: string; content: string }, {
+    preview_id: string; items: { item_id: string; status: string; metadata?: MetadataRecord; reason?: string }[]
+  }]
+  'library.commit_bibliography': [Write & { topic_id: string; preview_id: string; item_ids: string[] }, {
+    items: { status: string; paper_id?: string; source_version_id?: string; reason?: string }[]
+  }]
   'library.preview_identifier': [
     { topic_id: string; identifier: string },
     { preview_id: string; topic_id: string; metadata: MetadataRecord; existing_paper_id?: string },
@@ -79,7 +86,10 @@ export type LibraryMethods = {
     Write & { topic_id: string; preview_id: string; paper_id?: string },
     { paper_id: string; source_version_id: string; available_scope: 'metadata' | 'abstract' | 'full_text'; already_linked: boolean },
   ]
-  'library.metadata': [PaperKey & { edition_year?: number }, PaperDetails]
+  'library.recognize_publication': [{ paper_id: string }, { status: 'matched' | 'choose' | 'missing' | 'changed' }]
+  'library.choose_publication': [Write & { paper_id: string; doi: string }, { status: string }]
+  'library.import_catalog': [Write & { scheme: string; edition: string; year: number; source_url: string; content: string }, {count: number}]
+  'library.metadata': [{ paper_id: string; topic_id?: string } & { edition_year?: number }, PaperDetails]
   'library.update_metadata': [Write & PaperKey & { base_revision: string; changes: Partial<PaperMetadata> }, PaperDetails]
   'library.resolve_import': [
     Write & { review_id: string; decision: 'link' | 'separate' },

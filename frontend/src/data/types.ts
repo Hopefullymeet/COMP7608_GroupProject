@@ -1,4 +1,4 @@
-import type { Reading } from '../api/contract'
+import type { Reading, ReadingActivity } from '../api/contract'
 import type { RunConfiguration, Usage } from './serviceSettings'
 
 // Domain objects, named after the Technical Book (Topic, Session, Paper, Candidate,
@@ -39,6 +39,8 @@ export interface EvidenceAnchor {
 }
 
 export interface Topic {
+  wikiUnread?: boolean
+  wikiTurns?: string[]
   id: string
   title: string
   goal: string
@@ -72,7 +74,7 @@ export interface SearchAngle {
 export type Decision = 'pending' | 'added' | 'held' | 'excluded'
 
 export interface Candidate {
-  accessUrl?: string
+  pdf?: 'available' | 'saved' | 'unavailable' | 'missing'
   change?:'new'|'updated'
   id: string
   paperId: string
@@ -88,6 +90,7 @@ export interface Candidate {
 export type StepKind = 'plan' | 'tool' | 'observe' | 'decide' | 'stop'
 
 export interface AgentStep {
+  activity?: ReadingActivity
   id: string
   kind: StepKind
   title: string
@@ -100,13 +103,16 @@ export interface AgentStep {
 export type RunStatus = 'running' | 'done' | 'partial' | 'failed' | 'cancelled'
 
 export interface AgentRun {
+  durationSeconds?: number
   id: string
   manuscriptId?: string
   task: 'Discovery' | 'Question' | 'Comparison' | 'Citation check' | 'Citation suggestions' | 'Import' | 'Resume' | 'Literature synthesis' | 'Ask about selection' | 'Index figure descriptions'
   label: string
   status: RunStatus
+  steps: AgentStep[]
   summary?: string
   configuration?: RunConfiguration
+  estimate?: Usage
   usage?: Usage
   limit?: string
 }
@@ -120,6 +126,8 @@ export interface AnswerSegment {
 }
 
 export interface ChatMessage {
+  figures?: import('../api/reader').PdfObject[]
+  wikiTask?: string
   id: string
   sessionId: string
   role: 'user' | 'agent'

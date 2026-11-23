@@ -169,13 +169,14 @@ class TestCitationWorkflow(unittest.TestCase):
         self.assertTrue(call(worker, "synthesis.wiki", topic_id=self.topic)["items"][0]["needs_review"])
         self.assertEqual(call(worker, "evidence.open", topic_id=self.topic, anchor_id=refs[0])["quote"], evidence["quote"])
 
-    def start(self, draft):
+    def start(self, draft, **options):
         v = draft["versions"][0]
         args = {"topic_id": self.topic, "kind": "citation_audit", "input": {
             "draft_id": draft["draft_id"], "version_id": v["version_id"],
             "sentence_ids": [s["id"] for s in v["sentences"]],
             "source_versions": [self.paper["source_version_id"], self.wrong["source_version_id"]],
         }}
+        args["input"].update(options)
         prepared = call(self.worker, "task.prepare", **args)
         started = call(self.worker, "task.start", **args, confirmation_id=prepared["confirmation_id"])
         deadline = time.monotonic() + 5
@@ -185,6 +186,96 @@ class TestCitationWorkflow(unittest.TestCase):
                 return prepared, task
             time.sleep(.015)
         self.fail("Audit did not finish.")
+
+    def test_whole_manuscript_secondary_source_and_missing_original(self):
+        statement = "The earlier study used human-checked evidence [1, 2]."
+        review = self.import_pdf("Survey", "A survey of evidence retrieval methods", "Mary Lane",
+                                 statement, "References", self.draft_text[-3],
+                                 "[2] Sam Smith. 2024. A study outside the available corpus. doi:10.1234/missing")
+        draft = call(self.worker, "draft.import", topic_id=self.topic, name="Author.pdf", content=make_pdf(
+            "Assessing retrieval methods", "Student Author", "The evaluation used human-checked evidence [1].",
+            "References", "[1] Mary Lane. 2022. A survey of evidence retrieval methods."))
+        worker, topic = self.worker, self.topic
+        versions = [review["source_version_id"], self.paper["source_version_id"]]
+        excerpts = dict(zip(versions, [statement, "The evaluation uses human-checked citation evidence."]))
+        class Model:
+            key = "fixture"
+            def audit(inner, checks, sources, cancelled, language=None):
+                vid = sources[0]["source_version_id"]
+                p = call(worker, "source.read", topic_id=topic, source_version_id=vid)["passages"][0]
+                return {"checks": [{"id": "0", "status": "partial", "limit": "仅限此语料" if language == "zh-CN" else "Corpus only",
+                                    "evidence": [{"id": p["passage_id"], "quote": excerpts[vid]}]}]}, {
+                    p["passage_id"]: {"source_version_id": vid}}, [], {}, None
+
+        worker.dsh = Model()
+        worker.topic_wiki.model = lambda: {"model": "fixture"}
+        def reply(model, system, data, parse):
+            if "records" in data:
+                return parse({"text": "The survey cites a prior study.", "anchor_ids": [
+                    data["records"][0]["evidence"][0]["id"], "invented"]})
+            return parse({"summary": "One original source is missing."})
+        worker.topic_wiki.request = reply
+        _, task = self.start(draft, whole_document=True, source_versions=versions)
+        def report():
+            return call(worker, "draft.list", topic_id=topic)["items"][0]["versions"][0]["reports"][0]
+        finding = report()["findings"][0]
+        chain = finding["chain"]
+        self.assertEqual(len(chain), 3, (chain, report()))
+        self.assertEqual(task["status"], "partial")
+        self.assertEqual(chain[0]["version"], versions[0])
+        self.assertEqual({node["version"] for node in chain[1:]}, {versions[1], None})
+        chain = [chain[0], next(n for n in chain if n["version"] == versions[1]), next(n for n in chain if n["version"] is None)]
+        self.assertEqual(chain[2]["link"], "https://doi.org/10.1234/missing")
+        self.assertEqual(chain[1]["parent"], 0)
+        self.assertTrue(chain[1]["anchor_ids"])
+        _, task = self.start(draft, whole_document=True, source_versions=versions,
+                             question="Which source was missing?", report_id=report()["report_id"])
+        self.assertEqual(task["status"], "completed", task)
+        self.assertEqual(len(report()["discussion"][0]["anchor_ids"]), 1)
+        added = self.import_pdf("Missing", "A study outside the available corpus", "Sam Smith",
+                                "Persistent ID doi:10.1234/missing", "Replication used the same evidence labels.")
+        self.assertTrue(report()["findings"][0]["needs_review"])
+        new_version = added["source_version_id"]
+        excerpts[new_version] = "Replication used the same evidence labels."
+        _, task = self.start(draft, whole_document=True, source_versions=[*versions, new_version])
+        self.assertEqual(task["status"], "completed", task)
+        self.assertIn(new_version, [n["version"] for n in report()["findings"][0]["chain"]])
+        self.assertFalse(report()["findings"][0]["needs_review"])
+        self.assertFalse(call(worker, "draft.list", topic_id=self.other)["items"])
+
+        old_id = report()["report_id"]
+        self.start(draft, whole_document=True, source_versions=[*versions, new_version], language="zh-CN")
+        self.assertEqual(report()["language"], "zh-CN")
+        self.assertEqual(report()["findings"][0]["claims"][0]["limit"], "仅限此语料")
+        history = call(worker, "audit.history")["items"]
+        self.assertEqual(history[0]["report_id"], report()["report_id"])
+        self.assertIn(old_id, [row["report_id"] for row in history])
+        self.assertEqual(history[0]["version_id"], draft["versions"][0]["version_id"])
+
+    def test_manuscript_reader_marks(self):
+        draft = self.import_draft()
+        scope = {"draft_id": draft["draft_id"], "source_version_id": draft["versions"][0]["version_id"], "topic_id": self.topic}
+        self.assertTrue(call(self.worker, "reader.pdf", **scope)["content"])
+        saved = call(self.worker, "reader.mark_save", **scope, kind="highlight", page=1,
+                     rects=[[.2, .2, .4, .3]], quote="test")
+        self.assertEqual(call(self.worker, "reader.marks", **scope)["items"], [saved])
+        call(self.worker, "reader.mark_delete", **scope, mark_id=saved["mark_id"], base_revision=saved["revision"])
+        self.assertEqual(call(self.worker, "reader.marks", **scope)["items"], [])
+
+    def test_page_marks_keep_parallel_and_repeated_citations_at_their_own_locations(self):
+        content = (Path(__file__).resolve().parents[1] / "docs/examples/CV-Citation-Check.pdf").read_bytes()
+        draft = call(self.worker, "draft.import", topic_id=self.topic, name="CV.pdf",
+                     content=base64.b64encode(content).decode())
+        version = draft["versions"][0]
+        page = call(self.worker, "draft.page", topic_id=self.topic, draft_id=draft["draft_id"],
+                    version_id=version["version_id"], page=1)
+        marks = page["marks"]
+        self.assertEqual([m["label"] for m in marks], ["[1]", "[2]", "[3]", "[4]", "[1, 2]", "[2]", "[1]"])
+        self.assertEqual(marks[4]["keys"], ["1", "2"])
+        self.assertEqual(len(marks[4]["boxes"]), 1)
+        self.assertEqual(len({m["sentence_id"] for m in marks}), 7)
+        self.assertTrue(all(0 <= x < r <= 1 and 0 <= y < b <= 1
+                            for m in marks for x, y, r, b in m["boxes"]))
 
     def test_offline_bidirectional_navigation_and_migration(self):
         citing = self.import_pdf("Citing", *self.draft_text)

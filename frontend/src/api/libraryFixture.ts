@@ -245,9 +245,14 @@ export function libraryFixture(
       throw new Error('The fixture includes passages only. Connect a desktop host to open the original PDF.')
     },
     'evidence.open': ({ anchor_id }) => lookup(anchor_id),
+    'library.preview_bibliography': () => { throw new Error('Bibliography import requires the desktop workspace.') },
+    'library.commit_bibliography': () => { throw new Error('Bibliography import requires the desktop workspace.') },
     'library.preview_identifier': () => { throw new Error('Identifier lookup requires the desktop workspace.') },
     'library.commit_identifier': () => { throw new Error('Identifier import requires the desktop workspace.') },
     'library.metadata': () => { throw new Error('Paper details require the desktop workspace.') },
+    'library.recognize_publication': () => ({ status: 'missing' as const }),
+    'library.choose_publication': () => ({ status: 'missing' }),
+    'library.import_catalog': () => { throw new Error('Catalog import requires the desktop workspace.') },
     'library.update_metadata': () => { throw new Error('Paper details require the desktop workspace.') },
     'reader.position': ({ topic_id, source_version_id, session_id }) => ({
       passage_id: state.shelf.positions[(session_id ?? topic_id) + '/' + source_version_id],

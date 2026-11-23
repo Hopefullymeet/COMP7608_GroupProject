@@ -1,13 +1,13 @@
 import { useLanguage, type Message } from '../i18n'
 import { useState } from 'react'
 import { useStore } from '../data/store'
-import { Dialog, PageHead } from '../components/PageHead'
+import { Dialog, HeaderActions, PageHead } from '../components/PageHead'
 import { Icon } from '../components/Icon'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
-import type { Decision, ExportFormat, Finding, Report } from '../api/citation'
+import type { AuditHistoryItem, Decision, ExportFormat, Finding, Report } from '../api/citation'
 import { EvidenceLink } from './Notes'
+import { TopicChooser } from '../components/TopicChooser'
 import { PdfAudit } from './PdfAudit'
-import { TopicSelect } from './ResearchPages'
 
 function Manuscripts({ topic }: { topic: string }) {
   const { tr } = useLanguage()
@@ -426,24 +426,31 @@ function Manuscripts({ topic }: { topic: string }) {
   )
 }
 export function CitationPage() {
-  const { demo } = useWorkspace()
-  const { tr } = useLanguage()
-  const { state } = useStore(),
-    [topic, setTopic] = useState(
-      (state.route.view === 'check' && state.route.topicId) || state.topics[0]?.id || '',
-    )
-  return (
-    <div className="page">
-      <PageHead
-        title={tr('Citation check')}
-        icon="shield"
-        sub={tr('Check a manuscript against its selected sources')}
-      >
-        <TopicSelect value={topic} onChange={setTopic} />
-      </PageHead>
-      <div className="page-body scroll">
-        {topic ? (demo ? <Manuscripts topic={topic} key={topic} /> : <PdfAudit topic={topic} key={topic} />) : <p>{tr('Select a topic to add a manuscript.')}</p>}
-      </div>
+  const { demo, busy } = useWorkspace()
+  const { tr, language } = useLanguage()
+  const { state } = useStore()
+  const route = state.route.view === 'check' ? state.route : undefined
+  const [topic, setTopic] = useState(route?.draftId ? route.topicId ?? '' : '')
+  const [opened, openReport] = useState<AuditHistoryItem>()
+  const history = useRead('audit.history', {}, !demo && !topic)?.items
+  const selected = state.topics.find(t => t.id === topic)
+  const [actions, setActions] = useState<HTMLDivElement | null>(null)
+  return <HeaderActions.Provider value={actions}><div className="page">
+    <PageHead onBack={selected ? () => { openReport(undefined); setTopic('') } : undefined} backDisabled={busy} sub={tr('Check a manuscript against its selected sources')} trace title={tr('Citation check')} icon="shield">
+      <div className="header-actions audit-header-actions" ref={setActions} />
+    </PageHead>
+    <div className="page-body scroll">
+      {!selected ? <section className="audit-chooser">
+        <TopicChooser onSelect={setTopic} />
+        {history && history.length > 0 && <>
+          <h3>{tr('Audit history')}</h3>
+          <div className="audit-options">{history.map(item => <button key={item.report_id} className="audit-option"
+            onClick={() => { openReport(item); setTopic(item.topic_id) }}>
+            <span><strong>{item.name}</strong><small className="audit-history-meta">{item.topic_title} · {tr('Check {0}', item.number)}
+              {item.started_at && ' · ' + new Date(item.started_at).toLocaleString(language)}</small></span>
+            <span aria-hidden="true">›</span></button>)}</div>
+        </>}
+      </section> : demo ? <Manuscripts topic={topic} key={topic}/> : <PdfAudit topic={topic} initialReport={opened} key={topic}/>}
     </div>
-  )
+  </div></HeaderActions.Provider>
 }

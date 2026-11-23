@@ -2,6 +2,8 @@
 
 #[cfg(windows)]
 mod browser;
+#[cfg(target_os = "macos")]
+mod macos_menu;
 mod worker;
 
 use serde_json::Value;
@@ -72,6 +74,15 @@ async fn papertrace_subscribe(
         .map_err(|error| error.to_string())?
 }
 
+#[tauri::command]
+fn set_menu_language(app: tauri::AppHandle, language: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    macos_menu::install(&app, language == "zh-CN").map_err(|error| error.to_string())?;
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, language);
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
@@ -82,7 +93,7 @@ fn main() {
             app.manage(Host::new(directory));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![papertrace_rpc, papertrace_subscribe, open_paper_url])
+        .invoke_handler(tauri::generate_handler![papertrace_rpc, papertrace_subscribe, open_paper_url, set_menu_language])
         .build(tauri::generate_context!())
         .expect("could not start the PaperTrace desktop window")
         .run(|app, event| {

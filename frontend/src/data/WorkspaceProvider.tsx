@@ -15,7 +15,7 @@ type Workspace = {
   refresh: () => void
   report: (error: unknown) => void
   write: <M extends WriteMethod>(method: M, params: Payload<Methods[M][0]>) => Promise<Methods[M][1]>
-  prepare: (task: WorkspaceTask, onPrepared?: () => void) => Promise<void>
+  prepare: (task: WorkspaceTask, onPrepared?: () => void, startImmediately?: boolean) => Promise<void>
 }
 const Context = createContext<Workspace | null>(null)
 export function useWorkspace() {
@@ -88,6 +88,16 @@ export function WorkspaceProvider({
     const sent = retryWrite(() => api.call(method, payload))
       .then((result) => {
         refresh()
+        if (!demo && method === 'library.import_pdf') {
+          const { paper_id, source_version_id } = result as Methods['library.import_pdf'][1]
+          const { topic_id } = payload as Methods['library.import_pdf'][0]
+          void import('../visual/retrieve').then(m => m.indexFigures(api, topic_id, source_version_id)).catch(() => {
+            // Retry incomplete visual indexing on the next figure query.
+          })
+          void api.call('library.recognize_publication', { paper_id }).then(refresh).catch(() => {
+            // PDF import is complete. The inspector supports retrying an offline lookup.
+          })
+        }
         return result
       })
       .finally(() => {
@@ -99,7 +109,7 @@ export function WorkspaceProvider({
   }
   const busy = Boolean(task.task || task.busy || task.confirmation || pending)
   return (
-    <Context.Provider value={{ api, tick, report, refresh, write, prepare: async (input, onPrepared) => { await task.prepare(input, { onPrepared }) }, demo, busy }}>
+    <Context.Provider value={{ api, tick, report, refresh, write, prepare: async (input, onPrepared, startImmediately) => { await task.prepare(input, { onPrepared, startImmediately }) }, demo, busy }}>
       {children}
       {task.confirmation && (
         <Dialog title={tr('Confirm task scope')} onClose={task.dismiss}>

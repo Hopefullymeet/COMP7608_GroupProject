@@ -4,10 +4,9 @@ import type { Topic } from '../data/types'
 import { Icon } from './Icon'
 import { scrollWithin } from './util'
 
-export function TopicPicker({ topics, onSelect, disabled = false }: {
+export function TopicPicker({ topics, onSelect }: {
   topics: Pick<Topic, 'id' | 'title'>[]
   onSelect: (id: string) => void
-  disabled?: boolean
 }) {
   const { tr } = useLanguage()
   const [open, setOpen] = useState(false)
@@ -31,7 +30,7 @@ export function TopicPicker({ topics, onSelect, disabled = false }: {
 
   return (
     <div className="topic-search">
-      <button ref={trigger} className="link-btn lib-start topic-search-trigger" aria-expanded={open} disabled={disabled}
+      <button ref={trigger} className="link-btn lib-start topic-search-trigger" aria-expanded={open}
         aria-controls={open ? pickerId : undefined}
         onClick={() => { if (open) close(); else setOpen(true) }}>
         <Icon name="plus" size={14} />{' '}{tr('Add to topic')}
@@ -49,7 +48,7 @@ export function TopicPicker({ topics, onSelect, disabled = false }: {
             <ul className="topic-picker-results" aria-label={tr('Matching topics')}>
               {matches.map((topic) => (
                 <li key={topic.id}>
-                  <button aria-label={tr('Add to {0}', topic.title)} disabled={disabled} onClick={() => { onSelect(topic.id); close() }}>
+                  <button aria-label={tr('Add to {0}', topic.title)} onClick={() => { onSelect(topic.id); close() }}>
                     <span>{topic.title}</span><Icon name="plus" size={14} />
                   </button>
                 </li>

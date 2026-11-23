@@ -16,7 +16,7 @@
 | `session.list` | `{ topic_id: Id }` | `{ items: { session_id: Id; title?: NonEmptyText }[] }` |
 | `topic.rename` | `{ operation_id: Id, topic_id: Id, title: NonEmptyText }` | `{ topic_id: Id, title: NonEmptyText }` |
 | `session.rename` | `{ operation_id: Id, topic_id: Id, session_id: Id, title: NonEmptyText }` | `{ topic_id: Id, session_id: Id, title: NonEmptyText }` |
-| `session.get` | `{ topic_id: Id; session_id: Id }` | `{ turns: ReadingTurn[]; active_task_id?: Id }` |
+| `session.get` | `{ topic_id: Id; session_id: Id }` | `{ turns: ReadingTurn[]; active_task_id?: Id; title?: string }` |
 | `task.prepare` | `{ operation_id: Id } & TaskInput` | `{ confirmation_id: Id; transfers: Transfer[] }` |
 | `task.start` | `{ operation_id: Id; confirmation_id: Id } & TaskInput` | `StartResult`，阅读问答另返回 `scope_id: Id` |
 | `discovery.latest` | `{ topic_id: Id }` | `{ search_id?: Id; active_task_id?: Id }` |

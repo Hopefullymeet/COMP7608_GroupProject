@@ -20,6 +20,18 @@ class ScriptedProvider(BaseHTTPRequestHandler):
 
     def do_POST(self):
         request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if "dsh_session_log" in request:
+            self.send_error(400, "Session log field is forbidden")
+            return
+        if self.path.endswith("/chat/completions") and request["messages"] == [{"role": "user", "content": "Reply with OK."}]:
+            self.server.probes.append((request["model"], request["max_tokens"], request.get("tools", [])))
+            body = b'{"choices":[{"message":{"content":"OK"}}]}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         messages = request["messages"]
         self.chat = self.path.endswith("/chat/completions")
         self.stream = request.get("stream", False)
@@ -192,6 +204,7 @@ class DshResearchTest(unittest.TestCase):
                     prepared = fixture.call("task.prepare", **task)
                     config = fixture.call("services.get")
                     revision = config.pop("revision")
+                    config["models"][0]["endpoint"] = dsh.endpoint
                     config["models"][0]["model"] = "deepseek-pro"
                     config["models"][0]["endpoint"] = dsh.endpoint
                     fixture.call("services.save", base_revision=revision, **config)
@@ -222,7 +235,17 @@ class DshResearchTest(unittest.TestCase):
                     self.assertTrue(all(tools == expected_tools for tools in provider.observed_tools), provider.observed_tools)
                     version = fixture.versions[0]
                     sources = [{"source_version_id": version, "title": "Alpha", "available_scope": "full_text"}]
-                    full, seen, issue = dsh.answer_full_text("What benchmark does Alpha define?", sources, threading.Event())
+                    steps = []
+                    full, seen, issue = dsh.answer_full_text(
+                        "What benchmark does Alpha define?", sources, threading.Event(),
+                        progress=lambda name, detail, activity: steps.append((name, activity)),
+                    )
+                    self.assertEqual([name for name, _ in steps], ["paper_search", "paper_read"])
+                    self.assertEqual(steps[0][1]["query"], "benchmark")
+                    fragment = steps[1][1]["passages"][0]
+                    self.assertEqual(fragment["source_version_id"], version)
+                    self.assertTrue(fragment["excerpt"])
+                    self.assertGreaterEqual(fragment["page"], 1)
                     self.assertIsNone(issue)
                     self.assertIn(full[0]["references"][0]["passage"]["passage_id"], seen)
                     full, seen, issue = dsh.answer_full_text("Return an invalid response.", sources, threading.Event())

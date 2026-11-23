@@ -1,3 +1,5 @@
+import { bindPdfPinch } from './pdfPinch'
+import { usePreferences } from '../data/preferences'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { pdfQuoteRange } from '../components/quoteRange'
@@ -14,6 +16,10 @@ import { useLanguage } from '../i18n'
 import type { Mark, Point, Rect, Selection } from '../api/reader'
 
 GlobalWorkerOptions.workerSrc = workerUrl
+
+const minZoom = .5
+const maxZoom = 2
+const clampZoom = (scale: number) => Math.max(minZoom, Math.min(maxZoom, scale))
 
 const colors: Record<Mark['color'], string> = { amber: '#f7bc39', rose: '#d45d86', blue: '#5987cd', green: '#4ba583' }
 
@@ -37,10 +43,10 @@ type CitationTarget = { quote: string; passage?: string; anchor: string; onMissi
 
 type Tool = 'select' | 'region' | 'ink'
 
-function PdfSheet({ document, scope, page, width, aspectRatio, marks, target, citation, selection, tool,
+function PdfSheet({ document, scope, page, width, zoom, rasterZoom, aspectRatio, marks, target, citation, selection, tool,
   onMeasure, setSelection, onRegion, onInk }: {
-  document: PDFDocumentProxy; scope: { topic_id: string; source_version_id: string }
-  page: number; width: number; aspectRatio: number; marks: Mark[]; target?: Rect; citation?: CitationTarget
+  document: PDFDocumentProxy; scope: { topic_id: string; source_version_id: string; draft_id?: string }
+  page: number; width: number; zoom: number; rasterZoom: number; aspectRatio: number; marks: Mark[]; target?: Rect; citation?: CitationTarget
   selection?: Selection; tool: Tool; onMeasure: (page: number, ratio: number) => void
   setSelection: (selection?: Selection) => void; onRegion: () => void; onInk: (page: number, points: Point[]) => void
 }) {
@@ -49,7 +55,9 @@ function PdfSheet({ document, scope, page, width, aspectRatio, marks, target, ci
   const [size, setSize] = useState<{ width: number; height: number }>()
   const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
-  const fallback = useRead('source.page', { ...scope, page }, Boolean(error))
+  const sourceFallback = useRead('source.page', { ...scope, page }, Boolean(error && !scope.draft_id))
+  const draftFallback = useRead('draft.page', { topic_id: scope.topic_id, draft_id: scope.draft_id ?? '', version_id: scope.source_version_id, page }, Boolean(error && scope.draft_id))
+  const fallback = draftFallback ?? sourceFallback
   const [drawing, setDrawing] = useState<Point[]>([])
   const surface = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
@@ -58,35 +66,56 @@ function PdfSheet({ document, scope, page, width, aspectRatio, marks, target, ci
   const drawingPointer = useRef<number>()
 
   useEffect(() => {
-    if (!document || !width || !canvas.current || !layer.current) return
-    const raster = canvas.current
     const overlay = layer.current
+    if (!width || !overlay) return
     let active = true
-    let cancelRaster: (() => void) | undefined
-    let cancelText: (() => void) | undefined
+    let text: TextLayer | undefined
     setReady(false)
     setError('')
-    void document.getPage(page).then(async (pdfPage) => {
+    void document.getPage(page).then(async pdfPage => {
       if (!active) return
       const viewport = pdfPage.getViewport({ scale: width / pdfPage.getViewport({ scale: 1 }).width })
       setSize({ width: viewport.width, height: viewport.height })
       onMeasure(page, viewport.width / viewport.height)
-      const ratio = Math.min(window.devicePixelRatio || 1, 2)
-      raster.width = Math.ceil(viewport.width * ratio)
-      raster.height = Math.ceil(viewport.height * ratio)
-      overlay.replaceChildren()
-      overlay.style.setProperty('--total-scale-factor', String(viewport.scale))
       const textContentSource = await pdfPage.getTextContent()
       if (!active) return
-      const rendering = pdfPage.render({ canvas: raster, viewport, transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0] })
-      cancelRaster = () => rendering.cancel()
-      const text = new TextLayer({ textContentSource, container: overlay, viewport })
-      cancelText = () => text.cancel()
-      await Promise.all([rendering.promise, text.render()])
+      overlay.replaceChildren()
+      overlay.style.setProperty('--total-scale-factor', String(viewport.scale))
+      text = new TextLayer({ textContentSource, container: overlay, viewport })
+      await text.render()
       if (active) setReady(true)
     }).catch(() => { if (active) setError('This PDF page could not be rendered.') })
-    return () => { active = false; cancelRaster?.(); cancelText?.() }
+    return () => { active = false; text?.cancel() }
   }, [document, page, width, onMeasure])
+
+  useEffect(() => {
+    const visible = canvas.current
+    if (!width || !visible) return
+    let active = true
+    let cancel: (() => void) | undefined
+    void document.getPage(page).then(async pdfPage => {
+      if (!active) return
+      const viewport = pdfPage.getViewport({ scale: width * rasterZoom / pdfPage.getViewport({ scale: 1 }).width })
+      const density = Math.min(window.devicePixelRatio || 1, 2)
+      const buffer = visible.ownerDocument.createElement('canvas')
+      buffer.width = Math.ceil(viewport.width * density)
+      buffer.height = Math.ceil(viewport.height * density)
+      const render = pdfPage.render({ canvas: buffer, viewport, transform: [density, 0, 0, density, 0, 0] })
+      cancel = () => render.cancel()
+      try {
+        await render.promise
+        if (!active) return
+        const context = visible.getContext('2d')
+        if (!context) throw new Error('Canvas unavailable')
+        visible.width = buffer.width
+        visible.height = buffer.height
+        context.drawImage(buffer, 0, 0)
+      } finally {
+        buffer.width = buffer.height = 0
+      }
+    }).catch(() => { if (active) setError('This PDF page could not be rendered.') })
+    return () => { active = false; cancel?.() }
+  }, [document, page, width, rasterZoom])
   const [citationBox, setCitationBox] = useState<Rect>()
   useLayoutEffect(() => {
     setCitationBox(undefined)
@@ -159,7 +188,7 @@ function PdfSheet({ document, scope, page, width, aspectRatio, marks, target, ci
   }
   return (
       <div className={'pt-reader-page ' + (tool !== 'select' ? 'pt-reader-drawing' : '')} ref={surface}
-        style={size ?? { width: width || undefined, aspectRatio }} onPointerDown={start} onPointerMove={move}
+        style={{ ...(size ?? { width, aspectRatio }), transformOrigin: 'top left', transform: `scale(${zoom})` }} onPointerDown={start} onPointerMove={move}
         onPointerUp={(e) => { end(e); if (tool === 'select') window.requestAnimationFrame(captureText) }}
         onPointerCancel={() => { drawingPointer.current = undefined; strokes.current = []; setDrawing([]) }}
         onKeyUp={captureText}>
@@ -210,22 +239,49 @@ async function readOutline(pdf: PDFDocumentProxy) {
   return result
 }
 
-export default function PdfReader({ topic, version, page, target, citation, onAsk, onFind, onWiki, onPaperInfo, session, resume }: {
+export default function PdfReader({ topic, version, page, target, citation, onAsk, onFind, onWiki, onPaperInfo, session, resume, draft, pageOverlay, onPage }: {
   topic: string; version: string; page?: number; target?: Rect; citation?: CitationTarget
+  draft?: string; pageOverlay?: (page: number) => React.ReactNode; onPage?: (page: number) => void
   session?: string; resume?: boolean
   onAsk?: (selection: Selection) => void; onFind?: () => void; onWiki?: () => void; onPaperInfo?: (mode: 'scan' | 'analysis') => void
 }) {
   const { tr } = useLanguage()
   const workspace = useWorkspace()
-  const scope = { topic_id: topic, source_version_id: version }
+  const scope = { topic_id: topic, source_version_id: version, ...(draft && { draft_id: draft }) }
   const { api } = workspace
   const marks = useRead('reader.marks', scope)?.items ?? []
   const [document, setDocument] = useState<PDFDocumentProxy>()
   const [width, setWidth] = useState(0)
   const [zoom, setZoom] = useState(1)
+  const [rasterZoom, setRasterZoom] = useState(1)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setRasterZoom(zoom), 200)
+    return () => window.clearTimeout(timer)
+  }, [zoom])
   const [aspectRatio, setAspectRatio] = useState(0)
   const [ratios, setRatios] = useState<Record<number, number>>({})
+  const [ocrText, setOcrText] = useState<string>()
+  const [ocrBusy, setOcrBusy] = useState(false)
+  const ocrRun = useRef(0)
+  useEffect(() => {
+    setOcrText(undefined)
+    setOcrBusy(false)
+    return () => { ocrRun.current++ }
+  }, [version])
+  async function recognize(page: number, rect?: Rect) {
+    if (!document || ocrBusy) return
+    const run = ++ocrRun.current
+    setOcrBusy(true)
+    setOcrText(tr('Reading image text…'))
+    try {
+      const {readImageText} = await import('./paperOcr')
+      const result = await readImageText(document, page, rect)
+      if (run === ocrRun.current) setOcrText(result || tr('No text recognized'))
+    } catch { if (run === ocrRun.current) setOcrText(tr('Image recognition failed')) }
+    finally { if (run === ocrRun.current) setOcrBusy(false) }
+  }
   const [current, setCurrent] = useState(page ?? 1)
+  useEffect(() => { onPage?.(current) }, [current, onPage])
   const [renderRange, setRenderRange] = useState([1, 3])
   const [jumpValue, setJumpValue] = useState<string>()
   const [annotationsOpen, setAnnotationsOpen] = useState(false)
@@ -286,7 +342,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
   useEffect(() => {
     let live = true
     let loading: ReturnType<typeof getDocument> | undefined
-    void api.call('reader.pdf', { topic_id: topic, source_version_id: version }).then(async ({ content }) => {
+    void api.call('reader.pdf', { topic_id: topic, source_version_id: version, ...(draft && { draft_id: draft }) }).then(async ({ content }) => {
       if (!live) return
       loading = getDocument({ data: Uint8Array.from(atob(content), (v) => v.charCodeAt(0)) })
       const pdf = await loading.promise
@@ -299,7 +355,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
       }
     }).catch(() => { if (live) setError('The PDF could not be opened.') })
     return () => { live = false; void loading?.destroy().catch(() => undefined) }
-  }, [api, topic, version])
+  }, [api, topic, version, draft])
   useEffect(() => {
     if (error && citation) citation.onMissing()
   }, [error, citation])
@@ -361,7 +417,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
         restoringPosition.current = true
         const restore = { page, target }
         initialJump.current = restore
-        setZoom(Math.min(1.5, Math.max(1, savedPosition.zoom ?? 1)))
+        setZoom(clampZoom(savedPosition.zoom ?? 1))
         requestAnimationFrame(() => {
           if (initialJump.current === restore) jump(Math.min(document.numPages, savedPosition.page!), undefined, savedPosition.offset)
           requestAnimationFrame(() => { restoringPosition.current = false })
@@ -404,6 +460,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
     bookmarkTimer.current = setTimeout(saveBookmark, 450)
   }
 
+  const {findKey} = usePreferences()
   function openFind() {
     showFind(true)
     requestAnimationFrame(() => findInput.current?.focus())
@@ -413,7 +470,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
     if (!document) return
     function findShortcut(e: KeyboardEvent) {
       if (frame.current?.closest('[hidden]')) return
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' &&
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === findKey &&
           (frame.current?.parentElement?.contains(window.document.activeElement) || window.document.activeElement === window.document.body)) {
         e.preventDefault()
         openFind()
@@ -421,7 +478,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
     }
     window.addEventListener('keydown', findShortcut)
     return () => window.removeEventListener('keydown', findShortcut)
-  }, [document])
+  }, [document,findKey])
 
   useEffect(() => {
     if (!document || !findOpen || !term.trim()) { setMatches(undefined); return }
@@ -546,48 +603,71 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
     } catch (problem) { workspace.report(problem) }
   }
 
-  function adjustZoom(next: number) {
+  const requestedZoom = useRef(zoom)
+  const anchor = useRef<{ sheet: HTMLElement; x: number; y: number; clientX: number; clientY: number }>()
+  function adjustZoom(value: number, clientX?: number, clientY?: number) {
     const scroller = frame.current
-    const sheet = pageElement(current)
-    if (!scroller || !sheet || next === zoom) return
-    const within = (scroller.scrollTop - sheet.offsetTop) / Math.max(1, sheet.offsetHeight)
+    const next = clampZoom(value)
+    if (!scroller || !Number.isFinite(next) || requestedZoom.current === next) return
+    const bounds = scroller.getBoundingClientRect()
+    const x = clientX ?? bounds.left + scroller.clientWidth / 2
+    const y = clientY ?? bounds.top + scroller.clientHeight / 2
+    const first = pageElement(1)
+    if (!first) return
+    const position = y - first.getBoundingClientRect().top + first.offsetTop
+    const sheet = pageElement(pageAt(position))
+    if (!sheet) return
+    const box = sheet.getBoundingClientRect()
+    if (!box.width || !box.height) return
+    anchor.current = { sheet, x: (x - box.left) / box.width, y: (y - box.top) / box.height, clientX: x, clientY: y }
+    requestedZoom.current = next
     setZoom(next)
-    requestAnimationFrame(() => {
-      const activePage = pageElement(current)
-      if (activePage) scroller.scrollTo({ top: activePage.offsetTop + activePage.offsetHeight * within })
-      queueBookmark(scroller, next)
-    })
   }
+  useLayoutEffect(() => {
+    requestedZoom.current = zoom
+    const point = anchor.current
+    anchor.current = undefined
+    if (!point || !frame.current) return
+    const box = point.sheet.getBoundingClientRect()
+    frame.current.scrollBy(box.left + point.x * box.width - point.clientX, box.top + point.y * box.height - point.clientY)
+    queueBookmark(frame.current, zoom)
+  }, [zoom])
+  useEffect(() => {
+    if (!frame.current || !document) return
+    return bindPdfPinch(frame.current, (factor, x, y) => adjustZoom(requestedZoom.current * factor, x, y))
+  }, [document])
 
-  const pageGutter = width < 440 ? 44 : 12
+  const pageInset = 12
   return <div className="pt-reader">
     <div className="pt-reader-frame" ref={frame} tabIndex={0} aria-label={tr('PDF document')}
       onPointerDown={() => { if (more.current) more.current.open = false }}
       onScroll={(event) => { syncPageWindow(event.currentTarget); queueBookmark(event.currentTarget) }}>
       {error && <p role="alert" className="pt-pdf-loading">{tr(error)}</p>}
       {!document && !error && <p className="pt-pdf-loading" role="status">{tr('Opening PDF…')}</p>}
-      <div className="pt-reader-pages" ref={pageList} style={{ paddingInlineEnd: pageGutter }}>
+      <div className="pt-reader-pages" ref={pageList} style={{ paddingInline: pageInset }}>
         {document && width > 0 && Array.from({ length: document.numPages }, (_, index) => {
           const number = index + 1
           const ratio = ratios[number] ?? aspectRatio
-          const pageWidth = Math.max(1, width - 12 - pageGutter) * zoom
-          return <div className="pt-pdf-sheet" key={number} style={{ width: pageWidth, aspectRatio: ratio }}>
+          const baseWidth = Math.max(1, width - 2 * pageInset)
+          const pageWidth = baseWidth * zoom
+          return <div className="pt-pdf-sheet" key={number} style={{ width: pageWidth, height: ratio > 0 ? pageWidth / ratio : undefined }}>
             {(number >= renderRange[0] && number <= renderRange[1]) &&
-              <PdfSheet document={document} scope={scope} page={number} width={pageWidth} aspectRatio={ratio}
+              <PdfSheet document={document} scope={scope} page={number} width={baseWidth} zoom={zoom} rasterZoom={rasterZoom} aspectRatio={ratio}
                 citation={page === number ? citation : undefined} marks={marks.filter((mark) => mark.page === number)} target={highlight?.page === number ? highlight.rect : undefined}
                 selection={selection?.page === number ? selection : undefined} tool={tool} onMeasure={measure}
                 setSelection={setSelection} onRegion={() => setTool('select')}
                 onInk={(number, points) => void save('ink', [], points, '', '', undefined, number)} />}
+            {tool === 'select' && number >= renderRange[0] && number <= renderRange[1] && pageOverlay?.(number)}
           </div>
         })}
       </div>
     </div>
     <div className="pt-pdf-rail" aria-label={tr('PDF tools')}>
       <div className="pt-pdf-cluster">
-        <button className="pt-round" disabled={!document || zoom >= 1.5} title={tr('Zoom in')}
-          aria-label={tr('Zoom in')} onClick={() => adjustZoom(Math.min(1.5, zoom + .25))}><Icon name="zoomIn" size={17} /></button>
-        <button className="pt-round" disabled={!document || zoom <= 1} title={tr('Zoom out')}
-          aria-label={tr('Zoom out')} onClick={() => adjustZoom(Math.max(1, zoom - .25))}><Icon name="zoomOut" size={17} /></button>
+        <button className="pt-round" disabled={!document || zoom >= maxZoom} title={tr('Zoom in')}
+          aria-label={tr('Zoom in')} onClick={() => adjustZoom(zoom + .25)}><Icon name="zoomIn" size={17} /></button>
+        <button className="pt-round" disabled={!document || zoom <= minZoom} title={tr('Zoom out')}
+          aria-label={tr('Zoom out')} onClick={() => adjustZoom(zoom - .25)}><Icon name="zoomOut" size={17} /></button>
       </div>
       {tool !== 'select' && <button className="pt-round" onClick={() => setTool('select')}
         title={tr(tool === 'region' ? 'Cancel region selection' : 'Finish drawing')}
@@ -603,6 +683,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
             <button onClick={() => onPaperInfo('scan')}>{tr('Paper details')}</button>
             <button onClick={() => onPaperInfo('analysis')}>{tr('Paper references')}</button>
           </>}
+          <button disabled={!document || ocrBusy} onClick={() => void recognize(current)}>{tr('Read page text (OCR)')}</button>
           {onFind && <button onClick={onFind}>{tr('Find a figure')}</button>}
           <button disabled={!document} onClick={openFind}>{tr('Find in PDF')}</button>
           <button disabled={!document} onClick={() => {
@@ -669,9 +750,13 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
           <button disabled={workspace.busy} onClick={() => void save('highlight', selection.rects, [], selection.quote, '')}>{tr('Highlight')}</button>
           <button disabled={workspace.busy} onClick={() => void save('underline', selection.rects, [], selection.quote, '')}>{tr('Underline')}</button>
         </>}
+        {selection.medium === 'image' && <button disabled={ocrBusy} onClick={() => void recognize(selection.page, selection.rect)}>OCR</button>}
         <button onClick={() => edit({ value: '' })}>{tr('Add annotation')}</button>
         {onAsk && <button onClick={() => { onAsk(selection); setSelection(undefined); window.getSelection()?.removeAllRanges() }}>{tr('Ask AI')}</button>}
       </div>, window.document.body)}
+    {ocrText !== undefined && <Dialog title="OCR" onClose={() => { ocrRun.current++; setOcrText(undefined); setOcrBusy(false) }}>
+      <div style={{whiteSpace: 'pre-wrap', maxHeight: '60vh', overflow: 'auto'}}>{ocrText}</div>
+    </Dialog>}
     {editor && <Dialog title={tr('Annotation')} onClose={() => edit(undefined)}>
       <form className="pt-reader-note" onSubmit={(e) => {
         e.preventDefault()

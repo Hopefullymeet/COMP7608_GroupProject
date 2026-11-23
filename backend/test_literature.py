@@ -13,7 +13,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from dsh import Dsh, failure
-from literature import poppler
+from literature import body_passage_starts, poppler
 from papertrace import Worker
 
 
@@ -79,6 +79,17 @@ class ScriptedSynthesis:
 
 
 @unittest.skipUnless(shutil.which(poppler("pdftotext")), "Poppler is required")
+class BodyEvidenceTest(unittest.TestCase):
+    def test_abstract_across_chunks_and_body_on_same_page(self):
+        rows = [("a", 1, "Title Abstract—We report an improvement."),
+                ("b", 1, "More abstract text. I. INTRODUCTION Actual body evidence."),
+                ("c", 2, "Methods and experimental conditions.")]
+        starts = body_passage_starts(rows)
+        self.assertEqual([text[starts.get(pid, 0):].strip() for pid, _, text in rows],
+                         ["", "Actual body evidence.", rows[2][2]])
+        self.assertEqual(body_passage_starts([("a", 1, "Methods and experimental conditions.")]), {})
+
+
 class LiteratureTest(unittest.TestCase):
     def setUp(self):
         self.workspace = tempfile.TemporaryDirectory()
@@ -112,6 +123,32 @@ class LiteratureTest(unittest.TestCase):
         return self.call("library.import_pdf", topic_id=self.topic, name=name + ".pdf",
                          content=base64.b64encode(sample_pdf(text)).decode(), **params)
 
+    def test_wiki_retains_multiple_findings_but_only_links_verified_body_on_home(self):
+        paper = self.save_pdf("Test", "Abstract. Faster. 1. Introduction. Stable. Accurate.")
+        vid = paper["source_version_id"]
+        with self.worker.lock, self.worker.db:
+            pid, text = self.worker.db.execute("SELECT passage_id,text FROM paper_passages WHERE version_id=?", (vid,)).fetchone()
+            task = {"topic_id": self.topic}
+            passage = {"passage_id": pid, "source_version_id": vid, "paper_id": paper["paper_id"], "page": 1, "text": text}
+            ids = [self.worker.store_anchor(task, "msg", passage, q) for q in ("Faster.", "Stable.", "Accurate.")]
+            sid = self.worker.dispatch("session.create", task, [])["session_id"]
+            session = self.worker.get("session", sid)
+            session["turns"].append({"task_id": "test-turn", "question": "Compare results.",
+                                     "answer": {"sentences": [{"text": str(i), "anchor_ids": [aid]} for i, aid in enumerate(ids)]},
+                                     "wiki_review": {"model": "test", "findings": {"0":"lead", "1":"result", "2":"result"},
+                                                     "questions": ["Does this generalize?"]}})
+            self.worker.put("session", sid, session)
+            wiki = self.worker.topic_wiki.get(self.topic)
+            entries = [e for e in wiki["entries"] if e["origin"] == "qa"]
+            self.assertEqual([e["kind"] for e in entries], ["finding"] * 3 + ["open_question"])
+            self.assertEqual(wiki["home_points"], [e["entry_id"] for e in entries[1:3]])
+            self.assertEqual(wiki["map_sources"][ids[0]]["section"], "abstract_or_front_matter")
+            for aid in ids[1:]:
+                located = self.worker.dispatch("evidence.open", {"anchor_id": aid}, [])
+                self.assertEqual(located["source"]["passages"][0]["page"], 1)
+                self.assertIn(located["quote"], located["source"]["passages"][0]["text"])
+            self.assertEqual(self.worker.topic_wiki.get(self.topic)["home_points"], wiki["home_points"])
+
     def run_task(self, versions, kind="literature_synthesis"):
         input_ = {"source_versions": versions, "question": "How can answers be supported?"}
         if kind == "paper_comparison":
@@ -128,6 +165,19 @@ class LiteratureTest(unittest.TestCase):
                 return snapshot
             time.sleep(.03)
         self.fail("Synthesis did not finish.")
+
+    def test_outline_keeps_preset_selected_at_confirmation(self):
+        args = {"kind": "literature_synthesis", "topic_id": self.topic,
+                "input": {"question": "Which results agree?", "source_versions": self.versions}}
+        self.call("preset.save", mode="fixed")
+        prepared = self.call("task.prepare", **args)
+        self.assertNotIn("Relevant reviewed Wiki entries", prepared["transfers"][0]["data_categories"])
+        self.call("preset.save", mode="wiki")
+        started = self.call("task.start", confirmation_id=prepared["confirmation_id"], **args)
+        with self.worker.lock:
+            self.assertEqual(self.worker.get("task", started["task_id"])["input"]["mode"], "fixed")
+        following = self.call("task.prepare", **args)
+        self.assertIn("Relevant reviewed Wiki entries", following["transfers"][0]["data_categories"])
 
     def test_outline_uses_confirmed_endpoint_when_sdk_cannot_start(self):
         from io import BytesIO

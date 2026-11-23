@@ -13,9 +13,9 @@
     "windows": [
       {
         "label": "main",
+        "theme": "Light",
         "title": "PaperTrace",
         "decorations": false,
-        "theme": "Light",
         "backgroundColor": "#f8f4ef",
         "acceptFirstMouse": true,
         "width": 1440,
@@ -28,6 +28,6 @@
   },
   "bundle": {
     "active": false,
-    "icon": ["icons/icon.png", "icons/icon.ico"]
+    "icon": ["icons/icon.icns", "icons/icon.png", "icons/icon.ico"]
   }
 }

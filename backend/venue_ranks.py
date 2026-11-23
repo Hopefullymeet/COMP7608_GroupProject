@@ -2,6 +2,7 @@
 
 import argparse
 import csv
+from contextlib import nullcontext
 from html.parser import HTMLParser
 import json
 from pathlib import Path
@@ -70,6 +71,41 @@ def init_venue_ranks(db):
     """)
 
 
+    # Small, explicitly scoped offline snapshots for the library's vision venues.
+    venues = [
+        ("IEEE Conference on Computer Vision and Pattern Recognition", "CVPR|IEEE/CVF Conference on Computer Vision and Pattern Recognition|IEEE/CVF Computer Vision and Pattern Recognition Conference", "A"),
+        ("International Conference on Computer Vision", "ICCV|IEEE International Conference on Computer Vision|IEEE/CVF International Conference on Computer Vision", "A"),
+        ("European Conference on Computer Vision", "ECCV", "B"),
+    ]
+    for scheme, edition, year, url in (
+        ("ccf", "2022 · CV 摘选", 2022, "https://www.ccf.org.cn/Academic_Evaluation/AI/"),
+        ("icore", "CORE2023 · CV 摘选", 2023, "https://portal.core.edu.au/conf-ranks/?search=vision&source=CORE2023"),
+    ):
+        missing = not db.execute("SELECT 1 FROM venue_catalogs WHERE scheme=?", (scheme,)).fetchone()
+        journal = "IEEE Transactions on Image Processing"
+        old_excerpt = scheme == "ccf" and db.execute(
+            "SELECT 1 FROM venue_catalogs WHERE scheme=? AND edition=? AND source_url=?", (scheme, edition, url)
+        ).fetchone() and not db.execute(
+            "SELECT 1 FROM venue_rank_rows WHERE scheme=? AND edition=? AND venue=?", (scheme, edition, journal)
+        ).fetchone()
+        if missing or old_excerpt:
+            rows = [{"venue": name, "aliases": aliases, "venue_type": "conference",
+                     "value": grade if scheme == "ccf" else "A*"} for name, aliases, grade in venues]
+            if scheme == "ccf":
+                rows.append({"venue": journal, "venue_type": "journal", "value": "A",
+                             "issns": "1057-7149 1941-0042",
+                             "source_url": "https://www.ccf.org.cn/Academic_Evaluation/CGAndMT/"})
+            import_catalog(db, scheme, edition, year, url, rows)
+
+    for scheme, edition, filename, url in (
+        ("ccf", "CCF 官网目录快照 2026-11", "ccf-public.csv", "https://www.ccf.org.cn/Academic_Evaluation/By_category/"),
+        ("icore", "ICORE2026", "icore-public.csv", "https://portal.core.edu.au/conf-ranks/?source=ICORE2026"),
+    ):
+        if not db.execute("SELECT 1 FROM venue_catalogs WHERE scheme=? AND edition=?", (scheme, edition)).fetchone():
+            rows = csv_records(Path(__file__).with_name(filename), "standard", scheme)
+            import_catalog(db, scheme, edition, 2026, url, rows)
+
+
 def issns(value):
     text = " ".join(map(str, value)) if isinstance(value, (list, tuple)) else str(value or "")
     found = set()
@@ -86,9 +122,16 @@ def name_key(name):
 
 
 def conference_key(name):
+    if re.fullmatch(r"Computer Vision\s*[–—-]\s*ECCV\s+\d{4}", name, re.I):
+        return "eccv"
     name = re.sub(r"^(?:proceedings of (?:the )?)?(?:\d{4}\s+)?(?:\d+(?:st|nd|rd|th)\s+)?", "", name, flags=re.I)
     name = re.sub(r"\s*\([^)]*(?:volume|main conference|long papers)[^)]*\)\s*$", "", name, flags=re.I)
     name = re.sub(r"\s+(?:19|20)\d{2}$", "", name)
+    # IEEE catalog records often spell out a venue and repeat its acronym in parentheses.
+    # Keep workshop and other track qualifiers intact.
+    if not QUALIFIERS.search(name):
+        name = re.sub(r"\s+\((?:ICCV|ECCV|CVPR)\)$", "", name, flags=re.I)
+        name = re.sub(r"^IEEE/CVF\s+(?=International Conference on Computer Vision$)", "", name, flags=re.I)
     return name_key(name)
 
 
@@ -207,7 +250,7 @@ def catalog_records(paths, format_, scheme, edition):
             yield from csv_records(path, format_, scheme)
 
 
-def import_catalog(db, scheme, edition, year, source_url, rows, *, label="", metric="", venue_types=()):
+def import_catalog(db, scheme, edition, year, source_url, rows, *, label="", metric="", venue_types=(), transaction=True):
     if not re.fullmatch(r"[a-z][a-z0-9_-]{0,49}", scheme) or not edition.strip() or not 1900 <= year <= 9999:
         raise ValueError("Specify a scheme ID, edition and year.")
     if scheme == "cas" and year > 2025:
@@ -217,7 +260,7 @@ def import_catalog(db, scheme, edition, year, source_url, rows, *, label="", met
     if not label or metric not in ("quartile", "rank", "index") or not venue_types or set(venue_types) - set(BOTH):
         raise ValueError("Custom schemes need a label, metric and at least one venue type.")
     count = 0
-    with db:
+    with db if transaction else nullcontext():
         db.execute("""DELETE FROM venue_rank_keys WHERE row_id IN
                       (SELECT row_id FROM venue_rank_rows WHERE scheme=? AND edition=?)""", (scheme, edition))
         db.execute("DELETE FROM venue_rank_rows WHERE scheme=? AND edition=?", (scheme, edition))
@@ -269,7 +312,7 @@ def read_rankings(db, metadata, year):
     definitions = dict(SCHEMES)
     for scheme, edition, catalog_year, label, metric, venue_types, url in db.execute("""
         SELECT scheme, edition, year, label, metric, types, source_url FROM venue_catalogs
-        ORDER BY year DESC, rowid DESC
+        ORDER BY CASE WHEN edition LIKE 'CCF 官网目录快照%' THEN 1 WHEN edition LIKE '%CV 摘选' THEN 2 ELSE 0 END, year DESC, rowid DESC
     """):
         definitions[scheme] = (label, metric, json.loads(venue_types))
         if year is None or year == catalog_year:

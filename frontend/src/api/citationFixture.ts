@@ -98,12 +98,14 @@ export function citationFixture(
     return report.complete
   }
   const handlers: Handlers<CitationMethods> = {
+    'audit.history': () => ({ items: [] }),
     'audit.save_to_wiki': () => { throw new Error('PDF review requires the desktop workspace.') },
     'draft.page': () => { throw new Error('PDF rendering requires the desktop workspace.') },
     'draft.prose': () => ({ sentences: [] }),
     'draft.resolve_reference': () => { throw new Error('PDF review requires the desktop workspace.') },
     'draft.list': ({ topic_id }) => ({ items: items(topic_id) }),
     'draft.import': (p) => {
+      if ('source_version_id' in p) throw new Error('PDF review requires the desktop workspace.')
       const name = 'name' in p ? p.name : p.file_id
       const body = 'text' in p ? p.text : 'The dataset uses entire papers and abstracts. [@v1]'
       const sentences = body

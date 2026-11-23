@@ -1,0 +1,19 @@
+{
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "theme": "Light",
+        "title": "PaperTrace",
+        "decorations": true,
+        "width": 1440,
+        "height": 800,
+        "minWidth": 1024,
+        "minHeight": 640,
+        "center": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
+      }
+    ]
+  }
+}

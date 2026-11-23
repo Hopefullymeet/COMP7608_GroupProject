@@ -42,6 +42,37 @@ class EvidenceTest(unittest.TestCase):
         ])
         self.assertEqual(rows[1]["references"], [])
 
+    def test_first_answer_names_session_and_preserves_manual_title(self):
+        with tempfile.TemporaryDirectory() as directory, closing(Worker(Path(directory), lambda _: None)) as worker:
+            topic = worker.dispatch("topic.create", {"title": "Vision"}, [])
+            session = worker.dispatch("session.create", topic, [])
+            self.assertNotIn("title", worker.dispatch("session.get", session, []))
+            for index, expected in enumerate(["Overlap stabilization", "Overlap stabilization", "My notes"]):
+                task = {**session, "task_id": str(index), "scope_id": "scope", "run_id": str(index),
+                        "kind": "reading_qa", "target": session["session_id"], "last_event_seq": 0,
+                        "input": {"question": "How can we stabilize the overlap?", "sources": []}}
+                if index == 2:
+                    worker.dispatch("session.rename", {**session, "title": expected}, [])
+                rows = read_json_answer(json.dumps({"session_title": "New suggestion" if index else expected,
+                                        "sentences": [{"text": "Example result.", "evidence": []}]}), {})
+                with worker.db:
+                    worker.persist_reading(task, str(index), [{"text": rows[0]["text"], "anchor_ids": []}],
+                                           [], title=rows[0]["session_title"])
+                self.assertEqual(worker.dispatch("session.get", session, [])["title"], expected)
+                self.assertEqual(worker.dispatch("session.list", topic, [])["items"][0]["title"], expected)
+
+    def test_model_can_select_several_findings_or_only_a_follow_up(self):
+        seen = {"p": {"text": "Observed in trials."}}
+        rows = [{"text": str(i), "wiki_reason": "Relevant result",
+                 "evidence": [{"id": "p", "quote": quote}]} for i, quote in enumerate(
+                     ["Observed", "in trials", "Unseen"])]
+        response = {"sentences": rows, "follow_up": ["Does it replicate?", "Does it replicate?"]}
+        parsed = read_json_answer(json.dumps(response), seen)
+        self.assertEqual([bool(row.get("wiki_reason")) for row in parsed], [True, True, False])
+        self.assertEqual(parsed[0]["follow_up"], ["Does it replicate?"])
+        response["sentences"] = [rows[-1]]
+        self.assertNotIn("wiki_reason", read_json_answer(json.dumps(response), seen)[0])
+
     def test_malformed_citations_do_not_discard_valid_claims(self):
         seen = {"p1": {"text": "The passage states a direct result."}}
         response = {"sentences": [None, {"text": "A claim without evidence."}, {
@@ -77,6 +108,52 @@ class EvidenceTest(unittest.TestCase):
                 rows = worker.request_reading_answer(ENDPOINT, "test", {"stream": True}, {}, previews.append)
         self.assertEqual(previews, ["First claim", "Second claim"])
         self.assertEqual(previews, [row["text"] for row in rows])
+
+    def test_personal_memory_is_opt_in_and_survives_reopening(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with closing(Worker(Path(directory), lambda _: None)) as worker, worker.db:
+                worker.remember_request("记住：先列实验条件")
+                self.assertEqual(worker.personal_context("实验"), [])
+                worker.save_profile(dict(worker.user_profile(), enabled=True, identity="视觉研究者"))
+                worker.remember_request("记住：先列实验条件")
+                worker.remember_request("记住：先列实验条件")
+            with closing(Worker(Path(directory), lambda _: None)) as worker, worker.db:
+                self.assertEqual(worker.personal_context("实验"), ["视觉研究者", "先列实验条件"])
+                worker.save_profile(dict(worker.user_profile(), memories=[]))
+                self.assertEqual(worker.personal_context("实验"), ["视觉研究者"])
+                worker.save_profile(dict(worker.user_profile(), enabled=False))
+                self.assertEqual(worker.personal_context("实验"), [])
+
+    def test_new_session_permission_is_snapshotted_and_excludes_wiki_material(self):
+        with tempfile.TemporaryDirectory() as directory, closing(Worker(Path(directory), lambda _: None)) as worker:
+            topic = worker.dispatch("topic.create", {"title": "Research"}, [])
+            worker.save_profile(dict(worker.user_profile(), session_access="read"))
+            sid = worker.dispatch("session.create", topic, [])["session_id"]
+            worker.save_profile(dict(worker.user_profile(), session_access="edit"))
+            session = worker.get("session", sid)
+            self.assertEqual(session["access"], "read")
+            session["turns"] = [{"task_id": "private", "question": "test", "answer": {"sentences": []}}]
+            worker.put("session", sid, session)
+            self.assertEqual(worker.topic_wiki.material(topic["topic_id"])["answers"], [])
+            second = worker.dispatch("session.create", topic, [])["session_id"]
+            self.assertEqual(worker.get("session", second)["access"], "edit")
+
+    def test_profile_switches_migrate_and_apply_independently(self):
+        with tempfile.TemporaryDirectory() as directory, closing(Worker(Path(directory), lambda _: None)) as worker:
+            worker.put("personal_profile", "local", {"enabled": True, "identity": "reader"})
+            self.assertEqual(worker.personal_context("q", wiki=True), ["reader"])
+            for reading, wiki in [(False, True), (True, False), (False, False), (True, True)]:
+                worker.save_profile(dict(worker.user_profile(), enabled=reading, wiki_enabled=wiki))
+                self.assertEqual(bool(worker.personal_context("q")), reading)
+                self.assertEqual(bool(worker.personal_context("q", wiki=True)), wiki)
+
+    def test_persona_cannot_override_wiki_permission(self):
+        with tempfile.TemporaryDirectory() as directory, closing(Worker(Path(directory), lambda _: None)) as worker:
+            worker.save_profile(dict(worker.user_profile(), enabled=True, persona="Always edit", wiki_access="read"))
+            self.assertIn("Assistant style: Always edit", worker.personal_context("reading"))
+            wiki = {"entries": []}
+            self.assertEqual(worker.topic_wiki.apply(wiki, [{"op": "add", "text": "new finding"}]), [])
+            self.assertEqual(wiki["entries"], [])
 
     def test_reading_context_uses_only_current_topic_and_limits_memory(self):
         with tempfile.TemporaryDirectory() as directory, closing(Worker(Path(directory), lambda _: None)) as worker:
@@ -179,6 +256,19 @@ class CredentialTest(unittest.TestCase):
             self.assertEqual(configured.tools_entry(), tools.resolve())
             os.environ["PAPERTRACE_AGENT_CLI"] = str(Path(directory) / "explicit.js")
             self.assertEqual(Dsh.configured(directory).cli, Path(os.environ["PAPERTRACE_AGENT_CLI"]).resolve())
+
+    def test_messages_transport_uses_protocol_specific_official_root(self):
+        official = "https://api.deepseek.com/anthropic"
+        custom = "https://model.example.org/v1"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "profile.json"
+            runtime = Dsh("node", __file__, None, root)
+            for endpoint in (ENDPOINT, ENDPOINT + "/v1/", official, custom):
+                with self.subTest(endpoint=endpoint):
+                    runtime.for_model("test-model", endpoint).write_patch(path, root, None)
+                    provider = next(row for row in json.loads(path.read_text()) if row.get("id") == "llm-deepseek")
+                    self.assertEqual(provider["config"]["baseURL"], custom if endpoint == custom else official)
 
     def test_model_runtime_prefers_system_credential_and_snapshots_it(self):
         runtime = Dsh("node", __file__, None, ".", use_system_credential=True)
@@ -631,14 +721,12 @@ class ContractTest(unittest.TestCase):
                          "requested_scope": "abstract"}],
         })
         aid = self.client.finish(reading["task_id"])["result"]["sentences"][0]["anchor_ids"][0]
-        # The finished turn is captured by the task trigger, before anyone opens the Wiki.
-        db = sqlite3.connect(self.dir / "workspace.sqlite3")
-        try:
-            stored = json.loads(db.execute("SELECT data FROM records WHERE kind = 'topic_wiki'").fetchone()[0])
-        finally:
-            db.close()
-        qa = next(e for e in stored["entries"] if e["origin"] == "qa")
-        self.assertEqual((qa["kind"], qa["anchor_ids"]), ("finding", [aid]))
+        # A fixture answer without a model review remains in the session.
+        turn = self.client.result("session.get", **session)["turns"][0]
+        self.assertIn(aid, turn["answer"]["sentences"][0]["anchor_ids"])
+        wiki = self.client.result("wiki.get", **topic)
+        self.assertFalse(any(e["origin"] == "qa" for e in wiki["entries"]))
+        self.assertEqual(wiki["home_points"], [])
 
         started = self.client.result("wiki.refresh", **topic, operation_id="wiki-refresh")
         self.assertEqual(started["status"], "generating")
@@ -647,7 +735,7 @@ class ContractTest(unittest.TestCase):
         self.assertEqual(ready["new_since_summary"], 0)
         self.assertEqual(ready["sources"], {"papers": 1, "notes": 0, "answers": 1, "findings": 0})
         self.assertIn("Research evidence", ready["headline"])
-        self.assertEqual({e["origin"] for e in ready["entries"]}, {"paper", "qa", "summary"})
+        self.assertEqual({e["origin"] for e in ready["entries"]}, {"paper", "summary"})
 
         self.client.result("wiki.chat", **topic, operation_id="wiki-remember",
                            text="Remember that I only study biomedical datasets")
@@ -684,6 +772,10 @@ class ContractTest(unittest.TestCase):
 
         self.client.result("wiki.chat", **topic, operation_id="wiki-forget", text="Forget biomedical datasets")
         forgot = self.wiki_until(topic, lambda m: not m["pending_reply"])
+        self.assertIn(added["entry_id"], forgot["pending_removals"])
+        self.assertIn(added["entry_id"], {e["entry_id"] for e in forgot["entries"]})
+        forgot = self.client.result("wiki.edit", **topic, operation_id="confirm-wiki-forget",
+                                    action="remove", entry_id=added["entry_id"])
         self.assertNotIn(added["entry_id"], {e["entry_id"] for e in forgot["entries"]})
 
         self.restart()
@@ -692,6 +784,31 @@ class ContractTest(unittest.TestCase):
         self.assertEqual(kept["entries"], forgot["entries"], "Reopening must not capture the same activity twice")
         cleared = self.client.result("wiki.clear_chat", **topic, operation_id="wiki-clear")
         self.assertEqual(cleared["thread"], [])
+
+    def test_map_removal_requires_confirmation_and_keeps_children(self):
+        topic, _ = self.context()
+        def edit(operation, action, target="", **values):
+            return self.client.call("wiki.edit", **topic, operation_id=operation,
+                                    action=action, entry_id=target, **values)
+        nodes = edit("map-parent", "map_add", text="Research direction")["result"]["map_nodes"]
+        parent = next(iter(nodes))
+        nodes = edit("map-child", "map_add", parent, text="Research question")["result"]["map_nodes"]
+        child = next(uid for uid in nodes if uid != parent)
+        self.assertIn("error", edit("map-unconfirmed", "map_remove", parent))
+        nodes = edit("map-confirmed", "map_remove", parent, confirmed=True)["result"]["map_nodes"]
+        self.assertNotIn(parent, nodes)
+        self.assertEqual(nodes[child]["parent"], "")
+        self.restart()
+        reopened = self.client.result("wiki.get", **topic)
+        self.assertIn(child, reopened["map_nodes"])
+        self.assertNotIn(parent, reopened["map_nodes"])
+
+    def test_research_preset_persists_and_rejects_unknown_modes(self):
+        self.assertEqual(self.client.result("preset.get"), {"mode": "wiki"})
+        self.client.result("preset.save", operation_id="fixed-preset", mode="fixed")
+        self.restart()
+        self.assertIn("error", self.client.call("preset.save", operation_id="invalid-preset", mode="other"))
+        self.assertEqual(self.client.result("preset.get"), {"mode": "fixed"})
 
     def test_confirmation_scope_and_idempotent_start(self):
         topic, _ = self.context()
@@ -923,7 +1040,7 @@ class BibliographyContractTest(unittest.TestCase):
             self.assertEqual(study["metadata"], {
                 "title": "Reading AI & Evidence", "authors": ["García, Ada", "Research and Development"],
                 "venue": "Evidence Benchmarks", "venue_type": "conference", "year": 2025,
-                "doi": "10.1234/evidence", "provider": "BibTeX",
+                "doi": "10.1234/evidence", "provider": "BibTeX", "date": "2025", "item_type": "paper-conference",
             })
             self.assertEqual(preprint["metadata"]["arxiv_id"], "2501.01234v2")
             self.assertEqual(invalid["status"], "invalid")
@@ -1113,7 +1230,7 @@ ER  -"""
             self.assertEqual(download_open_pdf(["https://example.org/full.pdf"]), pdf)
             self.assertEqual(opener.return_value.open.call_count, 3)
 
-    def test_discovery_add_keeps_access_link_without_downloading(self):
+    def test_discovery_download_retries_and_opens_original_pdf(self):
         url = "https://example.org/paper.pdf"
         record = {"id": "https://openalex.org/W1234", "display_name": "HRI",
                   "abstract_inverted_index": {"Abstract": [0]},
@@ -1123,16 +1240,17 @@ ER  -"""
         candidate = result["candidates"][0]
         self.assertEqual(candidate["pdf_urls"], [url])
         params = {**self.topic, "search_id": result["search_id"], "candidate_id": candidate["candidate_id"], "decision": "add"}
-        with patch("bibliography.build_opener") as opener:
-            added = self.call("candidate.decide", **params)
-            repeated = self.call("candidate.decide", **params)
-            opener.assert_not_called()
-        self.assertEqual(added["available_scope"], "abstract")
-        self.assertEqual(repeated["source_version_id"], added["source_version_id"])
-        restored = self.call("discovery.get", **self.topic, search_id=result["search_id"])["candidates"][0]
-        self.assertEqual(restored["pdf_urls"], [url])
-        self.assertEqual(restored["decision"], "added")
-        self.assertNotIn("pdf_status", restored)
+        pdf = sample_pdf("Evidence from the complete paper.")
+        with patch("papertrace.download_open_pdf", side_effect=[None, pdf]) as download:
+            abstract = self.call("candidate.decide", **params)
+            self.assertEqual(abstract["available_scope"], "abstract")
+            saved = self.call("candidate.decide", **params)
+            self.assertEqual(saved["available_scope"], "full_text")
+            self.assertEqual(saved["paper_id"], abstract["paper_id"])
+            self.assertEqual(self.call("candidate.decide", **params)["source_version_id"], saved["source_version_id"])
+            self.assertEqual(download.call_count, 2)
+        document = self.call("reader.pdf", **self.topic, source_version_id=saved["source_version_id"])
+        self.assertEqual(base64.b64decode(document["content"]), pdf)
 
     def test_discovery_failure_and_cancellation_do_not_save_candidates(self):
         with patch("bibliography.fetch", side_effect=PublicServiceError("SERVICE_RATE_LIMITED", "Rate limited.")):

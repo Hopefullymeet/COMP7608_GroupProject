@@ -8,7 +8,6 @@ import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { Notes } from './Notes'
 import { PaperImportDialog, usePdfDrop } from './PaperImportDialog'
 import { PublicationDetails } from '../components/PublicationDetails'
-import { TopicPicker } from '../components/TopicPicker'
 
 const PdfReader = lazy(() => import('./PdfReader'))
 
@@ -45,6 +44,9 @@ export function LibraryPage() {
   const [tab, setTab] = useState('Papers'),
     [query, search] = useState(''),
     [limit, more] = useState(30)
+  const [filters, showFilters] = useState(false)
+  const [membership, filterMembership] = useState('all'),
+    [availability, filterScope] = useState('')
   const [chosen, choose] = useState<string[]>([]),
     [focus, setFocus] = useState(state.route.view === 'library' ? (state.route.paperId ?? '') : '')
   const [topic, setTopic] = useState(''),
@@ -59,10 +61,12 @@ export function LibraryPage() {
   const [feedback, setFeedback] = useState('')
   const [reader, setReader] = useState<LibraryReader>()
   const topics = state.topics
-  const rows = ((tab === 'Trash' ? catalog?.trash : catalog?.papers) ?? [])
-    .filter((paper) => !topic || paper.topic_ids.includes(topic))
+  const rows = (tab === 'Trash' ? catalog?.trash : catalog?.papers) ?? []
   const shown = rows.filter(
-    (p) => [p.title, p.identity, ...p.authors, ...p.tags].join(' ').toLowerCase().includes(query.toLowerCase()),
+    (p) =>
+      (membership === 'all' || (membership === 'linked') === p.topic_ids.length > 0) &&
+      (!availability || p.source_versions.some((v) => v.available_scope === availability)) &&
+      [p.title, p.identity, ...p.authors, ...p.tags].join(' ').toLowerCase().includes(query.toLowerCase()),
   )
   const paper = shown.find((p) => p.paper_id === focus) ?? shown[0]
   const checked = chosen.filter((id) => rows.some((p) => p.paper_id === id))
@@ -89,40 +93,17 @@ export function LibraryPage() {
     paper?.topic_ids.find((id) => topics.some((t) => t.id === id))
   const archivedTopics = archived?.items.filter((item) => item.kind === 'topic') ?? []
   const readerTopic = activeTopic ?? paper?.topic_ids.find((id) => archivedTopics.some((t) => t.id === id))
-  const topicSelect = (
-    <select
-      aria-label={tr('Working topic')}
-      className="lib-select"
-      value={topic}
-      onChange={(e) => {
-        setTopic(e.target.value)
-        choose([])
-        more(30)
-        setFeedback('')
-      }}
-    >
-      <option value="">{tr(tab === 'Notes' ? 'Choose a topic' : 'All topics')}</option>
-      {topics.map((t) => (
-        <option key={t.id} value={t.id}>
-          {t.title}
-        </option>
-      ))}
-    </select>
-  )
   if (reader) return <ArchivedReader reader={reader} close={() => setReader(undefined)} />
   return (
     <div className="page library-page">
-      <PageHead icon="library" title={tr('Library')} sub={tr('Papers, versions and research notes')}>
-        <button className="primary" disabled={busy} onClick={() => void pick().catch(report)}>
-          <Icon name="plus" size={14} />{' '}{tr('Import papers')}
-        </button>
+      <PageHead trace icon="library" title={tr('Library')} sub={tr('Papers, versions and research notes')}>
       </PageHead>
       <div className="page-body scroll">
         <div className="lib-tools">
-          <div className="seg">
-            {['Papers', 'Trash', 'Notes', 'Archived'].map((t) => (
+          <div className="seg lib-tabs">
+            {['Papers', 'Notes', 'Archived', 'Trash'].map((t) => (
               <button
-                key=                {tr(t)}
+                key={t}
                 className={t === tab ? 'on' : ''}
                 aria-pressed={t === tab}
                 onClick={() => {
@@ -131,11 +112,23 @@ export function LibraryPage() {
                   setFeedback('')
                 }}
               >
-                                {tr(t)}
+                {tr(t)}
               </button>
             ))}
           </div>
-          {tab === 'Notes' && topicSelect}
+          {tab === 'Notes' && <select
+            aria-label={tr('Working topic')}
+            className="lib-select"
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+          >
+            <option value="">{tr('Choose a topic')}</option>
+            {topics.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.title}
+              </option>
+            ))}
+          </select>}
         </div>
         {feedback && (
           <p className="review-done" role="status">
@@ -179,7 +172,9 @@ export function LibraryPage() {
                   </button>
                 </div>
               ))}
-            <div className="lib-tools lib-search-tools">
+            <div className="lib-grid">
+            <div className="lib-main">
+            <div className="lib-tools library-search">
               <label className="field-search">
                 <Icon name="search" />
                 <input
@@ -192,8 +187,36 @@ export function LibraryPage() {
                   }}
                 />
               </label>
-              {topicSelect}
-              {ids.length > 0 &&
+              <button className="ghost-btn" aria-expanded={filters} onClick={() => showFilters(!filters)}>
+                {tr('Filters')}{membership !== 'all' || availability ? ' •' : ''}
+              </button>
+              {tab === 'Papers' && <button className="primary" disabled={busy} onClick={() => void pick().catch(report)}>
+          <Icon name="plus" size={14} />{' '}{tr('Import papers')}
+        </button>}
+            </div>
+            <div className="lib-tools">
+              {filters && <>
+              <select
+                aria-label={tr('Topic membership')}
+                value={membership}
+                onChange={(e) => filterMembership(e.target.value)}
+              >
+                <option value="all">{tr('Any membership')}</option>
+                <option value="linked">{tr('In a topic')}</option>
+                <option value="unfiled">{tr('Unfiled')}</option>
+              </select>
+              <select
+                aria-label={tr('Reading scope')}
+                value={availability}
+                onChange={(e) => filterScope(e.target.value)}
+              >
+                <option value="">{tr('Any text availability')}</option>
+                <option value="full_text">{tr('Full text')}</option>
+                <option value="abstract">{tr('Abstract')}</option>
+                <option value="metadata">{tr('Metadata only')}</option>
+              </select>
+              </>}
+              {(checked.length > 0 || (tab === 'Trash' && ids.length > 0)) &&
                 (tab === 'Trash' ? (
                   <>
                     <button
@@ -207,19 +230,16 @@ export function LibraryPage() {
                     >
                       {tr('Restore')}
                     </button>
-                    <button className="ghost-btn lib-delete" onClick={() => void preview(true).catch(report)}>
-                      <Icon name="trash" size={15} />
+                    <button className="danger-link" onClick={() => void preview(true).catch(report)}>
                       {tr('Delete permanently…')}
                     </button>
                   </>
                 ) : (
-                  <button className="ghost-btn lib-delete" onClick={() => void preview(false).catch(report)}>
-                    <Icon name="trash" size={15} />
+                  <button className="ghost-btn" onClick={() => void preview(false).catch(report)}>
                     {tr('Move to trash…')}
                   </button>
                 ))}
             </div>
-            <div className="lib-grid">
               <section className="lib-list">
                 {shown.slice(0, limit).map((p) => (
                   <div className={'lib-row' + (p === paper ? ' on' : '')} key={p.paper_id}>
@@ -237,7 +257,6 @@ export function LibraryPage() {
                     />
                     <button className="paper-choice" onClick={() => setFocus(p.paper_id)}>
                       <strong>{p.title}</strong>
-                      {(p.authors.length > 0 || publicIdentity(p.identity)) && <small>{p.authors.join(', ') || publicIdentity(p.identity)}</small>}
                       <span className="lib-chips">
                         <span className="tag">{tr(p.source_versions[0].available_scope.replace('_', ' '))}</span>
                         <span className="tag">
@@ -245,11 +264,6 @@ export function LibraryPage() {
                             ? count(tr, p.topic_ids.length, 'topic')
                             : tr('Unfiled')}
                         </span>
-                        {p.tags.map((t) => (
-                          <span className="tag" key=                {tr(t)}>
-                            #                {tr(t)}
-                          </span>
-                        ))}
                       </span>
                     </button>
                   </div>
@@ -263,28 +277,11 @@ export function LibraryPage() {
                   </button>
                 )}
               </section>
+              </div>
               {paper && (
-                <aside className="card lib-detail">
+                <aside key={paper.paper_id} className="card lib-detail">
                   <h2>{paper.title}</h2>
-                  {publicIdentity(paper.identity) && <p className="record-meta">{publicIdentity(paper.identity)}</p>}
-                  {!demo && tab === 'Papers' && paper.topic_ids.length > 0 &&
-                    <PublicationDetails key={paper.paper_id} paper={paper.paper_id}
-                      topic={paper.topic_ids.includes(topic) ? topic : paper.topic_ids[0]} />}
-                  <h3>{tr('Files and versions')}</h3>
-                  {paper.files.map((f) => (
-                    <p key={f.source_version_id}>
-                      {f.name} · {tr(f.role.replaceAll('_', ' '))}{' '}
-
-                    </p>
-                  ))}
-                  {paper.changes.map((c) => (
-                    <p className="muted-text" key={c}>
-                      {c}
-                    </p>
-                  ))}
-                  {tab === 'Papers' && (
-                    <>
-                      {readerTopic && (
+                      {tab === 'Papers' && readerTopic && (
                         <button
                           className="link-btn"
                           onClick={() => activeTopic ?
@@ -299,10 +296,26 @@ export function LibraryPage() {
                           {tr('Open in reader')}
                         </button>
                       )}
-                      <button className="link-btn" onClick={() => void pick(paper.paper_id).catch(report)}>
-                        {tr('Add material version')}
-                      </button>
-                      <h3>{tr('Topics')}</h3>
+                  {publicIdentity(paper.identity) && <p className="record-meta">{publicIdentity(paper.identity)}</p>}
+                  {!demo && tab === 'Papers' &&
+                    <PublicationDetails paper={paper.paper_id}
+                      topic={paper.topic_ids.includes(topic) ? topic : paper.topic_ids[0]} />}
+                  <details open><summary>{tr('Files and versions')}</summary>
+                  {paper.files.map((f) => (
+                    <p key={f.source_version_id}>
+                      {f.name} · {tr(f.role.replaceAll('_', ' '))}{' '}
+
+                    </p>
+                  ))}
+                  {paper.changes.map((c) => (
+                    <p className="muted-text" key={c}>
+                      {c}
+                    </p>
+                  ))}
+                  {tab === 'Papers' && <button className="link-btn" onClick={() => void pick(paper.paper_id).catch(report)}>{tr('Add material version')}</button>}</details>
+                  {tab === 'Papers' && (
+                    <>
+                      <details><summary>{tr('Topics')}</summary>
                       {paper.topic_ids.map((id) => {
                         const active = topics.find((item) => item.id === id)
                         if (active) return <button key={id} className="link-btn" onClick={() => act.openTopic(id, 'read')}>{active.title}</button>
@@ -310,7 +323,26 @@ export function LibraryPage() {
                         return item && <p key={id}>{item.title} · {tr('Archived')}</p>
                       })}
                       <div className="lib-tools">
-                        <TopicPicker topics={topics} disabled={busy} onSelect={(id) => organize('link', id)} />
+          <select
+            aria-label={tr('Working topic')}
+            className="lib-select"
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+          >
+            <option value="">{tr('Choose a topic')}</option>
+            {topics.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.title}
+              </option>
+            ))}
+          </select>
+                        <button
+                          className="ghost-btn sm"
+                          disabled={!topic || busy}
+                          onClick={() => organize('link', topic)}
+                        >
+                          {tr('Add to topic')}
+                        </button>
                         <button
                           className="ghost-btn sm"
                           disabled={!topic || busy}
@@ -319,7 +351,8 @@ export function LibraryPage() {
                           {tr('Remove from topic')}
                         </button>
                       </div>
-                      <h3>{tr('Tags')}</h3>
+                      </details><details><summary>{tr('Tags')}</summary>
+                      <p>{paper.tags.join(' · ')}</p>
                       <input
                         className="text-field"
                         aria-label={tr('Tag')}
@@ -339,6 +372,7 @@ export function LibraryPage() {
                           </button>
                         ))}
                       </div>
+                      </details>
                     </>
                   )}
                 </aside>

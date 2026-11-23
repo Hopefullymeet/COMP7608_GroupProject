@@ -14,7 +14,7 @@ import threading
 
 from credentials import deepseek_api_key
 from dsh import DshFailure, ENDPOINT
-from literature import LiteratureError, digest
+from literature import LiteratureError, body_passage_starts, digest
 
 KINDS = ("focus", "paper", "finding", "preference", "open_question")
 CAPTURED = ("qa", "pdf", "paper", "note", "finding")      # origins written by capture triggers
@@ -73,6 +73,9 @@ class TopicWiki:
         self.identifier = identifier
         self.now = now
         self.running = set()
+        self.worker.db.execute("""CREATE TABLE IF NOT EXISTS wiki_history (
+            id INTEGER PRIMARY KEY, topic TEXT NOT NULL, created TEXT NOT NULL, changes TEXT NOT NULL)""")
+        self.worker.db.execute("CREATE INDEX IF NOT EXISTS wiki_history_topic ON wiki_history(topic,id)")
 
     # ---------- topic material ----------
 
@@ -85,13 +88,14 @@ class TopicWiki:
                  for n in host.rows("note") if n["topic_id"] == topic][:30]
         answers = []
         for session in host.rows("session"):
-            if session["topic_id"] != topic or session.get("archived"):
+            if session["topic_id"] != topic or session.get("archived") or session.get("access") == "read":
                 continue
             for turn in session["turns"]:
                 sentences = [{"text": clip(s["text"]), "anchor_ids": s["anchor_ids"]}
-                             for s in turn["answer"]["sentences"] if s.get("anchor_ids")]
-                answers.append({"id": turn["task_id"], "question": clip(turn["question"]), "sentences": sentences[:4]})
-        answers = answers[:30]
+                             for s in turn["answer"]["sentences"]]
+                answers.append({"id": turn["task_id"], "question": clip(turn["question"]), "sentences": sentences,
+                                "review": turn.get("wiki_review")})
+        answers = answers[-100:]
         findings = []
         for item in host.research.wiki(topic)["items"][:30]:
             entry = item["entry"]
@@ -162,13 +166,18 @@ class TopicWiki:
                 yield (key if index == 0 else f"{key}:{index}"), "paper", origin, f"{short}: {quote}", [anchor_id]
         for answer in material["answers"]:
             key = "qa:" + answer["id"]
-            if key in seen:
+            review = answer.get("review")
+            if review is None:
+                # Old turns have no model decision. They remain available for a full consolidation.
                 continue
-            if answer["sentences"]:
-                first = answer["sentences"][0]
-                yield key, "finding", "qa", first["text"], first["anchor_ids"]
-            else:
-                yield key, "open_question", "qa", answer["question"], []
+            for i, sentence in enumerate(answer["sentences"]):
+                item = f"{key}:finding:{i}"
+                if item not in seen and str(i) in review["findings"] and sentence["anchor_ids"]:
+                    yield item, "finding", "qa", sentence["text"], sentence["anchor_ids"]
+            for i, question in enumerate(review["questions"]):
+                item = f"{key}:question:{i}"
+                if item not in seen:
+                    yield item, "open_question", "qa", question, []
         for note in material["notes"]:
             key = f"note:{note['id']}:{note['revision']}"
             if key not in seen and note["text"]:
@@ -189,7 +198,22 @@ class TopicWiki:
                 "thread": [], "pending_reply": False, "fingerprint": "", "observed": [], "captured_since": 0}
 
     def store(self, wiki):
-        self.worker.put("topic_wiki", wiki["topic_id"], wiki)
+        topic = wiki["topic_id"]
+        old = self.load(topic)
+        def index(data):
+            items = {e["entry_id"]: (e["text"], e["anchor_ids"]) for e in data["entries"]}
+            items.update({n["id"]: (n["title"], n["parent"], n["anchors"]) for n in data.get("map_nodes", {}).values()})
+            if data.get("headline") or data.get("map_title"):
+                items["root"] = (data.get("map_title") or data["headline"], data.get("summary", []))
+            return items
+        before, after = index(old), index(wiki)
+        changes = [{"op": "remove" if key not in after else "add" if key not in before else "update",
+                    "id": key, "title": (after.get(key) or before[key])[0]}
+                   for key in sorted(before.keys() | after.keys()) if before.get(key) != after.get(key)]
+        if changes:
+            self.worker.db.execute("INSERT INTO wiki_history(topic,created,changes) VALUES(?,?,?)",
+                                   (topic, self.now(), json.dumps(changes, ensure_ascii=False)))
+        self.worker.put("topic_wiki", topic, wiki)
 
     def reading_context(self, topic, question):
         wiki = self.capture(topic)
@@ -223,6 +247,133 @@ class TopicWiki:
 
     # ---------- capture triggers ----------
 
+    @staticmethod
+    def directory_nodes(wiki):
+        """Keep authored nodes visible while retiring the old automatic Q&A folders."""
+        nodes = wiki.get("map_nodes", {})
+
+        def legacy_id(parent, title):
+            return digest(json.dumps((parent, title), ensure_ascii=False).encode())[:32]
+
+        folders = {uid for uid, node in nodes.items() if not node["parent"]
+                   and uid == legacy_id("direction", node["title"].casefold())}
+        hidden = folders | {uid for uid, node in nodes.items() if node["parent"] in folders
+                            and uid == legacy_id(node["parent"], node["title"])}
+        return {uid: dict(node, parent="" if node["parent"] in hidden else node["parent"])
+                for uid, node in nodes.items() if uid not in hidden}
+
+    def map_edit(self, wiki, params):
+        nodes = wiki.setdefault("map_nodes", {})
+        target = params.get("entry_id", "")
+        action = params["action"]
+        if action == "map_seen":
+            record = self.worker.get("topic", wiki["topic_id"])
+            record["wiki_unread"] = False
+            self.worker.put("topic", wiki["topic_id"], record)
+            return
+        if action in ("map_accept", "map_dismiss"):
+            proposal = wiki.get("map_proposals", {}).pop(target, None)
+            if not proposal:
+                raise missing("This proposal was not found.")
+            if action == "map_accept":
+                self.map_edit(wiki, dict(proposal, confirmed=params.get("confirmed")))
+            return
+        if target and target not in nodes:
+            raise missing("This map node was not found.")
+        text = clip(params.get("text"))
+        if action == "map_add" and text:
+            uid = self.identifier()
+            nodes[uid] = dict(id=uid, parent=target, title=text, anchors=[])
+        elif action == "map_rename" and text:
+            if target:
+                nodes[target]["title"] = text
+            else:
+                wiki["map_title"] = text
+        elif action == "map_remove" and target and params.get("confirmed") is True:
+            parent = nodes[target]["parent"]
+            drop = {target}
+            for child in nodes.values():
+                if child["parent"] == target and not params.get("subtree"):
+                    child["parent"] = parent
+            if params.get("subtree"):
+                while True:
+                    extra = {n["id"] for n in nodes.values() if n["parent"] in drop} - drop
+                    if not extra:
+                        break
+                    drop.update(extra)
+            wiki["map_hidden"] = sorted(set(wiki.get("map_hidden", [])) | drop)
+            for uid in drop:
+                del nodes[uid]
+        else:
+            raise invalid("Check the node, text and deletion confirmation.")
+
+    def map_sources(self, topic, nodes, extra=()):
+        ids = {a for n in nodes.values() for a in n["anchors"]} | set(extra)
+        if not ids:
+            return {}
+        papers = {p["paper_id"]: p["title"] for p in self.worker.rows("paper") if topic in p["topic_ids"]}
+        sources = {}
+        boundaries = {}
+        for row in self.worker.rows("anchor"):
+            a = row["value"]
+            if row.get("topic_id") != topic or a["anchor_id"] not in ids:
+                continue
+            location = a.get("location", {})
+            section = "unknown"
+            pid, version = location.get("passage_id"), a.get("source_version_id")
+            if a.get("read_scope") == "abstract":
+                section = "abstract"
+            elif pid and version and location.get("page") and a.get("quote") and a.get("paper_id") in papers:
+                db = self.worker.db
+                passage = db.execute("""SELECT p.text FROM passage_lookup l JOIN paper_passages p ON p.rowid=l.fts_rowid
+                                        WHERE l.version_id=? AND l.passage_id=? AND l.page=?""",
+                                     (version, pid, location["page"])).fetchone()
+                if passage and a["quote"] in passage[0]:
+                    if version not in boundaries:
+                        rows = db.execute("""SELECT l.passage_id,l.page,p.text FROM passage_lookup l JOIN paper_passages p
+                                             ON p.rowid=l.fts_rowid WHERE l.version_id=? AND l.page <= 2
+                                             ORDER BY l.page,l.ordinal""", (version,)).fetchall()
+                        offsets = body_passage_starts(rows)
+                        has_abstract = bool(offsets)
+                        if not offsets:
+                            # Without a marked abstract, withhold front matter up to a recognizable body heading.
+                            for ident, page, text in rows:
+                                match = re.search(r"\b(?:introduction|methods|methodology)\b|引言|绪论|研究方法", text, re.I)
+                                if match:
+                                    offsets[ident] = match.end()
+                                    break
+                                offsets[ident] = len(text)
+                        boundaries[version] = offsets, has_abstract
+                    offsets, has_abstract = boundaries[version]
+                    start = passage[0].find(a["quote"])
+                    if start >= offsets.get(pid, 0):
+                        section = "body"
+                    else:
+                        section = "abstract_or_front_matter" if has_abstract else "front_matter"
+            sources[a["anchor_id"]] = dict(paper_id=a.get("paper_id"), title=papers.get(a.get("paper_id"), ""), quote=a.get("quote", ""),
+                                          page=location.get("page"), scope=a.get("read_scope"), section=section)
+        return sources
+
+    @staticmethod
+    def documents(nodes, sources):
+        """Build document pages without rewriting the user's saved entries or evidence."""
+        pages = {}
+        for node in nodes.values():
+            if not node["anchors"]:
+                continue
+            refs = [sources.get(anchor, {}) for anchor in node["anchors"]]
+            paper_ids = {ref.get("paper_id") for ref in refs}
+            if None in paper_ids:
+                key, title = "unresolved", ""
+            elif len(paper_ids) == 1:
+                key, title = next(iter(paper_ids)), refs[0]["title"]
+            else:
+                key, title = "synthesis", ""
+            siblings = pages.setdefault(node["parent"], {})
+            page = siblings.setdefault(key, {"id": key, "title": title, "entries": []})
+            page["entries"].append(node["id"])
+        return {parent: list(group.values()) for parent, group in pages.items()}
+
     def capture(self, topic):
         """Turn new topic activity into entries. Runs inside the caller's lock and transaction."""
         wiki = self.load(topic)
@@ -230,13 +381,28 @@ class TopicWiki:
         seen = set(wiki["observed"])
         before = len(wiki["observed"])
         added = 0
+        new_turns = []
+        reviews = {a["id"]: a["review"] for a in material["answers"] if a["review"]}
         for key, kind, origin, text, anchors in self.observations(topic, material, seen):
+            if origin == "qa":
+                turn_id, _, index = key[3:].rsplit(":", 2)
+                new_turns.append(turn_id)
             seen.add(key)
             wiki["observed"].append(key)
             text = clip(text)
-            if text and not any(e["text"] == text for e in wiki["entries"]):
+            if text and text not in wiki.get("forgotten_texts", []) and not any(e["text"] == text for e in wiki["entries"]):
                 wiki["entries"].append(self.entry(kind, text, list(dict.fromkeys(anchors)), origin))
+                if origin == "qa" and kind == "finding":
+                    entry = wiki["entries"][-1]
+                    review = reviews[turn_id]
+                    entry["home_receipt"] = {"model": review["model"], "created": entry["updated_at"],
+                                             "run_id": turn_id, "reason": review["findings"][index], "text": text}
                 added += 1
+        if new_turns:
+            record = self.worker.get("topic", topic)
+            record["wiki_unread"] = True
+            record["wiki_turns"] = list(dict.fromkeys(record.get("wiki_turns", []) + new_turns))
+            self.worker.put("topic", topic, record)
         overflow = len(wiki["entries"]) - MAX_ENTRIES
         if overflow > 0:  # forget the oldest captured entries first; user, chat and pinned entries stay
             drop = [e["entry_id"] for e in wiki["entries"] if e["origin"] in CAPTURED and not e["pinned"]][:overflow]
@@ -275,8 +441,30 @@ class TopicWiki:
                         issue={"reason": "PROCESS_INTERRUPTED", "retryable": True, "next_action": "retry"})
             self.store(wiki)
         model = self.model()
-        hidden = ("fingerprint", "generator", "observed", "captured_since")
+        hidden = ("forgotten_texts", "fingerprint", "generator", "observed", "captured_since")
         result = {k: v for k, v in wiki.items() if k not in hidden}
+        nodes = self.directory_nodes(wiki)
+        result["map_nodes"] = nodes
+        candidates = [e for e in wiki["entries"] if e["kind"] == "finding" and e["anchor_ids"]]
+        result["map_sources"] = self.map_sources(topic, nodes,
+                                                 (a for e in candidates for a in e["anchor_ids"]))
+        result["home_points"] = []
+        for entry in candidates:
+            anchors = entry["anchor_ids"]
+            sources = [result["map_sources"].get(a, {}) for a in anchors]
+            if not any(s.get("section") == "body" for s in sources):
+                continue
+            if not entry.get("home_receipt") or entry["origin"] not in ("summary", "qa"):
+                continue
+            result["home_points"].append(entry["entry_id"])
+            if len(result["home_points"]) == 3:
+                break
+        result["documents"] = self.documents(nodes, result["map_sources"])
+        result["history"] = [{"created": created, "changes": json.loads(changes)} for created, changes in
+                             self.worker.db.execute("SELECT created,changes FROM wiki_history WHERE topic=? ORDER BY id DESC LIMIT 20", (topic,))]
+        result["integrity_issues"] = [node["title"] for node in nodes.values()
+                                      if (node["parent"] and node["parent"] not in nodes) or
+                                      any(a not in result["map_sources"] for a in node["anchors"])]
         result.update(
             sources={"papers": len(material["papers"]), "notes": len(material["notes"]),
                      "answers": len(material["answers"]), "findings": len(material["findings"])},
@@ -325,6 +513,10 @@ class TopicWiki:
         wiki = self.load(topic)
         action = params.get("action")
         entries = wiki["entries"]
+        if isinstance(action, str) and action.startswith("map_"):
+            self.map_edit(wiki, params)
+            self.store(wiki)
+            return self.view(topic, wiki)
         if action == "add":
             text = clip(params.get("text"))
             kind = params.get("kind", "finding")
@@ -337,6 +529,8 @@ class TopicWiki:
                 raise missing("This Wiki entry was not found.")
             if action == "remove":
                 entries.remove(entry)
+                wiki["forgotten_texts"] = sorted(set(wiki.get("forgotten_texts", [])) | {entry["text"]})
+                wiki.get("pending_removals", {}).pop(entry["entry_id"], None)
             elif action == "update":
                 text = clip(params.get("text"))
                 if not text:
@@ -401,7 +595,13 @@ class TopicWiki:
             model = None
         try:
             if model:
-                draft = self.model_summary(model, material, kept, captured)
+                with host.lock:
+                    anchor_ids = {a for e in entries for a in e["anchor_ids"]}
+                    for answer in material["answers"]:
+                        for sentence in answer["sentences"]:
+                            anchor_ids.update(sentence["anchor_ids"])
+                    evidence = self.map_sources(topic, {}, anchor_ids)
+                draft = self.model_summary(model, dict(material, home_evidence=evidence), kept, captured)
             else:  # nothing rewrites entries offline, so earlier summary entries stay
                 draft = local_summary(material, [e for e in entries if e not in kept], has_focus=any(
                     e["kind"] == "focus" for e in entries))
@@ -414,12 +614,21 @@ class TopicWiki:
         for answer in material["answers"]:
             for sentence in answer["sentences"]:
                 known.update(sentence["anchor_ids"])
+        questions = {a["question"].casefold() for a in material["answers"]}
         fresh = []
+        run_id = self.identifier()
         for row in draft["entries"]:
             text = clip(row.get("text"))
+            if text.casefold() in questions and row.get("kind") != "open_question" and "entry" not in row:
+                continue
+            if row.get("kind") == "finding" and not any(a in known for a in row.get("anchor_ids", []) if isinstance(a, str)):
+                continue
             if text and row.get("kind") in KINDS and not any(e["text"] == text for e in kept + fresh):
                 anchors = [a for a in row.get("anchor_ids", []) if isinstance(a, str) and a in known]
                 fresh.append(row["entry"] if "entry" in row else self.entry(row["kind"], text, list(dict.fromkeys(anchors)), "summary"))
+                if model and row.get("homepage") is True and row["kind"] == "finding" and anchors and len(anchors) == len(row.get("anchor_ids", [])):
+                    fresh[-1]["home_receipt"] = {"model": model["model"], "run_id": run_id, "created": self.now(),
+                                                  "reason": clip(row.get("reason")), "text": text}
         with host.lock:
             if host.closing.is_set():
                 return
@@ -431,9 +640,11 @@ class TopicWiki:
                 current_kept = [e for e in wiki["entries"] if e["pinned"] or e["origin"] in ("user", "chat")]
                 wiki.update(
                     revision=self.identifier(), status="ready", generated_at=self.now(),
+                    home_selection="model" if model else "local",
                     headline=clip(draft["headline"], 300),
                     summary=[clip(p, 1200) for p in draft["summary"] if clip(p)][:4],
-                    entries=(current_kept + [e for e in later if e not in current_kept] + fresh)[:MAX_ENTRIES],
+                    entries=(current_kept + [e for e in later if e not in current_kept] +
+                             [e for e in fresh if e["text"] not in wiki.get("forgotten_texts", [])])[:MAX_ENTRIES],
                     fingerprint=self.fingerprint(material), captured_since=max(0, wiki["captured_since"] - previous["captured_since"]),
                     generator={"kind": "model", "model": model["model"], "endpoint": model["endpoint"]} if model
                     else {"kind": "local"},
@@ -449,6 +660,8 @@ class TopicWiki:
             model = self.model()
             material = self.material(topic)
             wiki = self.load(topic)
+            material["personal_preferences"] = host.personal_context(wiki["thread"][-1]["text"], wiki=True)
+            material["allow_wiki_edits"] = host.user_profile()["wiki_access"] == "edit"
         message = wiki["thread"][-1]["text"]
         try:
             answer = self.model_reply(model, material, wiki, message) if model else local_reply(wiki, message)
@@ -462,6 +675,9 @@ class TopicWiki:
                 wiki = self.load(topic)
                 changes = self.apply(wiki, answer.get("changes", []))
                 reply = clip(answer.get("reply"), 4000) or ("已更新 Wiki。" if CJK.search(message) else "Wiki updated.")
+                if answer.get("changes") and host.user_profile()["wiki_access"] == "read":
+                    reply = ("当前仅允许回答，Wiki 条目未修改。" if CJK.search(message)
+                             else "Wiki chat is read-only. No entries were changed.")
                 wiki["thread"].append({"message_id": self.identifier(), "role": "assistant", "text": reply,
                                        "created_at": self.now(), **({"changes": changes} if changes else {})})
                 wiki["thread"] = wiki["thread"][-100:]
@@ -472,6 +688,8 @@ class TopicWiki:
                 self.store(wiki)
 
     def apply(self, wiki, changes):
+        if self.worker.user_profile()["wiki_access"] == "read":
+            return []
         applied = []
         entries = wiki["entries"]
         for change in changes[:6] if isinstance(changes, list) else []:
@@ -480,6 +698,17 @@ class TopicWiki:
             op = change.get("op")
             text = clip(change.get("text"))
             target = next((e for e in entries if e["entry_id"] == change.get("entry_id")), None)
+            if op in ("map_add", "map_rename", "map_remove"):
+                uid = change.get("entry_id", "")
+                if not isinstance(uid, str) or (uid and uid not in wiki.get("map_nodes", {})):
+                    continue
+                proposal = dict(action=op, entry_id=uid, text=text)
+                if op == "map_remove" or (op == "map_rename" and not uid):
+                    if uid or op == "map_rename":
+                        wiki.setdefault("map_proposals", {})[self.identifier()] = proposal
+                elif text:
+                    self.map_edit(wiki, proposal)
+                continue
             if op == "add" and text and not any(e["text"] == text for e in entries):
                 kind = change.get("kind") if change.get("kind") in KINDS else "preference"
                 entry = self.entry(kind, text, [], "chat", pinned=True)
@@ -489,8 +718,7 @@ class TopicWiki:
                 applied.append({"op": "update", "entry_id": target["entry_id"], "text": text, "before": target["text"]})
                 target.update(text=text, origin="chat", pinned=True, updated_at=self.now())
             elif op == "remove" and target:
-                entries.remove(target)
-                applied.append({"op": "remove", "entry_id": target["entry_id"], "text": target["text"]})
+                wiki.setdefault("pending_removals", {})[target["entry_id"]] = target["text"]
         return applied
 
     # ---------- model calls ----------
@@ -521,7 +749,15 @@ class TopicWiki:
             '"entries":[{"kind":"focus|paper|finding|preference|open_question","text":"one self-contained sentence",'
             '"anchor_ids":["anchor ID"]}]}. Consolidate observations: merge duplicates, keep one paper entry per paper, '
             "keep their anchor IDs, and write at most 24 entries. Cite only anchor IDs present in the input. "
-            "user_entries were confirmed by the user: respect them and do not repeat them."
+            "user_entries were confirmed by the user: respect them and do not repeat them. "
+            "Treat each question as context. Skip fragments, search commands, and answers without evidence. "
+            "Compare answers with prior findings by meaning. Merge paraphrases into one standalone claim, "
+            "retain distinct supporting passages and experimental conditions, and distinguish conflicting results. "
+            "Include only conclusions useful for the topic and supported by the quoted evidence. "
+            "Read all sentences in each turn, including evidence gaps. Keep specific unresolved research questions as open_question entries. Choose zero to three findings for the topic homepage. For those entries add homepage:true "
+            "and reason explaining their relevance to the user's research question. Name the subject, "
+            "report concrete results or limitations, and keep all qualifying conditions. Prefer complementary "
+            "findings backed by original body passages. Never choose an abstract-only finding."
         )
 
         def parse(result):
@@ -552,11 +788,20 @@ class TopicWiki:
                 raise ValueError
             return result
 
+        system += " If allow_wiki_edits is false, answer in read-only mode, with no changes or claims of edits."
+        system += (" For research map changes use map_add, map_rename or map_remove with entry_id as the target "
+                   "(empty string for root), and text. Delete and root rename requests are proposals for review. "
+                   "Do not say they have been completed.")
+        system += (" Organize the Wiki as browsable documents. Reuse an existing research question or direction "
+                   "as parent; put findings about the same paper together. Update an existing finding when possible. "
+                   "Keep multi-paper comparisons together, retain the exact supporting sources and conditions. "
+                   "Write each finding as a self-contained paragraph naming its subject. Avoid creating a sibling "
+                   "for every sentence, generic greetings or repeated restatements.")
         history = [{"role": m["role"], "text": m["text"]} for m in wiki["thread"][-THREAD_CONTEXT - 1:-1]]
         return self.request(model, system, {
             "wiki": {"headline": wiki["headline"], "summary": wiki["summary"],
                      "entries": [{k: e[k] for k in ("entry_id", "kind", "text")} for e in wiki["entries"]]},
-            "material": material, "conversation": history, "message": message,
+            "map_nodes": list(wiki.get("map_nodes", {}).values()), "material": material, "conversation": history, "message": message,
         }, parse)
 
 
@@ -566,8 +811,6 @@ def topic_name(material):
     """Topics created from a PDF are often named after the file; describe the research instead."""
     title = material["title"].strip()
     if not title or re.search(r"\.(pdf|bib|ris|json)$", title, re.I):
-        if material["answers"]:
-            return material["answers"][0]["question"]
         if material["papers"]:
             return material["papers"][0]
     return title
@@ -579,21 +822,16 @@ def local_summary(material, previous, has_focus=False):
     name = name or ("未命名主题" if zh else "Untitled topic")
     papers, notes, answers, findings = (material[k] for k in ("papers", "notes", "answers", "findings"))
     shown = ("、" if zh else ", ").join(papers[:3])
-    questions = [a["question"] for a in answers[-3:]]
     summary = []
     if zh:
         headline = f"这个主题研究「{name}」，目前汇集 {len(papers)} 篇论文和 {len(answers)} 轮问答。"
         summary.append(f"主题中的论文包括 {shown}。" if papers else "主题中还没有论文。")
-        if questions:
-            summary.append("最近关注的问题：" + "；".join(f"「{q}」" for q in questions) + "。")
         if notes or findings:
             summary.append(f"已保存 {len(notes)} 条笔记和 {len(findings)} 条发现。")
     else:
         plural = lambda n, word: f"{n} {word}{'' if n == 1 else 's'}"  # noqa: E731
         headline = f"Research on “{name}”, drawing on {plural(len(papers), 'paper')} and {plural(len(answers), 'conversation turn')}."
         summary.append(f"The topic’s papers include {shown}." if papers else "No papers have been added to this topic yet.")
-        if questions:
-            summary.append("Recent questions: " + "; ".join(f"“{q}”" for q in questions) + ".")
         if notes or findings:
             summary.append(f"You have saved {plural(len(notes), 'note')} and {plural(len(findings), 'finding')}.")
     entries = [] if has_focus else [{"kind": "focus", "text": name, "anchor_ids": []}]
