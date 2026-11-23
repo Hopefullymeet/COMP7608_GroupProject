@@ -721,14 +721,12 @@ class ContractTest(unittest.TestCase):
                          "requested_scope": "abstract"}],
         })
         aid = self.client.finish(reading["task_id"])["result"]["sentences"][0]["anchor_ids"][0]
-        # The finished turn is captured by the task trigger, before anyone opens the Wiki.
-        db = sqlite3.connect(self.dir / "workspace.sqlite3")
-        try:
-            stored = json.loads(db.execute("SELECT data FROM records WHERE kind = 'topic_wiki'").fetchone()[0])
-        finally:
-            db.close()
-        qa = next(e for e in stored["entries"] if e["origin"] == "qa")
-        self.assertEqual((qa["kind"], qa["anchor_ids"]), ("finding", [aid]))
+        # A fixture answer without a model review remains in the session.
+        turn = self.client.result("session.get", **session)["turns"][0]
+        self.assertIn(aid, turn["answer"]["sentences"][0]["anchor_ids"])
+        wiki = self.client.result("wiki.get", **topic)
+        self.assertFalse(any(e["origin"] == "qa" for e in wiki["entries"]))
+        self.assertEqual(wiki["home_points"], [])
 
         started = self.client.result("wiki.refresh", **topic, operation_id="wiki-refresh")
         self.assertEqual(started["status"], "generating")
@@ -737,7 +735,7 @@ class ContractTest(unittest.TestCase):
         self.assertEqual(ready["new_since_summary"], 0)
         self.assertEqual(ready["sources"], {"papers": 1, "notes": 0, "answers": 1, "findings": 0})
         self.assertIn("Research evidence", ready["headline"])
-        self.assertEqual({e["origin"] for e in ready["entries"]}, {"paper", "qa", "summary"})
+        self.assertEqual({e["origin"] for e in ready["entries"]}, {"paper", "summary"})
 
         self.client.result("wiki.chat", **topic, operation_id="wiki-remember",
                            text="Remember that I only study biomedical datasets")
@@ -1042,7 +1040,7 @@ class BibliographyContractTest(unittest.TestCase):
             self.assertEqual(study["metadata"], {
                 "title": "Reading AI & Evidence", "authors": ["García, Ada", "Research and Development"],
                 "venue": "Evidence Benchmarks", "venue_type": "conference", "year": 2025,
-                "doi": "10.1234/evidence", "provider": "BibTeX",
+                "doi": "10.1234/evidence", "provider": "BibTeX", "date": "2025", "item_type": "paper-conference",
             })
             self.assertEqual(preprint["metadata"]["arxiv_id"], "2501.01234v2")
             self.assertEqual(invalid["status"], "invalid")
