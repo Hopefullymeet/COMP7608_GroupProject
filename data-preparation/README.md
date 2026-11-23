@@ -84,4 +84,4 @@ SPECTER and SciBERT can be compared within the shared SciDocs experiments in SPE
 
 ## Local Files Excluded from Git
 
-Chinese review copies, the ZIP backup, and `.DS_Store` files are retained locally and excluded by ignore rules. They are not part of the submission. Original source materials and existing review history are preserved.
+The ZIP backup and `.DS_Store` files are retained locally and excluded by ignore rules. The three Chinese review copies are tracked as historical backups, with their original filenames and contents preserved. Original source materials and existing review history are preserved.

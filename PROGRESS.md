@@ -6,7 +6,7 @@ Updated 2026-11-23. The project is in implementation. The test paper collection 
 
 - Submitted the Group 52 proposal and completed the [MVP design](docs/PaperTrace_MVP_Design.md) and [project, technical, and design handoff package](docs/deliverables/PaperTrace_Handoff_20261109/).
 - The visual prototype (`visual-prototype`) passed review. It covers discovery, reading questions, evidence locations, comparison, and workspace pages. It uses sample data. See the [prototype instructions](prototype/AGENTS.md) for its scope.
-- Translated pending test data documentation, review explanations, historical record text, and generated checklist text into English. Local backups are excluded from Git. IDs, labels, source excerpts, and review status fields are preserved.
+- Translated pending test data documentation, review explanations, historical record text, and generated checklist text into English. The ZIP backup is excluded from Git. The three original Chinese review copies are also included as historical backups. IDs, labels, source excerpts, and review status fields are preserved.
 - Included all 18 original PDFs in `data-preparation/corpus/` on `test/data-preparation`, alongside the existing page text and source records.
 
 ## In Progress
