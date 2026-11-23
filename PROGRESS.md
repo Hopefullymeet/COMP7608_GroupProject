@@ -165,3 +165,5 @@ Reading answers now resolve version IDs to paper aliases or titles and localize 
 - 首页采用轮播研究问句和整框可点击的新建主题入口。弹窗填写主题名称和可选起始问题。浏览器已走查轮播、减少动态效果、窄屏取消及创建流程，macOS 调试包已构建。
 
 - 桌面首页的新建主题入口加宽至 520px，侧栏新建主题也先进入轮播首页。已重启 macOS 客户端，在桌面窗口确认入口。
+
+- 新建主题弹窗恢复可选的起始文献，沿用原有 PDF 选择、拖入和随主题导入流程。已在 macOS 桌面弹窗确认入口。
