@@ -167,3 +167,5 @@ Reading answers now resolve version IDs to paper aliases or titles and localize 
 - 桌面首页的新建主题入口加宽至 520px，侧栏新建主题也先进入轮播首页。已重启 macOS 客户端，在桌面窗口确认入口。
 
 - 新建主题弹窗恢复可选的起始文献，沿用原有 PDF 选择、拖入和随主题导入流程。已在 macOS 桌面弹窗确认入口。
+
+- 主题与会话搜索移至侧栏「主题」标题旁，默认收起，按 Esc 可清除筛选并收起。已核对 macOS 客户端首页。

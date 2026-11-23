@@ -1,5 +1,5 @@
 import { useLanguage } from '../i18n'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { hasMessages, sessionsOf, useStore, type Page } from '../data/store'
 import { Icon } from './Icon'
 import { LanguagePicker } from './LanguagePicker'
@@ -36,6 +36,8 @@ export function Sidebar() {
   const [editing, setEditing] = useState<{ kind: 'topic' | 'session'; topicId: string; id: string; title: string }>()
   const [renameError, setRenameError] = useState('')
   const [savingName, setSavingName] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchButton = useRef<HTMLButtonElement>(null)
   const [filter, setFilter] = useState('')
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [allTopics, setAllTopics] = useState(false)
@@ -75,13 +77,8 @@ export function Sidebar() {
         </span>
       </button>
 
-      <label className="side-search">
-        <Icon name="search" size={15} />
-        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={tr('Search')} aria-label={tr('Search topics and sessions')} />
-      </label>
-
       <nav className="side-nav" aria-label={tr('Workspace')}>
-        <button className="side-item" onClick={() => { setFilter(''); act.newTopic() }}>
+        <button className="side-item" onClick={() => { setFilter(''); setSearchOpen(false); act.newTopic() }}>
           <Icon name="plus" size={15} /> <span className="grow">{tr('New topic')}</span>
         </button>
         {PAGES.filter(p=>!state.mainline || state.mainline.pages?.includes(p.page)).map((l) => (
@@ -94,7 +91,19 @@ export function Sidebar() {
       </nav>
 
       <nav className="side-section" aria-label={tr('Topics')}>
-        <div className="side-label">{tr('Topics')}</div>
+        <div className="side-label side-topic-heading">
+          {tr('Topics')}
+          <button type="button" ref={searchButton} className="icon-btn sm" aria-label={tr('Search topics and sessions')}
+            title={tr('Search topics and sessions')} aria-expanded={searchOpen}
+            onClick={() => { setFilter(''); setSearchOpen(!searchOpen) }}>
+            <Icon name={searchOpen ? 'x' : 'search'} size={14} />
+          </button>
+        </div>
+        {searchOpen && <label className="side-search">
+          <input autoFocus value={filter} onChange={(e) => setFilter(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Escape') { setSearchOpen(false); setFilter(''); searchButton.current?.focus() } }}
+            placeholder={tr('Search topics and sessions')} aria-label={tr('Search topics and sessions')} />
+        </label>}
         {shownTopics.map((t) => {
           const open = isOpen(t.id)
           const all = sessionsOf(state, t.id).filter((s) => !q || match(t.title) || match(s.title))
