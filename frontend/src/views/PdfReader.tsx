@@ -43,10 +43,10 @@ type CitationTarget = { quote: string; passage?: string; anchor: string; onMissi
 
 type Tool = 'select' | 'region' | 'ink'
 
-function PdfSheet({ document, scope, page, width, aspectRatio, marks, target, citation, selection, tool,
+function PdfSheet({ document, scope, page, width, zoom, rasterZoom, aspectRatio, marks, target, citation, selection, tool,
   onMeasure, setSelection, onRegion, onInk }: {
   document: PDFDocumentProxy; scope: { topic_id: string; source_version_id: string; draft_id?: string }
-  page: number; width: number; aspectRatio: number; marks: Mark[]; target?: Rect; citation?: CitationTarget
+  page: number; width: number; zoom: number; rasterZoom: number; aspectRatio: number; marks: Mark[]; target?: Rect; citation?: CitationTarget
   selection?: Selection; tool: Tool; onMeasure: (page: number, ratio: number) => void
   setSelection: (selection?: Selection) => void; onRegion: () => void; onInk: (page: number, points: Point[]) => void
 }) {
@@ -66,35 +66,56 @@ function PdfSheet({ document, scope, page, width, aspectRatio, marks, target, ci
   const drawingPointer = useRef<number>()
 
   useEffect(() => {
-    if (!document || !width || !canvas.current || !layer.current) return
-    const raster = canvas.current
     const overlay = layer.current
+    if (!width || !overlay) return
     let active = true
-    let cancelRaster: (() => void) | undefined
-    let cancelText: (() => void) | undefined
+    let text: TextLayer | undefined
     setReady(false)
     setError('')
-    void document.getPage(page).then(async (pdfPage) => {
+    void document.getPage(page).then(async pdfPage => {
       if (!active) return
       const viewport = pdfPage.getViewport({ scale: width / pdfPage.getViewport({ scale: 1 }).width })
       setSize({ width: viewport.width, height: viewport.height })
       onMeasure(page, viewport.width / viewport.height)
-      const ratio = Math.min(window.devicePixelRatio || 1, 2)
-      raster.width = Math.ceil(viewport.width * ratio)
-      raster.height = Math.ceil(viewport.height * ratio)
-      overlay.replaceChildren()
-      overlay.style.setProperty('--total-scale-factor', String(viewport.scale))
       const textContentSource = await pdfPage.getTextContent()
       if (!active) return
-      const rendering = pdfPage.render({ canvas: raster, viewport, transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0] })
-      cancelRaster = () => rendering.cancel()
-      const text = new TextLayer({ textContentSource, container: overlay, viewport })
-      cancelText = () => text.cancel()
-      await Promise.all([rendering.promise, text.render()])
+      overlay.replaceChildren()
+      overlay.style.setProperty('--total-scale-factor', String(viewport.scale))
+      text = new TextLayer({ textContentSource, container: overlay, viewport })
+      await text.render()
       if (active) setReady(true)
     }).catch(() => { if (active) setError('This PDF page could not be rendered.') })
-    return () => { active = false; cancelRaster?.(); cancelText?.() }
+    return () => { active = false; text?.cancel() }
   }, [document, page, width, onMeasure])
+
+  useEffect(() => {
+    const visible = canvas.current
+    if (!width || !visible) return
+    let active = true
+    let cancel: (() => void) | undefined
+    void document.getPage(page).then(async pdfPage => {
+      if (!active) return
+      const viewport = pdfPage.getViewport({ scale: width * rasterZoom / pdfPage.getViewport({ scale: 1 }).width })
+      const density = Math.min(window.devicePixelRatio || 1, 2)
+      const buffer = visible.ownerDocument.createElement('canvas')
+      buffer.width = Math.ceil(viewport.width * density)
+      buffer.height = Math.ceil(viewport.height * density)
+      const render = pdfPage.render({ canvas: buffer, viewport, transform: [density, 0, 0, density, 0, 0] })
+      cancel = () => render.cancel()
+      try {
+        await render.promise
+        if (!active) return
+        const context = visible.getContext('2d')
+        if (!context) throw new Error('Canvas unavailable')
+        visible.width = buffer.width
+        visible.height = buffer.height
+        context.drawImage(buffer, 0, 0)
+      } finally {
+        buffer.width = buffer.height = 0
+      }
+    }).catch(() => { if (active) setError('This PDF page could not be rendered.') })
+    return () => { active = false; cancel?.() }
+  }, [document, page, width, rasterZoom])
   const [citationBox, setCitationBox] = useState<Rect>()
   useLayoutEffect(() => {
     setCitationBox(undefined)
@@ -167,7 +188,7 @@ function PdfSheet({ document, scope, page, width, aspectRatio, marks, target, ci
   }
   return (
       <div className={'pt-reader-page ' + (tool !== 'select' ? 'pt-reader-drawing' : '')} ref={surface}
-        style={size ?? { width: width || undefined, aspectRatio }} onPointerDown={start} onPointerMove={move}
+        style={{ ...(size ?? { width, aspectRatio }), transformOrigin: 'top left', transform: `scale(${zoom})` }} onPointerDown={start} onPointerMove={move}
         onPointerUp={(e) => { end(e); if (tool === 'select') window.requestAnimationFrame(captureText) }}
         onPointerCancel={() => { drawingPointer.current = undefined; strokes.current = []; setDrawing([]) }}
         onKeyUp={captureText}>
@@ -232,6 +253,11 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
   const [document, setDocument] = useState<PDFDocumentProxy>()
   const [width, setWidth] = useState(0)
   const [zoom, setZoom] = useState(1)
+  const [rasterZoom, setRasterZoom] = useState(1)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setRasterZoom(zoom), 200)
+    return () => window.clearTimeout(timer)
+  }, [zoom])
   const [aspectRatio, setAspectRatio] = useState(0)
   const [ratios, setRatios] = useState<Record<number, number>>({})
   const [ocrText, setOcrText] = useState<string>()
@@ -622,10 +648,11 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
         {document && width > 0 && Array.from({ length: document.numPages }, (_, index) => {
           const number = index + 1
           const ratio = ratios[number] ?? aspectRatio
-          const pageWidth = Math.max(1, width - 2 * pageInset) * zoom
+          const baseWidth = Math.max(1, width - 2 * pageInset)
+          const pageWidth = baseWidth * zoom
           return <div className="pt-pdf-sheet" key={number} style={{ width: pageWidth, height: ratio > 0 ? pageWidth / ratio : undefined }}>
             {(number >= renderRange[0] && number <= renderRange[1]) &&
-              <PdfSheet document={document} scope={scope} page={number} width={pageWidth} aspectRatio={ratio}
+              <PdfSheet document={document} scope={scope} page={number} width={baseWidth} zoom={zoom} rasterZoom={rasterZoom} aspectRatio={ratio}
                 citation={page === number ? citation : undefined} marks={marks.filter((mark) => mark.page === number)} target={highlight?.page === number ? highlight.rect : undefined}
                 selection={selection?.page === number ? selection : undefined} tool={tool} onMeasure={measure}
                 setSelection={setSelection} onRegion={() => setTool('select')}
