@@ -15,7 +15,7 @@ type Workspace = {
   refresh: () => void
   report: (error: unknown) => void
   write: <M extends WriteMethod>(method: M, params: Payload<Methods[M][0]>) => Promise<Methods[M][1]>
-  prepare: (task: WorkspaceTask, onPrepared?: () => void) => Promise<void>
+  prepare: (task: WorkspaceTask, onPrepared?: () => void, startImmediately?: boolean) => Promise<void>
 }
 const Context = createContext<Workspace | null>(null)
 export function useWorkspace() {
@@ -99,7 +99,7 @@ export function WorkspaceProvider({
   }
   const busy = Boolean(task.task || task.busy || task.confirmation || pending)
   return (
-    <Context.Provider value={{ api, tick, report, refresh, write, prepare: async (input, onPrepared) => { await task.prepare(input, { onPrepared }) }, demo, busy }}>
+    <Context.Provider value={{ api, tick, report, refresh, write, prepare: async (input, onPrepared, startImmediately) => { await task.prepare(input, { onPrepared, startImmediately }) }, demo, busy }}>
       {children}
       {task.confirmation && (
         <Dialog title={tr('Confirm task scope')} onClose={task.dismiss}>

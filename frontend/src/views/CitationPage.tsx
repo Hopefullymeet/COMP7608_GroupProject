@@ -7,7 +7,6 @@ import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import type { Decision, ExportFormat, Finding, Report } from '../api/citation'
 import { EvidenceLink } from './Notes'
 import { PdfAudit } from './PdfAudit'
-import { TopicSelect } from './ResearchPages'
 
 function Manuscripts({ topic }: { topic: string }) {
   const { tr } = useLanguage()
@@ -426,25 +425,26 @@ function Manuscripts({ topic }: { topic: string }) {
   )
 }
 export function CitationPage() {
-  const { demo } = useWorkspace()
+  const { demo, busy } = useWorkspace()
   const { tr } = useLanguage()
-  const { state } = useStore(),
-    [topic, setTopic] = useState(
-      (state.route.view === 'check' && state.route.topicId) || state.topics[0]?.id || '',
-    )
-  return (
-    <div className="page">
-      <PageHead
-        trace
-        title={tr('Citation check')}
-        icon="shield"
-        sub={tr('Check a manuscript against its selected sources')}
-      >
-        <TopicSelect value={topic} onChange={setTopic} />
-      </PageHead>
-      <div className="page-body scroll">
-        {topic ? (demo ? <Manuscripts topic={topic} key={topic} /> : <PdfAudit topic={topic} key={topic} />) : <p>{tr('Select a topic to add a manuscript.')}</p>}
-      </div>
+  const { state, act } = useStore()
+  const route = state.route.view === 'check' ? state.route : undefined
+  const [topic, setTopic] = useState(route?.draftId ? route.topicId ?? '' : '')
+  const selected = state.topics.find(t => t.id === topic)
+  return <div className="page">
+    <PageHead sub={tr('Check a manuscript against its selected sources')} trace title={tr('Citation check')} icon="shield">
+      {selected && <button className="ghost-btn" disabled={busy} onClick={() => setTopic('')}>
+        {selected.title} <Icon name="chevronDown" size={14}/></button>}
+    </PageHead>
+    <div className="page-body scroll">
+      {!selected ? <section className="audit-chooser">
+        <h2>{tr('Choose a topic to begin')}</h2>
+        <div className="audit-options">{state.topics.map(t => <button key={t.id}
+          className="audit-option" onClick={() => setTopic(t.id)}>
+          <Icon name="book" size={19}/><span>{t.title}</span><span aria-hidden="true">›</span>
+        </button>)}</div>
+        {!state.topics.length && <button className="ghost-btn" onClick={() => act.newTopic()}>{tr('New topic')}</button>}
+      </section> : demo ? <Manuscripts topic={topic} key={topic}/> : <PdfAudit topic={topic} key={topic}/>}
     </div>
-  )
+  </div>
 }

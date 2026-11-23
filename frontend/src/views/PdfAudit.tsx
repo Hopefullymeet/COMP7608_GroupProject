@@ -21,7 +21,7 @@ export function PdfAudit({ topic }: { topic: string }) {
   const items = useRead('draft.list', scope)?.items ?? []
   const papers = useRead('library.list', scope)?.items ?? []
   const { state } = useStore()
-  const [active, setActive] = useState(state.route.view === 'check' ? state.route.draftId ?? '' : '')
+  const [active, setActive] = useState(state.route.view === 'check' && state.route.topicId === topic ? state.route.draftId ?? '' : '')
   const [question, setQuestion] = useState('')
   const [versionId, selectVersion] = useState('')
   const [reportId, selectReport] = useState('')
@@ -34,7 +34,7 @@ export function PdfAudit({ topic }: { topic: string }) {
   const [source, setSource] = useState<Located>()
   const [limit, setLimit] = useState(40)
   const suggesting = kind === 'citation_suggest'
-  const doc = items.find((item) => item.draft_id === active) ?? items[0]
+  const doc = items.find((item) => item.draft_id === active)
   const version = doc?.versions.find((item) => item.version_id === versionId) ?? doc?.versions[0]
   const reports = version?.reports.filter((item) => item.kind === kind) ?? []
   const report = reports.find((item) => item.report_id === reportId) ?? reports[0]
@@ -80,7 +80,7 @@ export function PdfAudit({ topic }: { topic: string }) {
       setKind('citation_audit')
       const first = result.versions[0]
       if (first?.sentences.length && !first.reports.some(r => r.whole_document))
-        await wholeAudit(result.draft_id, first)
+        await wholeAudit(result.draft_id, first, undefined, true)
     } catch (error) { workspace.report(error) }
   }
 
@@ -104,14 +104,14 @@ export function PdfAudit({ topic }: { topic: string }) {
     } catch (error) { workspace.report(error) }
   }
 
-  async function wholeAudit(draftId: string, snapshot: NonNullable<typeof version>, ask?: string) {
+  async function wholeAudit(draftId: string, snapshot: NonNullable<typeof version>, ask?: string, automatic = false) {
     const library = await workspace.api.call('library.list', scope)
     await workspace.prepare({ ...scope, kind: 'citation_audit', input: {
       draft_id: draftId, version_id: snapshot.version_id, whole_document: true,
       sentence_ids: snapshot.sentences.map(s => s.id),
       source_versions: library.items.flatMap(p => p.source_versions.slice(0, 1).map(v => v.source_version_id)),
       ...(ask && report ? { question: ask, report_id: report.report_id } : {}),
-    } })
+    } }, undefined, automatic)
   }
 
   function assignedSources(ids: string[]) {
@@ -129,21 +129,27 @@ export function PdfAudit({ topic }: { topic: string }) {
     } })
   }
 
+  if (!doc) return <section className="audit-chooser" onDragOver={e => e.preventDefault()} onDrop={e => {
+    e.preventDefault()
+    const file = e.dataTransfer.files[0]
+    if (!workspace.busy && file?.name.toLowerCase().endsWith('.pdf')) void importPdf(false, undefined, file)
+  }}>
+    <h2>{tr('Choose your paper')}</h2>
+    <p className="fine">{tr('Choosing a PDF starts a citation check using this topic’s papers and configured model.')}</p>
+    <button className="primary" disabled={workspace.busy} onClick={() => void importPdf()}>{tr('Add PDF manuscript')}</button>
+    <div className="audit-options">{papers.filter(p => p.source_versions[0]?.available_scope === 'full_text').map(p =>
+      <button className="audit-option" key={p.paper_id} disabled={workspace.busy}
+        onClick={() => void importPdf(false, p.source_versions[0].source_version_id)}>
+        <span>{p.title}</span><span aria-hidden="true">›</span></button>)}</div>
+    {items.length > 0 && <><h3>{tr('Previous manuscripts')}</h3>
+      <div className="audit-options">{items.map(item => <button key={item.draft_id} className="audit-option"
+        onClick={() => { reset(); setActive(item.draft_id) }}><span>{item.name}</span><span aria-hidden="true">›</span></button>)}</div></>}
+  </section>
   return <div className="synthesis-workbench">
-    <section className="synthesis-main" onDragOver={e => e.preventDefault()} onDrop={e => {
-      e.preventDefault()
-      const file = e.dataTransfer.files[0]
-      if (!workspace.busy && file?.name.toLowerCase().endsWith('.pdf')) void importPdf(false, undefined, file)
-    }}>
+    <section className="synthesis-main">
       <div className="lib-tools">
-        <button className="primary" disabled={workspace.busy} onClick={() => void importPdf()}>{tr('Add PDF manuscript')}</button>
-        {papers.length > 0 && <select aria-label={tr('Select a library PDF')} value="" disabled={workspace.busy}
-          onChange={e => { if (e.target.value) void importPdf(false, e.target.value) }}>
-          <option value="">{tr('Select a library PDF')}</option>
-          {papers.filter(p => p.source_versions[0]?.available_scope === 'full_text').map(p =>
-            <option key={p.paper_id} value={p.source_versions[0].source_version_id}>{p.title}</option>)}
-        </select>}
-        {doc && <button className="ghost-btn" disabled={workspace.busy} onClick={() => void importPdf(true)}>{tr('Add version')}</button>}
+        <button className="ghost-btn" disabled={workspace.busy} onClick={() => { reset(); setActive('') }}>{tr('Choose your paper')}</button>
+        <button className="ghost-btn" disabled={workspace.busy} onClick={() => void importPdf(true)}>{tr('Add version')}</button>
       </div>
       {doc && version && <>
         <div className="lib-tools">
