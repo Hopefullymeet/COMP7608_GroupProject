@@ -85,6 +85,7 @@ export function Sidebar({ onSettings }: { onSettings: () => void }) {
 
   return (
     <aside className="workspace-sidebar" style={{ '--sidebar-width': width + 'px' } as CSSProperties}>
+      <div className="mac-window-drag" data-tauri-drag-region aria-hidden="true" />
       <div className="sidebar-scroll">
         <button className="brand" onClick={() => act.navigate({ view: 'home' })}>
           <img src={import.meta.env.BASE_URL + 'reading-otter.png'} width="40" height="36" alt="" />

@@ -395,3 +395,8 @@ html:root[data-theme=dark] {
   --ink: #f4eee9; --ink-2: #d3c8bf; --ink-3: #b1a399; --ink-4: #998b82;
   --line: #443d38; --line-2: #594d45; --accent: #e99979; --accent-soft: #593b30; --accent-faint: #3c302a;
 }
+
+.mac-window-drag { display: none; }
+.native-mac .mac-window-drag { display: block; flex: 0 0 30px; }
+.native-mac .workspace-sidebar .sidebar-scroll { padding-top: 5px; }
+.native-mac .app--desktop .page-head { padding-inline-end: 12px; }

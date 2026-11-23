@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { zhCN } from './zh-CN'
 
 type Language = 'en' | 'zh-CN'
@@ -15,31 +16,44 @@ export function count(tr: Translate, value: number, item: CountedItem) {
 
 const STORAGE_KEY = 'papertrace.language'
 
-function initialLanguage(): Language {
+type LanguagePreference = Language | 'system'
+export const nativeMac = isTauri() && /Mac/.test(navigator.platform)
+
+function initialLanguage(): LanguagePreference {
   try {
-    return localStorage.getItem(STORAGE_KEY) === 'zh-CN' ? 'zh-CN' : 'en'
+    const saved = localStorage.getItem(STORAGE_KEY)
+    return saved === 'zh-CN' || saved === 'en' ? saved : 'system'
   } catch {
-    return 'en'
+    return 'system'
   }
 }
 
 const LanguageContext = createContext<{
   language: Language
-  setLanguage: (language: Language) => void
+  preference: LanguagePreference
+  setLanguage: (language: LanguagePreference) => void
   tr: Translate
 } | null>(null)
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguage] = useState(initialLanguage)
+  const [preference, setLanguage] = useState(initialLanguage)
+  const [locale, setLocale] = useState(navigator.language)
+  useEffect(() => {
+    const sync = () => setLocale(navigator.language)
+    window.addEventListener('languagechange', sync)
+    return () => window.removeEventListener('languagechange', sync)
+  }, [])
+  const language = preference === 'system' ? (/^zh/i.test(locale) ? 'zh-CN' : 'en') : preference
 
   useEffect(() => {
     document.documentElement.lang = language
+    if (nativeMac) void invoke('set_menu_language', { language }).catch(console.error)
     try {
-      localStorage.setItem(STORAGE_KEY, language)
+      localStorage.setItem(STORAGE_KEY, preference)
     } catch {
       // The current session can still switch languages when storage is unavailable.
     }
-  }, [language])
+  }, [language, preference])
 
   const tr: Translate = (message, ...values) => {
     const text = language === 'zh-CN' && Object.hasOwn(zhCN, message) ? zhCN[message] : message
@@ -47,7 +61,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       index < values.length ? String(values[index] ?? '') : token) : text
   }
 
-  return <LanguageContext.Provider value={{ language, setLanguage, tr }}>{children}</LanguageContext.Provider>
+  return <LanguageContext.Provider value={{ language, preference, setLanguage, tr }}>{children}</LanguageContext.Provider>
 }
 
 export function useLanguage() {
