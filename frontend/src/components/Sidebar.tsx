@@ -2,7 +2,6 @@ import { useLanguage } from '../i18n'
 import { useRef, useState } from 'react'
 import { hasMessages, sessionsOf, useStore, type Page } from '../data/store'
 import { Icon } from './Icon'
-import { Logo } from './Logo'
 import { Dialog } from './PageHead'
 import { errorText } from '../api/contract'
 
@@ -68,11 +67,8 @@ export function Sidebar({ onSettings }: { onSettings: () => void }) {
   return (
     <aside className="workspace-sidebar">
       <button className="brand" onClick={() => act.navigate({ view: 'home' })}>
-        <Logo />
-        <span>
-          <strong>PaperTrace</strong>
-          <small>{tr('Research workspace')}</small>
-        </span>
+        <img src={import.meta.env.BASE_URL + 'paper-bird.png'} width="38" height="38" alt="" />
+        <strong>PaperTrace</strong>
       </button>
 
       <nav className="side-nav" aria-label={tr('Workspace')}>

@@ -303,7 +303,6 @@ export const zhCN: Readonly<Record<string, string>> = {
   'Models & services': '模型与服务',
   'Show less': '收起',
   'Show {0} more': '展开其余 {0} 项',
-  'Research workspace': '研究工作区',
   'Search': '搜索',
   'Search topics and sessions': '搜索主题和会话',
   'Workspace': '工作区',
