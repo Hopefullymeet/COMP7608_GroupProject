@@ -200,10 +200,10 @@ class TestCitationWorkflow(unittest.TestCase):
         excerpts = dict(zip(versions, [statement, "The evaluation uses human-checked citation evidence."]))
         class Model:
             key = "fixture"
-            def audit(inner, checks, sources, cancelled):
+            def audit(inner, checks, sources, cancelled, language=None):
                 vid = sources[0]["source_version_id"]
                 p = call(worker, "source.read", topic_id=topic, source_version_id=vid)["passages"][0]
-                return {"checks": [{"id": "0", "status": "partial", "limit": "Corpus only",
+                return {"checks": [{"id": "0", "status": "partial", "limit": "仅限此语料" if language == "zh-CN" else "Corpus only",
                                     "evidence": [{"id": p["passage_id"], "quote": excerpts[vid]}]}]}, {
                     p["passage_id"]: {"source_version_id": vid}}, [], {}, None
 
@@ -242,6 +242,15 @@ class TestCitationWorkflow(unittest.TestCase):
         self.assertIn(new_version, [n["version"] for n in report()["findings"][0]["chain"]])
         self.assertFalse(report()["findings"][0]["needs_review"])
         self.assertFalse(call(worker, "draft.list", topic_id=self.other)["items"])
+
+        old_id = report()["report_id"]
+        self.start(draft, whole_document=True, source_versions=[*versions, new_version], language="zh-CN")
+        self.assertEqual(report()["language"], "zh-CN")
+        self.assertEqual(report()["findings"][0]["claims"][0]["limit"], "仅限此语料")
+        history = call(worker, "audit.history")["items"]
+        self.assertEqual(history[0]["report_id"], report()["report_id"])
+        self.assertIn(old_id, [row["report_id"] for row in history])
+        self.assertEqual(history[0]["version_id"], draft["versions"][0]["version_id"])
 
     def test_page_marks_keep_parallel_and_repeated_citations_at_their_own_locations(self):
         content = (Path(__file__).resolve().parents[1] / "docs/examples/CV-Citation-Check.pdf").read_bytes()

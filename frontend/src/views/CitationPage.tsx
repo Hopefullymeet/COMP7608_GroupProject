@@ -4,7 +4,7 @@ import { useStore } from '../data/store'
 import { Dialog, PageHead } from '../components/PageHead'
 import { Icon } from '../components/Icon'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
-import type { Decision, ExportFormat, Finding, Report } from '../api/citation'
+import type { AuditHistoryItem, Decision, ExportFormat, Finding, Report } from '../api/citation'
 import { EvidenceLink } from './Notes'
 import { PdfAudit } from './PdfAudit'
 
@@ -426,14 +426,16 @@ function Manuscripts({ topic }: { topic: string }) {
 }
 export function CitationPage() {
   const { demo, busy } = useWorkspace()
-  const { tr } = useLanguage()
+  const { tr, language } = useLanguage()
   const { state, act } = useStore()
   const route = state.route.view === 'check' ? state.route : undefined
   const [topic, setTopic] = useState(route?.draftId ? route.topicId ?? '' : '')
+  const [opened, openReport] = useState<AuditHistoryItem>()
+  const history = useRead('audit.history', {}, !demo && !topic)?.items
   const selected = state.topics.find(t => t.id === topic)
   return <div className="page">
     <PageHead sub={tr('Check a manuscript against its selected sources')} trace title={tr('Citation check')} icon="shield">
-      {selected && <button className="ghost-btn" disabled={busy} onClick={() => setTopic('')}>
+      {selected && <button className="ghost-btn" disabled={busy} onClick={() => { openReport(undefined); setTopic('') }}>
         {selected.title} <Icon name="chevronDown" size={14}/></button>}
     </PageHead>
     <div className="page-body scroll">
@@ -444,7 +446,15 @@ export function CitationPage() {
           <Icon name="book" size={19}/><span>{t.title}</span><span aria-hidden="true">›</span>
         </button>)}</div>
         {!state.topics.length && <button className="ghost-btn" onClick={() => act.newTopic()}>{tr('New topic')}</button>}
-      </section> : demo ? <Manuscripts topic={topic} key={topic}/> : <PdfAudit topic={topic} key={topic}/>}
+        {history && history.length > 0 && <>
+          <h3>{tr('Audit history')}</h3>
+          <div className="audit-options">{history.map(item => <button key={item.report_id} className="audit-option"
+            onClick={() => { openReport(item); setTopic(item.topic_id) }}>
+            <span><strong>{item.name}</strong><small className="audit-history-meta">{item.topic_title} · {tr('Check {0}', item.number)}
+              {item.started_at && ' · ' + new Date(item.started_at).toLocaleString(language)}</small></span>
+            <span aria-hidden="true">›</span></button>)}</div>
+        </>}
+      </section> : demo ? <Manuscripts topic={topic} key={topic}/> : <PdfAudit topic={topic} initialReport={opened} key={topic}/>}
     </div>
   </div>
 }

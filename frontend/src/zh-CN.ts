@@ -1,5 +1,13 @@
 // Simplified Chinese interface messages, keyed by their English source text.
 export const zhCN: Readonly<Record<string, string>> = {
+  'Checking citations.': '正在核查引用。',
+  'Check cited claims against selected papers': '用所选论文核对稿件中的引用',
+  'The selected source could not be checked in this run.': '本次未能核对所选文献。',
+  'No valid supporting or conflicting passage was established.': '尚未找到能支持或反驳这句话的原文。',
+  'Audit history': '历史核查',
+  'Check {0}': '第 {0} 次核查',
+  'Generate an English report': '生成中文报告',
+  'Reference is unresolved or the selected full text is unavailable.': '未能匹配参考文献，或所选文献缺少全文。',
   '{0} annotation': '{0} 条批注',
   '{0} annotations': '{0} 条批注',
   'Remove annotation': '移除批注',

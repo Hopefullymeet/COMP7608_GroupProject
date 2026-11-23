@@ -6,6 +6,7 @@
 | --- | --- |
 | 查论文引用 | `literature.refs` 接收 `topic_id`、`source_version_id` 和方向 `outgoing` 或 `incoming`。返回候选条目的匹配状态、引用双方版本，以及已定位的正文摘录和 PDF 页码。未找到正文位置时保留书目。旧资料若正在补索引，响应列出 `pending_versions`。 |
 | 导入与定位稿件 | `draft.import` 接收 `operation_id`、`topic_id`、`{name,content}`（Base64 PDF）或本机 PDF 路径，可带 `draft_id` 表示新增版本。返回稿件的只读版本及识别出的引用句。重复导入复用原版本。用 `draft.list` 读取稿件和报告，用 `draft.page` 按稿件版本及页码渲染原页。 |
+| 打开历史核查 | 工作区只读接口 `audit.history` 接收空对象，返回 `items`。每项含主题、稿件与版本、报告 ID 和核查时间。无记录时返回空列表。按 ID 打开对应报告，无须重新发起任务。 |
 | 确认书目映射 | `draft.resolve_reference` 接收稿件版本、`ref_key`、所选主题内 `paper_id`。空值恢复自动匹配。歧义、当前主题缺论文和缺全文分别保留待查状态。 |
 | 回查与取消 | `task.prepare → task.start` 的 `citation_audit` 接收 `draft_id`、`version_id`、选定句子和来源版本。检查逐句逐引用进行。远程确认单列明所选稿件句和原文摘录。任务终态含 `record_id`，报告从稿件读回。无法查证和预算耗尽可以保留部分结果。 |
 | 查找引用建议 | `citation_suggest` 沿用 `draft_id`、`version_id`、`sentence_ids` 和 `source_versions`。可选已有引用的句子或稿件的 `uncited_sentences`。每次至多选择 12 句和 12 篇论文，每篇一个版本。模型只查确认范围内的全文，响应含逐项支持程度、短引文、限制和待补点。 |
@@ -31,3 +32,5 @@
 报告按句子和书目保存判断。每条 `chain` 记录父节点、查阅版本和可打开的证据。原文摘录包含转述引用时继续查找项目中的来源。同一个来源的重复路径使用 `same_as` 指回已读节点。缺少全文的条目保留书目信息，可用 DOI、arXiv 或题名查找。每条链最多查阅 32 个不同版本，未读来源保留在报告里。
 
 追问使用相同的任务类型，传入报告 ID 和 `question`。回答写入该稿件版本的报告，引文必须能在本次允许的范围内定位。历史报告和作者上传的 PDF 可随时回看。
+
+核查任务可通过 `input.language` 指定 `zh-CN` 或 `en`。报告解释与句子小结跟随该语言，证据保留原文。以另一种语言重查会保存新报告。

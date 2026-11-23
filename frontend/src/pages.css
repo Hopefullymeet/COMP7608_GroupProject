@@ -410,6 +410,7 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .audit-chooser { max-width: 38rem; margin: clamp(28px, 8vh, 84px) auto; padding: 0 20px 32px; }
 .audit-chooser h2 { margin: 0 0 20px; font-size: clamp(22px, 3vw, 31px); }
 .audit-chooser .fine { margin: -8px 0 20px; }
+.audit-history-meta { display: block; margin-top: 4px; font-weight: normal; opacity: .72; }
 .audit-chooser h3 { margin: 30px 0 10px; }
 .audit-options { display: grid; gap: 8px; margin: 14px 0; }
 .audit-option { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; text-align: left; background: var(--paper, #fffdf9); border: 1px solid var(--line, #ddd4c8); border-radius: 9px; color: inherit; font: inherit; cursor: pointer; }

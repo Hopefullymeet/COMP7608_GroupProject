@@ -98,6 +98,7 @@ export function citationFixture(
     return report.complete
   }
   const handlers: Handlers<CitationMethods> = {
+    'audit.history': () => ({ items: [] }),
     'audit.save_to_wiki': () => { throw new Error('PDF review requires the desktop workspace.') },
     'draft.page': () => { throw new Error('PDF rendering requires the desktop workspace.') },
     'draft.prose': () => ({ sentences: [] }),

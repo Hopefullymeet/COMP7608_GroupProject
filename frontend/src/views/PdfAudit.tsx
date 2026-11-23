@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useLanguage } from '../i18n'
 import { pickPdfs, pdfInput, downloadText } from '../api/pdf'
-import type { Decision, Report } from '../api/citation'
+import type { AuditHistoryItem, Decision, Report } from '../api/citation'
 import type { Located } from '../api/library'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { useStore } from '../data/store'
@@ -15,18 +15,18 @@ const assessment = {
   blocked: 'Could not check', evidence_not_established: 'Evidence not established',
 }
 
-export function PdfAudit({ topic }: { topic: string }) {
-  const { tr } = useLanguage()
+export function PdfAudit({ topic, initialReport }: { topic: string; initialReport?: AuditHistoryItem }) {
+  const { tr, language } = useLanguage()
   const workspace = useWorkspace()
   const scope = { topic_id: topic }
   const items = useRead('draft.list', scope)?.items ?? []
   const papers = useRead('library.list', scope)?.items ?? []
   const { state } = useStore()
-  const [active, setActive] = useState(state.route.view === 'check' && state.route.topicId === topic ? state.route.draftId ?? '' : '')
+  const [active, setActive] = useState(initialReport?.draft_id ?? (state.route.view === 'check' && state.route.topicId === topic ? state.route.draftId ?? '' : ''))
   const [toolsOpen, showTools] = useState(false)
   const [question, setQuestion] = useState('')
-  const [versionId, selectVersion] = useState('')
-  const [reportId, selectReport] = useState('')
+  const [versionId, selectVersion] = useState(initialReport?.version_id ?? '')
+  const [reportId, selectReport] = useState(initialReport?.report_id ?? '')
   const [selected, select] = useState<string[]>([])
   const [page, setPage] = useState(1)
   const [saved, setSaved] = useState<string[]>([])
@@ -109,7 +109,7 @@ export function PdfAudit({ topic }: { topic: string }) {
   async function wholeAudit(draftId: string, snapshot: NonNullable<typeof version>, ask?: string, automatic = false) {
     const library = await workspace.api.call('library.list', scope)
     await workspace.prepare({ ...scope, kind: 'citation_audit', input: {
-      draft_id: draftId, version_id: snapshot.version_id, whole_document: true,
+      language, draft_id: draftId, version_id: snapshot.version_id, whole_document: true,
       sentence_ids: snapshot.sentences.map(s => s.id),
       source_versions: library.items.flatMap(p => p.source_versions.slice(0, 1).map(v => v.source_version_id)),
       ...(ask && report ? { question: ask, report_id: report.report_id } : {}),
@@ -126,7 +126,7 @@ export function PdfAudit({ topic }: { topic: string }) {
     selectReport('')
     setExported([])
     void workspace.prepare({ ...scope, kind, input: {
-      draft_id: target.draft_id, version_id: target.version_id, sentence_ids: ids,
+      language, draft_id: target.draft_id, version_id: target.version_id, sentence_ids: ids,
       source_versions: suggesting ? approved : assignedSources(ids),
     } })
   }
@@ -148,7 +148,8 @@ export function PdfAudit({ topic }: { topic: string }) {
         onClick={() => { reset(); setActive(item.draft_id) }}><span>{item.name}</span><span aria-hidden="true">›</span></button>)}</div></>}
   </section>
   if (version && !toolsOpen) return <ManuscriptReader key={version.version_id} topic={topic} draft={doc.draft_id}
-    name={doc.name} version={version} report={version.reports.find(r => r.kind === 'citation_audit' && r.whole_document) ?? version.reports.find(r => r.kind === 'citation_audit')}
+    name={doc.name} version={version} onLocalizedCheck={() => { selectReport(''); void wholeAudit(doc.draft_id, version).catch(workspace.report) }}
+    busy={workspace.busy} report={version.reports.find(r => r.kind === 'citation_audit' && r.report_id === reportId) ?? version.reports.find(r => r.kind === 'citation_audit' && r.whole_document) ?? version.reports.find(r => r.kind === 'citation_audit')}
     onTools={() => showTools(true)} onChoose={() => { reset(); setActive('') }}/>
   return <div className="synthesis-workbench">
     <section className="synthesis-main">

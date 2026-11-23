@@ -15,10 +15,11 @@ function SourceQuote({ id }: { id: string }) {
     <EvidenceLink id={id} label={page ? tr('PDF page {0}', page) : tr('View source')}/></div>
 }
 
-export function ManuscriptReader({ topic, draft, version, report, name, onTools, onChoose }: {
+export function ManuscriptReader({ topic, draft, version, report, name, onTools, onChoose, busy, onLocalizedCheck }: {
+  busy: boolean; onLocalizedCheck: () => void
   topic: string; draft: string; version: Snapshot; report?: Report; name: string; onTools: () => void; onChoose: () => void
 }) {
-  const { tr } = useLanguage()
+  const { tr, language } = useLanguage()
   const [page, setPage] = useState(1)
   const [index, select] = useState<number>()
   const [loose, selectLoose] = useState<CitationMark>()
@@ -57,7 +58,8 @@ export function ManuscriptReader({ topic, draft, version, report, name, onTools,
   const total = version.page_count ?? page
   return <section className="audit-reading">
     <div className="audit-reader-tools"><button className="ghost-btn" onClick={onChoose}>‹ {tr('Choose your paper')}</button>
-      <strong title={name}>{name}</strong><button className="ghost-btn" onClick={onTools}>{tr('Audit tools')}</button></div>
+      <strong title={name}>{name}</strong>{report && report.language !== language &&
+        <button className="ghost-btn" disabled={busy} onClick={onLocalizedCheck}>{tr('Generate an English report')}</button>}<button className="ghost-btn" onClick={onTools}>{tr('Audit tools')}</button></div>
     <div className={'audit-spread' + (mark ? ' inspecting' : '')} ref={frame}>
       <div className="audit-sheet">{data && <>
         <img src={'data:image/png;base64,' + data.png} alt={tr('Original PDF page {0}', page)}/>
@@ -84,7 +86,7 @@ export function ManuscriptReader({ topic, draft, version, report, name, onTools,
               {c.anchor_ids.length > 1 && <details><summary>{tr('More evidence')}</summary>
                 {c.anchor_ids.slice(1).map(id => <SourceQuote key={id} id={id}/>)}</details>}</div>)
               : <p>{tr('No check recorded for this citation yet.')}</p>}
-            {f?.chain?.slice(1).map((n,i) => <details key={i}><summary>{n.title}</summary><p>{tr(states[n.status])} {n.limit}</p>
+            {f?.chain?.slice(1).map((n,i) => <details key={i}><summary>{n.title}</summary><p>{tr(states[n.status])} {n.limit && tr(n.limit)}</p>
               {n.anchor_ids.map(id => <SourceQuote key={id} id={id}/>)}
               {n.link && <a href={n.link} target="_blank" rel="noreferrer">{tr('Source link')}</a>}</details>)}
           </section>

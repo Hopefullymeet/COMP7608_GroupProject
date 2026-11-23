@@ -536,6 +536,8 @@ class Worker:
             return self.citations.import_draft(self.topic(params), params)
         if method == "draft.resolve_reference":
             return self.citations.resolve_reference(self.topic(params), params)
+        if method == "audit.history":
+            return self.citations.history()
         if method == "draft.list":
             topic = self.topic(params)
             return {"items": [self.citations.public(r) for r in self.rows("pdf_draft") if r["topic_id"] == topic]}
@@ -1237,6 +1239,8 @@ class Worker:
         input_ = params.get("input")
         if not isinstance(input_, dict):
             raise invalid("input must be an object.")
+        if kind in ("citation_audit", "citation_suggest") and "language" in input_ and input_["language"] not in ("zh-CN", "en"):
+            raise invalid("Unsupported citation report language.")
         task_data = {"topic_id": topic, "kind": kind, "input": input_}
         provider = self.service_settings() if kind != "discovery" else None
         if kind == "discovery":
