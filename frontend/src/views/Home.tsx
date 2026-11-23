@@ -12,7 +12,7 @@ export function Home() {
   const { state, act } = useStore()
   const [name, setName] = useState('')
   const [question, setQuestion] = useState('')
-  const [open, setOpen] = useState(state.route.view === 'home' && !!state.route.create)
+  const [open, setOpen] = useState(false)
   const canDemo = !state.mainline ? state.topics.some((t) => t.id === DEMO_TOPIC) : state.mainline.demo
 
   const canSubmit = !!name.trim()

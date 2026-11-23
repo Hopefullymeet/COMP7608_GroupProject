@@ -504,7 +504,7 @@ export function MainlineProvider({
     reading.detach()
     setView((state) => ({
       ...state,
-      route: { view: 'home', create: reset },
+      route: { view: 'home' },
       activeSessionId: null,
       activeEvidence: null,
       trace: emptyTrace,

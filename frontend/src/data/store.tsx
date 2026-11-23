@@ -13,7 +13,7 @@ import type {
 
 export type Tab = 'discover' | 'read' | 'compare' | 'synthesis'
 export type Page = 'library' | 'wiki' | 'check' | 'settings'
-export type Route = { view: 'home'; create?: boolean } | { view: 'topic'; topicId: string; tab: Tab;sourceVersion?:string }
+export type Route = { view: 'home' } | { view: 'topic'; topicId: string; tab: Tab;sourceVersion?:string }
   | { view: 'library'; paperId?: string } | { view: Exclude<Page, 'library'>;topicId?:string;draftId?:string;sentenceId?:string }
 
 type TaskState = 'idle' | 'running' | 'done'
@@ -334,7 +334,7 @@ function reducer(s: State, a: Action): State {
         activeEvidence: null }
     }
     case 'home-new':
-      return { ...s, route: { view: 'home', create: true }, dropped: [], homeRevision: s.homeRevision + 1,
+      return { ...s, route: { view: 'home' }, dropped: [], homeRevision: s.homeRevision + 1,
         activeSessionId: null, activeEvidence: null, trace: { open: false, focus: null } }
     case 'topic-create':
       return { ...s, topics: [a.topic, ...s.topics], sessions: [...s.sessions, a.session],
