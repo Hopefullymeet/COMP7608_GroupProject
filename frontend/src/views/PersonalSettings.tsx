@@ -93,20 +93,31 @@ function ProfileForm({profile,onSaved}:{profile:PersonalProfile;onSaved?:()=>voi
     try {await write('profile.save',value);setDraft(undefined);setSaved(true);onSaved?.()}
     catch {setError(t('保存失败。重新读取设置后再试。','Could not save. Reload settings and retry.'))}
   }
-  return <div className="set-body">
-    <h2>{t('自定义角色','Customize roles')}</h2>
-    <label className="set-field">{t('你希望助手怎样帮你？','How should the assistant help?')}<textarea className="text-field" maxLength={500} rows={3}
-      placeholder={t('例如：像研究导师一样，先讲直觉，再列实验依据。','For example: explain the intuition before discussing experiments.')}
-      value={value.persona ?? ''} onChange={e=>change({persona:e.target.value,enabled:true})}/></label>
-    <label className="set-field">{t('你希望助手了解你的哪些背景？','My profile')}<textarea className="text-field" maxLength={500} rows={2}
-      value={value.identity} onChange={e=>change({identity:e.target.value,enabled:true})}
-      placeholder={t('例如：我是研究图像拼接的硕士生','For example: I study image stitching')}/></label>
-    <label><input type="checkbox" checked={value.enabled} onChange={e=>change({enabled:e.target.checked})}/> {t('在论文问答和 Wiki 对话中使用这些角色和记忆','Use my profile and memories across topics')}</label>
-    <small>{t('角色只调整讲解方式。论文范围、原文依据和写入权限由应用控制。','Roles guide explanations. The app controls source access, evidence checks and edits.')}</small>
-    <label className="set-field">{t('长期记忆','Long-term memories')}<textarea className="text-field" rows={4}
-      value={value.memories.join('\n')} onChange={e=>change({memories:e.target.value.split('\n')})}/></label>
-    <small>{t('每行一条。开启后，在论文问答中说“记住：……”也能保存。回答时会把相关偏好发送给所选模型。','One per line. When enabled, start a reading question with “Remember…” to save it. Preferences are sent to the selected model when answering.')}</small>
-    <div><button className="primary" disabled={!draft || busy || value.memories.length>60 || value.memories.some(m=>m.length>400)} onClick={()=>void save()}>{tr('Save')}</button>
-      {saved && <small role="status"> {tr('Saved')}</small>}{error && <p role="alert">{error} <button className="link-btn" onClick={()=>{setDraft(undefined);setError('')}}>{tr('Reload')}</button></p>}</div>
-  </div>
+  const contexts = [
+    {key:'enabled', label:t('论文问答','Paper Q&A'), checked:value.enabled},
+    {key:'wiki_enabled', label:t('Wiki 对话','Wiki chat'), checked:value.wiki_enabled ?? profile.enabled},
+  ] as const
+  return <section className="role-form">
+    <header><h2>{t('自定义角色','Customize roles')}</h2>
+      <p>{t('选择在哪些对话中使用你的角色和记忆。','Choose where to use your profile and memories.')}</p>
+      <div className="role-columns">{contexts.map(({key,label,checked})=>
+        <button type="button" key={key} role="switch" aria-checked={checked} className="role-toggle"
+          onClick={()=>change({[key]:!checked})}>{label}<span aria-hidden="true" className={'switch'+(checked?' on':'')}><span/></span></button>)}</div>
+    </header>
+    <div className="role-columns">
+      <label>{t('助手风格','Assistant style')}<textarea className="text-field" maxLength={500} rows={3}
+        placeholder={t('先讲直觉，再列实验依据。','Explain the intuition, then show the evidence.')}
+        value={value.persona ?? ''} onChange={e=>change({persona:e.target.value})}/></label>
+      <label>{t('我的背景','My background')}<textarea className="text-field" maxLength={500} rows={3}
+        placeholder={t('我是研究图像拼接的硕士生。','I study image stitching.')}
+        value={value.identity} onChange={e=>change({identity:e.target.value})}/></label>
+    </div>
+    <label>{t('长期记忆','Long-term memories')}<small>{t('每行一条。开启论文问答个性化后，也可以在对话里说「记住……」。','One per line. With personalization on in paper Q&A, you can also say “Remember…”.')}</small>
+      <textarea className="text-field" rows={4} placeholder={t('例如：比较论文时，优先列出实验条件。','For example: compare experimental conditions first.')}
+        value={value.memories.join('\n')} onChange={e=>change({memories:e.target.value.split('\n')})}/></label>
+    <footer><small>{t('已开启的对话会将相关偏好发送给所选模型。','Enabled conversations send relevant preferences to the selected model.')}</small>
+      {saved && <small role="status">{tr('Saved')}</small>}
+      <button className="primary" disabled={!draft || busy || value.memories.length>60 || value.memories.some(m=>m.length>400)} onClick={()=>void save()}>{tr('Save')}</button></footer>
+    {error && <p role="alert">{error} <button className="link-btn" onClick={()=>{setDraft(undefined);setError('')}}>{tr('Reload')}</button></p>}
+  </section>
 }

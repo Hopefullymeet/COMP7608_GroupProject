@@ -639,7 +639,7 @@ class TopicWiki:
             model = self.model()
             material = self.material(topic)
             wiki = self.load(topic)
-            material["personal_preferences"] = host.personal_context(wiki["thread"][-1]["text"])
+            material["personal_preferences"] = host.personal_context(wiki["thread"][-1]["text"], wiki=True)
             material["allow_wiki_edits"] = host.user_profile()["wiki_access"] == "edit"
         message = wiki["thread"][-1]["text"]
         try:

@@ -61,3 +61,5 @@ type Activity={id:Id,topic_id:Id,title:string,detail:string,target:'library'|'re
 语言、外观、字号、轨迹显示、阅读输入和外链确认保存在本机。阅读输入最多排队一条纯文本问题，只在原会话中发送。应用保留本地任务轨迹，研究引擎移除了两条会话日志上传路径。
 
 个人资料的可选字段 `session_access` 接受 `read` 或 `edit`，默认 `edit`。新阅读会话记录创建时的权限。选择 `read` 时保留对话历史，该会话的回答不进入 Wiki 素材，也不从提问写入长期记忆。修改默认值只影响以后创建的会话。
+
+角色偏好中，`enabled` 控制论文问答，`wiki_enabled` 控制 Wiki 对话。旧记录缺少后者时继承原开关，后续独立保存。Wiki 条目写入权限继续使用 `wiki_access`。

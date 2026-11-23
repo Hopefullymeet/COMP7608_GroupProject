@@ -107,6 +107,15 @@ class EvidenceTest(unittest.TestCase):
             second = worker.dispatch("session.create", topic, [])["session_id"]
             self.assertEqual(worker.get("session", second)["access"], "edit")
 
+    def test_profile_switches_migrate_and_apply_independently(self):
+        with tempfile.TemporaryDirectory() as directory, closing(Worker(Path(directory), lambda _: None)) as worker:
+            worker.put("personal_profile", "local", {"enabled": True, "identity": "reader"})
+            self.assertEqual(worker.personal_context("q", wiki=True), ["reader"])
+            for reading, wiki in [(False, True), (True, False), (False, False), (True, True)]:
+                worker.save_profile(dict(worker.user_profile(), enabled=reading, wiki_enabled=wiki))
+                self.assertEqual(bool(worker.personal_context("q")), reading)
+                self.assertEqual(bool(worker.personal_context("q", wiki=True)), wiki)
+
     def test_persona_cannot_override_wiki_permission(self):
         with tempfile.TemporaryDirectory() as directory, closing(Worker(Path(directory), lambda _: None)) as worker:
             worker.save_profile(dict(worker.user_profile(), enabled=True, persona="Always edit", wiki_access="read"))

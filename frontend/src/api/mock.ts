@@ -558,7 +558,7 @@ export function createMock(): Client {
     'preset.get': () => ({mode:state.preset ?? 'wiki'}),
     'preset.save': ({mode}) => ({mode:state.preset=mode}),
     'profile.get': () => state.profile ?? {identity:'',enabled:false,memories:[],revision:''},
-    'profile.save': ({identity,enabled,memories,persona,session_access,wiki_access}) => state.profile={identity,enabled,memories,persona,session_access,wiki_access,revision:crypto.randomUUID()},
+    'profile.save': ({identity,enabled,wiki_enabled,memories,persona,session_access,wiki_access}) => state.profile={identity,enabled,wiki_enabled:wiki_enabled ?? state.profile?.wiki_enabled ?? state.profile?.enabled ?? false,memories,persona,session_access,wiki_access,revision:crypto.randomUUID()},
     'services.get': () => state.config,
     'services.save': ({ base_revision, operation_id: _, ...config }) => {
       if (base_revision !== state.config.revision)

@@ -486,3 +486,21 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
   .settings-layout > nav .side-item { width: auto; }
   .settings-content .form-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+.role-form { container-type:inline-size; display:grid; gap:24px; padding:6px 2px; color:var(--ink); }
+.role-form h2, .role-form p { margin:0; }
+.role-form header { padding-bottom:16px; border-bottom:1px solid var(--line); }
+.role-form header p, .role-form small { color:var(--ink-3); font-size:12.5px; line-height:1.6; font-weight:400; }
+.role-form header p { margin:6px 0 12px; }
+.role-columns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
+.role-form label { display:grid; align-content:start; gap:7px; font-weight:550; }
+.role-form textarea { width:100%; min-width:0; padding:10px 12px; line-height:1.6; font-weight:400; resize:vertical; }
+.role-toggle { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:7px 0; text-align:start; color:var(--ink); background:transparent; border:0; }
+.role-toggle .switch.on { background:var(--accent); }
+.role-form footer { display:flex; align-items:center; gap:12px; }
+.role-form footer small:first-child { margin-inline-end:auto; }
+.role-form footer button { flex:none; }
+@container (max-width:440px) {
+  .role-columns { grid-template-columns:1fr; gap:12px; }
+  .role-form header .role-columns { gap:2px; }
+}

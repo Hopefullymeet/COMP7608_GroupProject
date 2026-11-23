@@ -322,8 +322,9 @@ class Worker:
 
     def user_profile(self):
         row = self.db.execute("SELECT data FROM records WHERE kind='personal_profile' AND id='local'").fetchone()
-        return {"identity": "", "enabled": False, "memories": [], "revision": "", "persona": "",
-                "wiki_access": "edit", "session_access": "edit", **(json.loads(row[0]) if row else {})}
+        stored = json.loads(row[0]) if row else {}
+        return {"identity": "", "enabled": False, "wiki_enabled": stored.get("enabled", False), "memories": [], "revision": "", "persona": "",
+                "wiki_access": "edit", "session_access": "edit", **stored}
 
     def save_profile(self, params):
         profile = self.user_profile()
@@ -341,16 +342,19 @@ class Worker:
         session_access = params.get("session_access", profile["session_access"])
         if session_access not in ("read", "edit"):
             raise invalid("Invalid session permission.")
-        profile.update(session_access=session_access)
+        wiki_enabled = params.get("wiki_enabled", profile["wiki_enabled"])
+        if not isinstance(wiki_enabled, bool):
+            raise invalid("Invalid Wiki profile preference.")
+        profile.update(session_access=session_access, wiki_enabled=wiki_enabled)
         profile.update(persona=persona.strip(), wiki_access=access)
         profile.update(identity=identity.strip(), enabled=enabled, revision=identifier(),
                        memories=list(dict.fromkeys(m.strip() for m in memories if m.strip())))
         self.put("personal_profile", "local", profile)
         return profile
 
-    def personal_context(self, question):
+    def personal_context(self, question, *, wiki=False):
         profile = self.user_profile()
-        if not profile["enabled"]:
+        if not profile["wiki_enabled" if wiki else "enabled"]:
             return []
         terms = words(question)
         ranked = sorted(reversed(profile["memories"]), key=lambda m: len(terms & words(m)), reverse=True)
