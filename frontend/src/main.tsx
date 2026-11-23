@@ -1,5 +1,5 @@
 import { WorkspaceProvider } from './data/WorkspaceProvider'
-import { ServicesPage } from './views/ServicesPage'
+import { FirstRunSettings, ServicesPage } from './views/ServicesPage'
 import { CitationPage } from './views/CitationPage'
 import { ComparePage } from './views/ResearchPages'
 import { WikiPage, WorkspaceWikiSource } from './views/WikiPage'
@@ -26,7 +26,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <LanguageProvider>
       <StoreProvider>
-        {api ? <WorkspaceProvider api={api} demo={demo}><MainlineProvider api={api} demo={demo}>{app}</MainlineProvider></WorkspaceProvider> : app}
+        {api ? <WorkspaceProvider api={api} demo={demo}><MainlineProvider api={api} demo={demo}>{app}{desktop && <FirstRunSettings/>}</MainlineProvider></WorkspaceProvider> : app}
       </StoreProvider>
     </LanguageProvider>
   </StrictMode>,

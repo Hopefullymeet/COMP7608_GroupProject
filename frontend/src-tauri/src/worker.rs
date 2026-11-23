@@ -12,6 +12,7 @@ use std::{
 };
 use tauri::ipc::Channel;
 
+const AGENT_POLICY: &[u8] = include_bytes!("../../../backend/agent.md");
 const WORKER: &[u8] = include_bytes!("../../../backend/papertrace.py");
 const LITERATURE: &[u8] = include_bytes!("../../../backend/literature.py");
 const WORKBENCH: &[u8] = include_bytes!("../../../backend/workbench.py");
@@ -54,6 +55,7 @@ impl Worker {
         READER.hash(&mut hash);
         LITERATURE.hash(&mut hash);
         WORKBENCH.hash(&mut hash);
+        AGENT_POLICY.hash(&mut hash);
         WIKI.hash(&mut hash);
         RESEARCH_TOOLS.hash(&mut hash);
         BIBLIOGRAPHY.hash(&mut hash);
@@ -62,7 +64,7 @@ impl Worker {
         fs::create_dir_all(&runtime).map_err(|error| error.to_string())?;
         let script = runtime.join("papertrace.py");
         for (path, contents) in [
-            (&script, WORKER), (&runtime.join("dsh.py"), DSH),
+            (&runtime.join("agent.md"), AGENT_POLICY), (&script, WORKER), (&runtime.join("dsh.py"), DSH),
             (&runtime.join("credentials.py"), CREDENTIALS),
             (&runtime.join("literature.py"), LITERATURE), (&runtime.join("workbench.py"), WORKBENCH),
             (&runtime.join("wiki.py"), WIKI),

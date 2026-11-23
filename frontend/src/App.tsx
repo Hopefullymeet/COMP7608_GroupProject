@@ -1,5 +1,6 @@
 import { useLanguage } from './i18n'
-import { useState, type ReactNode } from 'react'
+import { usePreferences } from './data/preferences'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useStore } from './data/store'
 import { Sidebar } from './components/Sidebar'
 import { TraceDrawer } from './components/TraceDrawer'
@@ -17,10 +18,27 @@ export function App({ windowControls, pages, comparison, liveResearch }: { windo
   const { tr } = useLanguage()
   const { state, act } = useStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const prefs = usePreferences()
+  const [link,setLink] = useState<string>()
+  useEffect(() => {
+    const media = matchMedia('(prefers-color-scheme: dark)')
+    const apply = () => {
+      document.documentElement.dataset.theme = prefs.appearance === 'system' ? (media.matches ? 'dark' : 'light') : prefs.appearance
+      document.documentElement.style.setProperty('--chat-size', prefs.font + 'px')
+    }
+    apply()
+    media.addEventListener('change', apply)
+    return () => media.removeEventListener('change', apply)
+  }, [prefs.appearance,prefs.font])
   const r = state.route
   const waiting = state.runOrder.map((id) => state.runs[id]).find((run) => run.limit)
   return (
-    <div className={windowControls ? 'app app--desktop' : 'app'}>
+    <div onClickCapture={event => {
+      const a = event.target instanceof Element && event.target.closest('a[href]')
+      if (prefs.links === 'confirm' && a instanceof HTMLAnchorElement && a.target === '_blank' && /^https?:$/.test(a.protocol) && !a.hasAttribute('data-confirmed')) {
+        event.preventDefault(); setLink(a.href)
+      }
+    }} className={windowControls ? 'app app--desktop' : 'app'}>
       <Sidebar onSettings={() => setSettingsOpen(true)} />
       <main className="main">
         {windowControls && r.view !== 'topic' && (
@@ -35,6 +53,9 @@ export function App({ windowControls, pages, comparison, liveResearch }: { windo
       </main>
       {settingsOpen && <Dialog title={tr('Settings')} onClose={() => setSettingsOpen(false)} panelClass="settings-window">
         {pages?.settings ?? <Settings />}
+      </Dialog>}
+      {link && <Dialog title={tr('Open external link?')} onClose={()=>setLink(undefined)}>
+        <p>{link}</p><a className="primary" data-confirmed href={link} target="_blank" rel="noreferrer" onClick={()=>setLink(undefined)}>{tr('Open')}</a>
       </Dialog>}
       <TraceDrawer />
       {!(r.view === 'topic' && r.tab === 'read') && <EvidencePopover />}

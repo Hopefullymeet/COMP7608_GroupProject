@@ -1,3 +1,4 @@
+import { usePreferences } from '../data/preferences'
 import { count, useLanguage, type Translate } from '../i18n'
 import { useEffect, useState } from 'react'
 import { useStore } from '../data/store'
@@ -21,6 +22,7 @@ function usageLabel(tr: Translate, usage: Usage) {
 function RunCard({ run, open, onToggle }: { run: AgentRun; open: boolean; onToggle: () => void }) {
   const { tr } = useLanguage()
   const {state}=useStore()
+  const prefs = usePreferences()
   const tokens = run.steps.reduce((n, s) => n + (s.tokens ?? 0), 0)
   const ms = run.steps.reduce((n, s) => n + (s.ms ?? 0), 0)
   const config = run.configuration
@@ -44,8 +46,8 @@ function RunCard({ run, open, onToggle }: { run: AgentRun; open: boolean; onTogg
                 <div>
                   <small>{tr(KIND[s.kind].label)}</small>
                   <strong>{tr(s.title)}</strong>
-                  {s.call && <code>{s.call}</code>}
-                  {s.detail && <p>{tr(s.detail)}</p>}
+                  {prefs.steps === 'detailed' && s.call && <code>{s.call}</code>}
+                  {prefs.steps === 'detailed' && s.detail && <p>{tr(s.detail)}</p>}
                 </div>
               </li>
             ))}
@@ -57,9 +59,9 @@ function RunCard({ run, open, onToggle }: { run: AgentRun; open: boolean; onTogg
               {config.sources.length > 0 && <p>{tr('Search sources:')}{' '}{config.sources.map((id) => SOURCE_NAMES[id]).join(', ')}</p>}
               <p>{tr('Budget:')}{' '}{limit(config.budget.calls)}{' '}{tr('calls ·')}{' '}{limit(config.budget.tokens)}{' '}{tr('tokens ·')}{' '}{limit(config.budget.minutes)}{' '}{tr('min · USD')}{' '}{limit(config.budget.cost)}</p>
             </>}
-            {run.estimate && <p>{tr('Estimated (demo):')}{' '}{usageLabel(tr, run.estimate)}</p>}
-            {run.usage ? <span>{state.mainline&&!state.mainline.demo?tr('Used'):tr('Used (demo)')} · {usageLabel(tr, run.usage)}</span>
-              : state.mainline?<span>{count(tr, run.steps.length,'step')}{' '}{tr('· Usage unavailable')}</span> : <span>{count(tr, run.steps.length, 'step')} · ~{tokens.toLocaleString()}{' '}{tr('tokens ·')}{' '}{(ms / 1000).toFixed(1)}{' '}{tr('s')}{' '}<em>{tr('(mock)')}</em></span>}
+            {prefs.usage === 'detailed' && run.estimate && <p>{tr('Estimated (demo):')}{' '}{usageLabel(tr, run.estimate)}</p>}
+            {prefs.usage === 'detailed' && (run.usage ? <span>{state.mainline&&!state.mainline.demo?tr('Used'):tr('Used (demo)')} · {usageLabel(tr, run.usage)}</span>
+              : state.mainline?<span>{count(tr, run.steps.length,'step')}{' '}{tr('· Usage unavailable')}</span> : <span>{count(tr, run.steps.length, 'step')} · ~{tokens.toLocaleString()}{' '}{tr('tokens ·')}{' '}{(ms / 1000).toFixed(1)}{' '}{tr('s')}{' '}<em>{tr('(mock)')}</em></span>)}
           </div>
         </>
       )}
@@ -70,6 +72,7 @@ function RunCard({ run, open, onToggle }: { run: AgentRun; open: boolean; onTogg
 export function TraceDrawer() {
   const { tr } = useLanguage()
   const { state, act } = useStore()
+  const prefs = usePreferences()
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const { open, focus } = state.trace
   const runIds = !state.mainline && state.route.view === 'check'
@@ -97,7 +100,7 @@ export function TraceDrawer() {
           ? tr('No checks for this manuscript yet.') : tr('No runs yet. Start a search, ask a question or run a comparison.')}</p>}
         {runIds.map((id, i) => {
           const run = state.runs[id]
-          const isOpen = collapsed[id] === undefined ? i === 0 || id === focus : !collapsed[id]
+          const isOpen = collapsed[id] === undefined ? (id === focus || (i === 0 && (prefs.collapse === 'never' || run.status === 'running'))) : !collapsed[id]
           return <RunCard key={id} run={run} open={isOpen} onToggle={() => setCollapsed((c) => ({ ...c, [id]: isOpen }))} />
         })}
       </div>

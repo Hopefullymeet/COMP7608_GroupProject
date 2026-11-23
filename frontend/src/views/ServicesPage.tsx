@@ -1,5 +1,4 @@
-import { AgentPresets } from './AgentPresets'
-import { PersonalSettings } from './PersonalSettings'
+import { PersonalSettings, RoleSettings } from './PersonalSettings'
 import { useLanguage, type Message } from '../i18n'
 import { useEffect, useState } from 'react'
 import { Dialog } from '../components/PageHead'
@@ -472,7 +471,7 @@ export function ServicesPage() {
   const sections = [
     ['general', 'settings', 'General settings'],
     ['model', 'globe', 'Model'],
-    ['preset', 'trace', 'Agent presets'],
+    ['preset', 'trace', 'Customize roles'],
   ] as const
   return <div className="settings-layout">
     <nav aria-label={tr('Settings')}>{sections.map(([id, icon, label]) =>
@@ -482,7 +481,25 @@ export function ServicesPage() {
       {tab === 'general' && <PersonalSettings/>}
       {tab === 'model' && config && <SettingsForm key={config.revision} config={config}/>}
       {tab === 'model' && demo && <AccessAndBackup/>}
-      {tab === 'preset' && <AgentPresets/>}
+      {tab === 'preset' && <RoleSettings/>}
     </div>
   </div>
+}
+
+export function FirstRunSettings() {
+  const { tr } = useLanguage()
+  const config = useRead('services.get', {})
+  const [stage, setStage] = useState(() => localStorage.getItem('papertrace.role-intro.v1'))
+  function finish() {
+    const next = ready ? 'done' : 'api-deferred'
+    localStorage.setItem('papertrace.role-intro.v1',next)
+    setStage(next)
+  }
+  if (stage === 'done' || !config) return null
+  const ready = config.models.some(m => m.id === config.model_id && (m.local || m.credential_configured))
+  if (!ready && stage === 'api-deferred') return null
+  return <Dialog title={tr(ready ? 'Set up your research assistant' : 'Connect your model')} onClose={finish} panelClass="first-run-settings">
+    {ready ? <RoleSettings onSaved={finish}/> : <SettingsForm key={config.revision} config={config}/>}
+    <button className="link-btn" onClick={finish}>{tr('Set up later')}</button>
+  </Dialog>
 }

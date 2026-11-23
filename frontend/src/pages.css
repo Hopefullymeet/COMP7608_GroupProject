@@ -479,11 +479,6 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .settings-content { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 8px 18px 0; }
 .settings-content .set-section { grid-template-columns: minmax(0, 1fr); padding: 10px 0 20px; gap: 16px; }
 .preference-row { display: flex; align-items: center; justify-content: space-between; }
-.preset-options { display: grid; gap: 10px; }
-.preset-option { text-align: start; border: 1px solid var(--line); border-radius: 10px; padding: 14px; background: var(--surface); color: var(--ink); }
-.preset-option[aria-pressed=true] { border-color: var(--accent); }
-.preset-option small { margin-inline-start: 10px; color: var(--accent); }
-.preset-option span { display: block; margin-top: 6px; color: var(--ink-2); }
 @media (max-width: 620px) {
   .dialog.settings-window { padding: 14px; width: calc(100vw - 18px); }
   .settings-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 12px; }

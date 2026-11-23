@@ -20,7 +20,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
 
 from credentials import deepseek_api_key, system_key, store
-from dsh import ANSWER_LAYOUT, Dsh, DshFailure, ENDPOINT, MODEL, read_json_answer
+from dsh import AGENT_POLICY, ANSWER_LAYOUT, Dsh, DshFailure, ENDPOINT, MODEL, read_json_answer
 from literature import LiteratureError, MAX_VERSIONS, body_passage_starts, digest, init_corpus
 from workbench import Workbench
 from citations import CitationWorkspace, init_citations
@@ -322,7 +322,8 @@ class Worker:
 
     def user_profile(self):
         row = self.db.execute("SELECT data FROM records WHERE kind='personal_profile' AND id='local'").fetchone()
-        return json.loads(row[0]) if row else {"identity": "", "enabled": False, "memories": [], "revision": ""}
+        return {"identity": "", "enabled": False, "memories": [], "revision": "", "persona": "",
+                "wiki_access": "edit", **(json.loads(row[0]) if row else {})}
 
     def save_profile(self, params):
         profile = self.user_profile()
@@ -333,6 +334,11 @@ class Worker:
                 or not isinstance(memories, list) or len(memories) > 60
                 or any(not isinstance(m, str) or len(m) > 400 for m in memories)):
             raise invalid("Check your profile and memory lengths.")
+        persona = params.get("persona", profile["persona"])
+        access = params.get("wiki_access", profile["wiki_access"])
+        if not isinstance(persona, str) or len(persona) > 500 or access not in ("read", "edit"):
+            raise invalid("Invalid assistant preferences.")
+        profile.update(persona=persona.strip(), wiki_access=access)
         profile.update(identity=identity.strip(), enabled=enabled, revision=identifier(),
                        memories=list(dict.fromkeys(m.strip() for m in memories if m.strip())))
         self.put("personal_profile", "local", profile)
@@ -344,7 +350,7 @@ class Worker:
             return []
         terms = words(question)
         ranked = sorted(reversed(profile["memories"]), key=lambda m: len(terms & words(m)), reverse=True)
-        return [text for text in [profile["identity"], *ranked[:10]] if text]
+        return [text for text in [("Assistant style: " + profile["persona"]) if profile["persona"] else "", profile["identity"], *ranked[:10]] if text]
 
     def remember_request(self, question):
         profile = self.user_profile()
@@ -1753,6 +1759,12 @@ class Worker:
         return self.request_model_json(endpoint, key, payload, seen, lambda text: read_json_answer(text, seen), preview=preview)
 
     def request_model_json(self, endpoint, key, payload, seen, parse, timeout=30, preview=None):
+        messages = list(payload.get("messages", []))
+        if messages and messages[0]["role"] == "system":
+            messages[0] = {**messages[0], "content": AGENT_POLICY + "\n" + messages[0]["content"]}
+        else:
+            messages.insert(0, {"role": "system", "content": AGENT_POLICY})
+        payload = {**payload, "messages": messages}
         request = Request(endpoint + "/chat/completions", data=encode(payload).encode("utf-8"),
                           headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
         stage = "completion_envelope"

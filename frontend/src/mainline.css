@@ -361,3 +361,14 @@
   .app:has(.audit-header-actions, .wiki-page) > .workspace-sidebar { width: 100%; max-height: 24dvh; }
   .app:has(.audit-header-actions, .wiki-page) > .main { min-height: 0; }
 }
+
+.settings-content .preference-row { min-height: 44px; border-bottom: 1px solid var(--line); gap: 12px; }
+.preference-row select { color: var(--ink); background: var(--sunk); border: 1px solid var(--line); padding: 5px 8px; border-radius: 6px; }
+.chat .answer, .chat .msg.user { font-size: var(--chat-size, 14px); }
+.dialog.first-run-settings .set-section { grid-template-columns: 1fr; }
+html:root[data-theme=dark] {
+  color-scheme: dark;
+  --bg: #201d1b; --surface: #292522; --sidebar: #24211f; --sunk: #34302d;
+  --ink: #f4eee9; --ink-2: #d3c8bf; --ink-3: #b1a399; --ink-4: #998b82;
+  --line: #443d38; --line-2: #594d45; --accent: #e99979; --accent-soft: #593b30; --accent-faint: #3c302a;
+}

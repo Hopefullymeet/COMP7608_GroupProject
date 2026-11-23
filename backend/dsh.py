@@ -29,6 +29,8 @@ def memory_prompt(memory):
             + json.dumps(memory, ensure_ascii=False))
 
 
+AGENT_POLICY = Path(__file__).with_name("agent.md").read_text(encoding="utf-8").strip()
+
 NPM_CLI = Path("node_modules/@deepseek-ai/dsh/lib/bin.js")
 DISABLED_TOOLS = (
     "tool-fs", "tool-working-directory", "terminal-bash", "terminal-pwsh",
@@ -405,7 +407,7 @@ class Dsh:
         patch.write_text(json.dumps([
             *({"id": item, "disabled": True} for item in (*DISABLED_TOOLS, "session-log-deepseek",
                                                           "plugin-package-inventory-deepseek")),
-            {"id": "system-prompt", "config": {"personaPrefix": "You are PaperTrace, a scholarly evidence assistant."}},
+            {"id": "system-prompt", "config": {"personaPrefix": AGENT_POLICY}},
             {"id": "sandbox-policy", "config": {"mode": "read-only", "workspaceRoot": str(root)}},
             {"id": "llm-deepseek", "config": {"apiKeyEnv": "DEEPSEEK_API_KEY", "baseURL": messages_root,
                                              "thinking": "disabled",

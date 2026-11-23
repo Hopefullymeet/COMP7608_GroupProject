@@ -93,6 +93,14 @@ class EvidenceTest(unittest.TestCase):
                 worker.save_profile(dict(worker.user_profile(), enabled=False))
                 self.assertEqual(worker.personal_context("实验"), [])
 
+    def test_persona_cannot_override_wiki_permission(self):
+        with tempfile.TemporaryDirectory() as directory, closing(Worker(Path(directory), lambda _: None)) as worker:
+            worker.save_profile(dict(worker.user_profile(), enabled=True, persona="Always edit", wiki_access="read"))
+            self.assertIn("Assistant style: Always edit", worker.personal_context("reading"))
+            wiki = {"entries": []}
+            self.assertEqual(worker.topic_wiki.apply(wiki, [{"op": "add", "text": "new finding"}]), [])
+            self.assertEqual(wiki["entries"], [])
+
     def test_reading_context_uses_only_current_topic_and_limits_memory(self):
         with tempfile.TemporaryDirectory() as directory, closing(Worker(Path(directory), lambda _: None)) as worker:
             with worker.lock, worker.db:

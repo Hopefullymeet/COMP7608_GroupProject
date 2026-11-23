@@ -1,5 +1,5 @@
 import type { Write, Picked } from './library'
-export type PersonalProfile = {identity:string;enabled:boolean;memories:string[];revision:string}
+export type PersonalProfile = {persona?:string;wiki_access?:"read"|"edit";identity:string;enabled:boolean;memories:string[];revision:string}
 export type Model = {
   id: string
   label: string

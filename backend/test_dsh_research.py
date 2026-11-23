@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import threading
 import unittest
+from unittest.mock import patch
 
 from dsh import Dsh, DshFailure
 import test_literature
@@ -19,6 +20,18 @@ class ScriptedProvider(BaseHTTPRequestHandler):
 
     def do_POST(self):
         request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if "dsh_session_log" in request:
+            self.send_error(400, "Session log field is forbidden")
+            return
+        if self.path.endswith("/chat/completions") and request["messages"] == [{"role": "user", "content": "Reply with OK."}]:
+            self.server.probes.append((request["model"], request["max_tokens"], request.get("tools", [])))
+            body = b'{"choices":[{"message":{"content":"OK"}}]}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         messages = request["messages"]
         prompt = next(block["text"] for m in messages if m["role"] == "user"
                       for block in m["content"] if isinstance(block, dict) and block["type"] == "text")
@@ -160,15 +173,17 @@ class DshResearchTest(unittest.TestCase):
                     prepared = fixture.call("task.prepare", **task)
                     config = fixture.call("services.get")
                     revision = config.pop("revision")
+                    config["models"][0]["endpoint"] = dsh.endpoint
                     config["models"][0]["model"] = "deepseek-pro"
                     fixture.call("services.save", base_revision=revision, **config)
                     fixture.call("task.start", confirmation_id=prepared["confirmation_id"],
                                  error="CONFIRMATION_REQUIRED", **task)
-                    for _ in range(2):
-                        self.assertTrue(worker.test_service({
-                            "id": config["model_id"], "operation_id": "probe-1",
-                        })["ok"])
-                    self.assertEqual(provider.probes, [("deepseek-pro", 32, [])])
+                    with patch("papertrace.deepseek_api_key", return_value="loopback-fixture"):
+                        for _ in range(2):
+                            self.assertTrue(worker.test_service({
+                                "id": config["model_id"], "operation_id": "probe-1",
+                            })["ok"])
+                    self.assertEqual(provider.probes, [("deepseek-pro", 16, [])])
                     self.assertEqual(dsh.model, "deepseek-flash")
                     fixture.run_task(fixture.versions)
                     self.assertTrue(provider.research_models)

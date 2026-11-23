@@ -640,6 +640,7 @@ class TopicWiki:
             material = self.material(topic)
             wiki = self.load(topic)
             material["personal_preferences"] = host.personal_context(wiki["thread"][-1]["text"])
+            material["allow_wiki_edits"] = host.user_profile()["wiki_access"] == "edit"
         message = wiki["thread"][-1]["text"]
         try:
             answer = self.model_reply(model, material, wiki, message) if model else local_reply(wiki, message)
@@ -653,6 +654,9 @@ class TopicWiki:
                 wiki = self.load(topic)
                 changes = self.apply(wiki, answer.get("changes", []))
                 reply = clip(answer.get("reply"), 4000) or ("已更新 Wiki。" if CJK.search(message) else "Wiki updated.")
+                if answer.get("changes") and host.user_profile()["wiki_access"] == "read":
+                    reply = ("当前仅允许回答，Wiki 条目未修改。" if CJK.search(message)
+                             else "Wiki chat is read-only. No entries were changed.")
                 wiki["thread"].append({"message_id": self.identifier(), "role": "assistant", "text": reply,
                                        "created_at": self.now(), **({"changes": changes} if changes else {})})
                 wiki["thread"] = wiki["thread"][-100:]
@@ -663,6 +667,8 @@ class TopicWiki:
                 self.store(wiki)
 
     def apply(self, wiki, changes):
+        if self.worker.user_profile()["wiki_access"] == "read":
+            return []
         applied = []
         entries = wiki["entries"]
         for change in changes[:6] if isinstance(changes, list) else []:
@@ -757,6 +763,7 @@ class TopicWiki:
                 raise ValueError
             return result
 
+        system += " If allow_wiki_edits is false, answer in read-only mode, with no changes or claims of edits."
         system += (" For research map changes use map_add, map_rename or map_remove with entry_id as the target "
                    "(empty string for root), and text. Delete and root rename requests are proposals for review. "
                    "Do not say they have been completed.")

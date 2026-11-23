@@ -1,3 +1,4 @@
+import { usePreferences } from '../data/preferences'
 import { count, useLanguage } from '../i18n'
 import { lazy, Suspense, useContext, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { allEvidence, currentTopic, evidenceFor, paperFor, papersOfTopic, sourceStatus, useStore } from '../data/store'
@@ -140,6 +141,8 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
   const { tr } = useLanguage()
   const { state, act } = useStore()
   const actions = useContext(HeaderActions)
+  const prefs = usePreferences()
+  const [queued,setQueued] = useState<{session:string;question:string}>()
   const [text, setText] = useState('')
   const endRef = useRef<HTMLDivElement>(null)
   const session = state.sessions.find((s) => s.id === state.activeSessionId)
@@ -169,6 +172,24 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
     if (fromComposer) setText((current) => current === t ? '' : current)
   }
 
+  const queuedRef = useRef(queued)
+  queuedRef.current = queued
+  useEffect(() => {
+    if (!queued || queuedRef.current !== queued) return
+    if (queued.session !== session?.id) { setQueued(undefined); return }
+    if (state.qaRunning || blocked || !canAsk) return
+    queuedRef.current = undefined
+    setQueued(undefined)
+    void act.ask(queued.question).then(ok => { if (!ok) setText(current => current || queued.question) })
+  }, [queued, session?.id, state.qaRunning, blocked, canAsk, act])
+  const canQueue = prefs.busy === 'queue' && !annotations.items.length && !queued && !!session
+  function submit() {
+    if (state.qaRunning && canQueue && session && text.trim()) {
+      setQueued({session:session.id, question:text.trim()}); setText(''); return
+    }
+    void send(text,true)
+  }
+
   const suggestions = (state.mainline
     ? state.mainline.demo ? [{ id: 'pubmedqa', text: 'What context does PubMedQA provide to the model?', requires: undefined },{id:'limits',text:'What does the abstract establish about the conclusions?',requires:undefined}] : []
     : QUESTIONS).filter((q) => !asked.has(q.text))
@@ -189,7 +210,9 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
         {messages.map((m) =>
           m.role === 'user'
             ? <div key={m.id} className="msg user"><p>{m.segments[0]?.text}</p></div>
-            : <AgentMessage key={m.id} m={m} />,
+            : prefs.replies === 'latest' && m.done && messages.slice(messages.indexOf(m)+1).some(next=>next.role==='agent' && next.done)
+              ? <details key={m.id}><summary>{tr('Earlier answer')}</summary><AgentMessage m={m}/></details>
+              : <AgentMessage key={m.id} m={m} />,
         )}
         {selections.map((answer) => <div key={answer.id}>
           <div className="msg user"><p>{answer.question}</p></div>
@@ -230,13 +253,14 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
               </div>)}
             </div>
           </div>}
+          {queued && <p role="status">{tr('Queued question')} · {queued.question} <button onClick={()=>setQueued(undefined)}>{tr('Cancel')}</button></p>}
           {blocked && <p className="fine">{blocked}</p>}
           <textarea ref={annotations.input} value={text} rows={2} placeholder={messages.length ? tr('Ask a follow-up…') : tr('Ask about these papers…')} aria-label={tr('Ask a follow-up')}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(text, true) } }} />
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (prefs.send === 'enter' || e.metaKey || e.ctrlKey)) { e.preventDefault(); submit() } }} />
           <div className="composer-bar">
             <span className="grow" />
-            <button className="send" disabled={state.qaRunning || !canAsk || !!blocked || !text.trim()} onClick={() => void send(text, true)} aria-label={tr('Send')}><Icon name="arrowUp" size={16} /></button>
+            <button className="send" disabled={(state.qaRunning && !canQueue) || !canAsk || !!blocked || !text.trim()} onClick={submit} aria-label={tr('Send')}><Icon name="arrowUp" size={16} /></button>
           </div>
         </div>
       </div>}
