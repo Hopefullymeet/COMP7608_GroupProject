@@ -563,18 +563,18 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
     })
   }
 
-  const pageGutter = width < 440 ? 44 : 12
+  const pageInset = 12
   return <div className="pt-reader">
     <div className="pt-reader-frame" ref={frame} tabIndex={0} aria-label={tr('PDF document')}
       onPointerDown={() => { if (more.current) more.current.open = false }}
       onScroll={(event) => { syncPageWindow(event.currentTarget); queueBookmark(event.currentTarget) }}>
       {error && <p role="alert" className="pt-pdf-loading">{tr(error)}</p>}
       {!document && !error && <p className="pt-pdf-loading" role="status">{tr('Opening PDF…')}</p>}
-      <div className="pt-reader-pages" ref={pageList} style={draft ? { paddingInlineStart: 48 } : { paddingInlineEnd: pageGutter }}>
+      <div className="pt-reader-pages" ref={pageList} style={{ paddingInline: pageInset }}>
         {document && width > 0 && Array.from({ length: document.numPages }, (_, index) => {
           const number = index + 1
           const ratio = ratios[number] ?? aspectRatio
-          const pageWidth = Math.max(1, width - 12 - (draft ? 48 : pageGutter)) * zoom
+          const pageWidth = Math.max(1, width - 2 * pageInset) * zoom
           return <div className="pt-pdf-sheet" key={number} style={{ width: pageWidth, aspectRatio: ratio }}>
             {(number >= renderRange[0] && number <= renderRange[1]) &&
               <PdfSheet document={document} scope={scope} page={number} width={pageWidth} aspectRatio={ratio}

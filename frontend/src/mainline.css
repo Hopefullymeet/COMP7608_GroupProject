@@ -286,7 +286,7 @@
 .pt-topic-menu button:hover, .pt-topic-menu button[aria-current] { color: var(--accent); background: var(--accent-faint); }
 @media (max-width: 780px) {
   .reader--library { min-height: 60dvh; }
-  .pt-pdf-rail { inset-inline-end: 8px; }
+  .pt-pdf-rail { inset-inline-end: 15px; }
   .pt-paper-directory { inset-inline-start: 8px; }
   .pt-reading-content .pt-reader-frame { max-height: 68dvh; }
 }
