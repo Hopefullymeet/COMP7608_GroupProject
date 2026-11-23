@@ -6,17 +6,18 @@ import { dreamFrame, greetingsAt } from '../data/greetings'
 
 export function NewTopicEntry({ paused, onOpen }: { paused: boolean; onOpen: () => void }) {
   const { language, tr } = useLanguage()
-  const [lines, setLines] = useState(() => greetingsAt(new Date().getHours()))
-  useEffect(() => {
-    const sync = () => setLines(greetingsAt(new Date().getHours()))
-    const timer = window.setInterval(sync, 15000)
-    document.addEventListener('visibilitychange', sync)
-    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', sync) }
-  }, [])
   const [dream, setDream] = useState<number | null>(null)
   const variant = useRef(0)
   const greeting = useRef<HTMLButtonElement>(null)
   const dreaming = dream !== null
+  const [lines, setLines] = useState(() => greetingsAt(new Date().getHours()))
+  useEffect(() => {
+    if (dreaming) return
+    const sync = () => setLines(greetingsAt(new Date().getHours()))
+    const timer = window.setInterval(sync, 15000)
+    document.addEventListener('visibilitychange', sync)
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', sync) }
+  }, [dreaming])
   useEffect(() => {
     if (!dreaming) return
     function dismiss(event: PointerEvent) {
@@ -32,45 +33,55 @@ export function NewTopicEntry({ paused, onOpen }: { paused: boolean; onOpen: () 
       document.removeEventListener('keydown', escape)
     }
   }, [dreaming])
-  const cursor = useRef({ pool: lines, line: 0 })
   const [frame, setFrame] = useState({ line: 0, length: 0 })
   const entry = lines[frame.line % lines.length]
   const full = entry[language]
   const text = full.slice(0, frame.length)
   const source = text === full ? entry.source?.[language] : ''
+  const resumeAfterDream = useRef(false)
+  const cursor = useRef({ pool: lines, language, line: 0, length: 0, erasing: false })
   useEffect(() => {
+    if (dreaming) {
+      resumeAfterDream.current = true
+      return
+    }
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)')
     const typingDelay = language === 'en' ? 38 : 115
     const eraseDelay = language === 'en' ? 14 : 42
+    if (cursor.current.pool !== lines || cursor.current.language !== language) {
+      cursor.current = { pool: lines, language, line: 0, length: 0, erasing: false }
+    }
+    const position = cursor.current
+    const show = () => setFrame({ line: position.line, length: position.length })
+    const readingDelay = () => lines[position.line].source ? 6000 : 4000
     let timer: number
+    function tick() {
+      const size = lines[position.line][language].length
+      position.length += position.erasing ? -1 : 1
+      show()
+      let delay = position.erasing ? eraseDelay : typingDelay
+      if (position.length === size) {
+        position.erasing = true
+        delay = readingDelay()
+      } else if (position.length === 0) {
+        position.line = (position.line + 1) % lines.length
+        position.erasing = false
+        delay = 250
+      }
+      timer = window.setTimeout(tick, delay)
+    }
     function restart() {
       window.clearTimeout(timer)
-      if (cursor.current.pool !== lines) cursor.current = { pool: lines, line: 0 }
-      let line = cursor.current.line
-      if (paused || dreaming || document.hidden || motion.matches) {
-        setFrame({ line, length: lines[line][language].length })
-        return
+      if (paused || document.hidden || motion.matches) {
+        position.length = lines[position.line][language].length
+        position.erasing = true
+        show()
+      } else if (resumeAfterDream.current || position.length === lines[position.line][language].length) {
+        timer = window.setTimeout(tick, readingDelay())
+      } else {
+        tick()
       }
-      let length = 0
-      let erasing = false
-      function tick() {
-        length += erasing ? -1 : 1
-        const entry = lines[line]
-        const full = entry[language]
-        cursor.current.line = line
-        setFrame({ line, length })
-        let delay = erasing ? eraseDelay : typingDelay
-        if (length === full.length) {
-          erasing = true
-          delay = entry.source ? 6000 : 4000
-        } else if (length === 0) {
-          line = (line + 1) % lines.length
-          erasing = false
-          delay = 250
-        }
-        timer = window.setTimeout(tick, delay)
-      }
-      tick()
+      resumeAfterDream.current = false
     }
     restart()
     motion.addEventListener('change', restart)
