@@ -457,3 +457,10 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .audit-inspector header { flex: none; }
 .audit-inspector-body { overflow: auto; overscroll-behavior: contain; min-height: 0; }
 @media(max-width:800px) { .audit-inspector { contain: none; max-height: 45dvh; } }
+.audit-panel-nav { display: flex; gap: 16px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+.audit-panel-nav button { border: 0; border-bottom: 2px solid transparent; padding: 4px 0 8px; background: transparent; color: var(--ink-2); cursor: pointer; }
+.audit-panel-nav button[aria-pressed=true] { border-bottom-color: var(--accent); color: var(--ink); font-weight: 600; }
+.audit-panel-hint { margin: auto 0; padding: 1rem; text-align: center; color: var(--ink-2); }
+.audit-question { display: grid; gap: 6px; margin-top: auto; padding-top: 10px; }
+.audit-question textarea { width: 100%; resize: vertical; min-height: 4em; }
+.audit-question button { justify-self: start; }

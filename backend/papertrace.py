@@ -1282,13 +1282,19 @@ class Worker:
                 seen.add(version)
                 self.source(version, topic, required(item, "paper_id"))
         elif kind == "citation_audit":
-            draft, _, audit_jobs = self.citations.jobs(topic, input_)
+            draft, snapshot, audit_jobs = self.citations.jobs(topic, input_)
             target, label = draft["draft_id"], draft["name"]
             audit_pending = [j for j in audit_jobs if j["usable"] and (input_.get("whole_document") or j["cached"] is None)]
             if "question" in input_:
                 question = required(input_, "question").strip()
                 if not question or len(question) > 2000:
                     raise invalid("Enter a question of up to 2000 characters.")
+                keys = input_.get("reference_keys")
+                if keys is not None:
+                    selected = [s for s in snapshot["sentences"] if s["id"] in input_["sentence_ids"]]
+                    if (len(selected) != 1 or not isinstance(keys, list) or not keys or
+                            not all(isinstance(k, str) and k in selected[0]["cites"] + selected[0].get("unresolved", []) for k in keys)):
+                        raise invalid("Select references from the current manuscript sentence.")
                 self.citations.report(topic, input_)
                 if not self.topic_wiki.model():
                     raise RpcError(-32015, "MODEL_UNAVAILABLE", "configure_service", "Configure a text model.")

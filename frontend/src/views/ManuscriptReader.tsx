@@ -31,14 +31,22 @@ function CitationPins({ topic, draft, version, page, selected, onSelect }: {
       onClick={e => onSelect(mark, e.currentTarget)}/>))}</>
 }
 
-export function ManuscriptReader({ topic, draft, version, report, name, onTools, onChoose, busy, onLocalizedCheck }: {
+export function ManuscriptReader({ topic, draft, version, report, name, onAsk, onError, onChoose, busy, onLocalizedCheck }: {
   busy: boolean; onLocalizedCheck: () => void
-  topic: string; draft: string; version: Snapshot; report?: Report; name: string; onTools: () => void; onChoose: () => void
+  topic: string; draft: string; version: Snapshot; report?: Report; name: string; onAsk: (question: string, mark?: CitationMark) => Promise<void>; onError: (err: unknown) => void; onChoose: () => void
 }) {
   const { tr, language } = useLanguage()
+  const [view, setView] = useState<'audit' | 'ask'>('audit')
+  const [question, setQuestion] = useState('')
   const [page, setPage] = useState(1)
   const [mark, select] = useState<CitationMark>()
   const [wire, setWire] = useState('')
+  const answered = report?.discussion?.length ?? 0
+  const previousCount = useRef(answered)
+  useEffect(() => {
+    if (answered > previousCount.current) setQuestion(q => report?.discussion?.at(-1)?.question === q.trim() ? '' : q)
+    previousCount.current = answered
+  }, [answered, report])
   const frame = useRef<HTMLDivElement>(null)
   const pin = useRef<HTMLButtonElement | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
@@ -69,17 +77,38 @@ export function ManuscriptReader({ topic, draft, version, report, name, onTools,
     observer.observe(root); observer.observe(start); observer.observe(end)
     root.addEventListener('scroll', measure, true)
     return () => { observer.disconnect(); root.removeEventListener('scroll', measure, true) }
-  }, [mark])
+  }, [mark, view])
   return <section className="audit-reading">
     <div className="audit-reader-tools"><button className="ghost-btn" onClick={onChoose}>‹ {tr('Choose your paper')}</button>
       <strong title={name}>{name}</strong>{report && report.language !== language &&
-        <button className="ghost-btn" disabled={busy} onClick={onLocalizedCheck}>{tr('Generate an English report')}</button>}<button className="ghost-btn" onClick={onTools}>{tr('Audit tools')}</button></div>
-    <div className={'audit-spread' + (mark ? ' inspecting' : '')} ref={frame}>
+        <button className="ghost-btn" disabled={busy} onClick={onLocalizedCheck}>{tr('Generate an English report')}</button>}</div>
+    <div className="audit-spread inspecting" ref={frame}>
       <Suspense fallback={<p>{tr('Opening PDF…')}</p>}><PdfReader topic={topic} version={version.version_id} draft={draft} onPage={setPage}
         pageOverlay={number => <CitationPins topic={topic} draft={draft} version={version} page={number} selected={mark}
-          onSelect={(value, button) => { pin.current = button; select(value) }}/>} /></Suspense>
-      {wire && mark && <svg className="audit-wire" aria-hidden="true"><path d={wire}/></svg>}
-      {mark && <aside className="audit-inspector" aria-label={tr('Citation check')+' '+mark.label}>
+          onSelect={(value, button) => { pin.current = button; select(value); setView('audit') }}/>} /></Suspense>
+      {wire && mark && view === 'audit' && <svg className="audit-wire" aria-hidden="true"><path d={wire}/></svg>}
+      <aside className="audit-inspector" aria-label={tr('Citation check')}>
+        <nav className="audit-panel-nav" aria-label={tr('Citation check')}>
+          <button aria-pressed={view === 'audit'} onClick={() => setView('audit')}>{tr('Citation check')}</button>
+          <button aria-pressed={view === 'ask'} onClick={() => setView('ask')}>{tr('Ask AI')}</button>
+        </nav>
+        {view === 'ask' ? <>
+          <div className="audit-inspector-body" aria-live="polite">
+            {report?.discussion?.map((turn,i) => <article key={i}><strong>{turn.question}</strong>
+              <AuditText text={turn.text}/>{turn.anchor_ids.map(id => <EvidenceLink key={id} id={id}/>)}</article>)}
+          </div>
+          <form className="audit-question" onSubmit={async e => { e.preventDefault()
+            if (!question.trim() || busy || !report) return
+            try { await onAsk(question.trim(), mark) } catch (error) { onError(error) }
+          }}>
+            <small>{mark ? tr('Current citation {0}', mark.label || sentence?.text || '') : tr('Current audit report')}</small>
+            {mark && <button type="button" className="link-btn" onClick={close}>{tr('Use whole report')}</button>}
+            <textarea aria-label={tr('Ask about this audit')} placeholder={tr('Ask about this audit')}
+              value={question} maxLength={2000} onChange={e => setQuestion(e.target.value)}/>
+            <button className="primary" disabled={busy || !question.trim() || !report}>{tr('Ask')}</button>
+            {!report && <p>{tr('A report is needed to answer audit questions.')}</p>}
+          </form>
+        </> : mark ? <>
         <header><h3 ref={heading}>{tr('Citation check')} {mark.label}</h3>
           <button className="icon-btn" aria-label={tr('Close')} onClick={close}>×</button></header>
         <div className="audit-inspector-body" key={mark.sentence_id + mark.label}>
@@ -101,10 +130,13 @@ export function ManuscriptReader({ topic, draft, version, report, name, onTools,
           </section>
         })}
         </div>
-      </aside>}
+        </> : <p className="audit-panel-hint">{version.sentences.length
+          ? tr('Click a citation number in the manuscript to see its check and evidence.')
+          : tr('No citations were identified in this manuscript.')}</p>}
+      </aside>
     </div>
     {data && remaining.length > 0 && <details><summary>{tr('Citations without a page marker')}</summary>
-      {remaining.map(s => <button className="audit-option" key={s.id} onClick={() => { pin.current = null; select({
+      {remaining.map(s => <button className="audit-option" key={s.id} onClick={() => { pin.current = null; setView('audit'); select({
         sentence_id:s.id, label:'', keys:[...s.cites,...(s.unresolved ?? [])], boxes:[] }) }}>{s.text}</button>)}</details>}
   </section>
 }

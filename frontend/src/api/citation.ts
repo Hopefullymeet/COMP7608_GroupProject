@@ -64,7 +64,7 @@ type V = { draft_id: string; version_id: string }
 type F = V & { report_id: string; finding_id: string }
 export type CitationTask = T & {
   kind: Report['kind']
-  input: V & { language?: 'en' | 'zh-CN'; whole_document?: boolean; question?: string; report_id?: string; sentence_ids: string[]; source_versions: string[] }
+  input: V & { language?: 'en' | 'zh-CN'; whole_document?: boolean; question?: string; reference_keys?: string[]; report_id?: string; sentence_ids: string[]; source_versions: string[] }
 }
 export type CitationMethods = {
   'draft.import': [Write & T & ({ file_id: string } | { source_version_id: string } | { name: string; text: string } | { name: string; content: string; draft_id?: string }), Manuscript]
