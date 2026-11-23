@@ -155,6 +155,45 @@ test('verified backup restores the same live workspace and rejects damaged versi
   assert.equal((await createMock().call('note.list', { topic_id })).items[0].text, 'Original note')
 })
 
+test('full-text questions with only an abstract save a supported partial answer or fail without a turn', async () => {
+  const api = client()
+  const { topic_id } = await api.call('topic.create', { operation_id: op(), title: 'Reading scope' })
+  const { session_id } = await api.call('session.create', { operation_id: op(), topic_id })
+  const search = await start(api, { kind: 'discovery', topic_id, input: { query: 'PubMedQA' } })
+  const { search_id, candidates } = (await finish(api, search.task_id)).result
+  const { paper_id, source_version_id } = await api.call('candidate.decide', {
+    operation_id: op(), topic_id, search_id, candidate_id: candidates[0].candidate_id, decision: 'add',
+  })
+  const read_sources = [{ source_version_id, read_scope: 'abstract' }]
+  const issue = {
+    reason: 'FULL_TEXT_REQUIRED',
+    retryable: false,
+    next_action: 'attach_full_text',
+    details: { read_sources },
+  }
+  const ask = (question) => start(api, {
+    kind: 'reading_qa',
+    topic_id,
+    session_id,
+    input: { question, sources: [{ paper_id, source_version_id, requested_scope: 'full_text' }] },
+  })
+
+  const partial = await ask('What context does PubMedQA use?')
+  const answer = await finish(api, partial.task_id)
+  assert.equal(answer.status, 'partial')
+  assert.deepEqual(answer.issue, issue)
+  assert.deepEqual(answer.result.read_sources, read_sources)
+  const sentence = answer.result.sentences.find((item) => item.assessment === 'supported')
+  assert.match(sentence?.text ?? '', /abstract without its conclusion/i)
+  assert.ok(sentence.anchor_ids.length)
+
+  const failed = await ask('What was the annotation budget?')
+  assert.deepEqual(await finish(api, failed.task_id), { status: 'failed', issue })
+  const { turns } = await api.call('session.get', { topic_id, session_id })
+  assert.deepEqual(turns.map((turn) => turn.task_id), [partial.task_id])
+  assert.deepEqual(turns[0].answer, answer.result)
+})
+
 test('cancelling a run expires live access and leaves explicitly revoked grants revoked', async () => {
   const api = client(),
     { topic_id } = await api.call('topic.create', { operation_id: op(), title: 'Scoped access' })
