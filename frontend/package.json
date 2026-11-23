@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "desktop": "tauri dev",
-    "desktop:build": "tauri build",
+    "desktop:build": "tauri build --config src-tauri/tauri.portable.conf.json && node scripts/publish-exe.mjs",
     "build": "tsc --noEmit && vite build",
     "test": "node --test tests/workspace.test.mjs",
     "typecheck": "tsc --noEmit",

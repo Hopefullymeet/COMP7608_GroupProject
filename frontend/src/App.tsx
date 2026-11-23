@@ -8,7 +8,8 @@ import { Dialog } from './components/PageHead'
 import { Home } from './views/Home'
 import { TopicView } from './views/TopicView'
 import { Library } from './views/Library'
-import { Wiki } from './views/Wiki'
+import { WikiPage } from './views/WikiPage'
+import { StoreWikiSource } from './data/storeWiki'
 import { Check } from './views/Check'
 import { Settings } from './views/Settings'
 
@@ -27,12 +28,12 @@ export function App({ windowControls, pages, comparison, liveResearch }: { windo
         {r.view === 'home' ? <Home key={state.homeRevision} />
           : r.view === 'topic' ? <TopicView topicId={r.topicId} tab={r.tab} comparison={comparison} liveResearch={liveResearch} windowControls={windowControls} />
           : pages?.[r.view] ?? (r.view === 'library' ? <Library />
-          : r.view === 'wiki' ? <Wiki />
+          : r.view === 'wiki' ? <StoreWikiSource><WikiPage /></StoreWikiSource>
           : r.view === 'check' ? <Check />
           : <Settings />)}
       </main>
       <TraceDrawer />
-      <EvidencePopover />
+      {!(r.view === 'topic' && r.tab === 'read') && <EvidencePopover />}
       {waiting ? <Dialog key={waiting.id} title={tr('Task budget reached')} onClose={() => act.resolveBudget(waiting.id, false)}>
         <p className="dialog-text">{tr('{0} is paused. The next step would exceed the limit for {1}.', tr(waiting.task), waiting.limit?.split(', ').map((limit) => tr(limit)).join(', '))}</p>
         <p className="dialog-text">{tr('You can stop and keep the results so far, or allow this run to exceed its budget.')}</p>

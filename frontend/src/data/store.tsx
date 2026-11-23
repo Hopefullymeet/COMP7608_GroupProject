@@ -2,14 +2,13 @@ import { createContext, useContext, useMemo, useReducer, useRef, type ReactNode 
 import { estimateRun, runTask, type ScriptItem } from './runtime'
 import { compareScript, discoveryScript, questionScript, QUESTIONS, SEED_QUESTION } from './scripts'
 import { DEFAULT_QUESTION, DEMO_TOPIC, EVIDENCE, PAPERS, SEED_SESSION, SESSIONS, TOPICS } from './fixtures'
-import { checkScript, wikiScript } from './workspaceScripts'
-import { buildWikiProposal, reviewWikiProposal } from './wiki'
+import { checkScript } from './workspaceScripts'
 import { enabledSources, modelErrors, type ModelConfig, type ModelProvider, type RunConfiguration, type Settings, type Usage } from './serviceSettings'
 import { unlimitedBudget } from '../api/services'
-import { MANUSCRIPTS, DUPLICATE_REVIEW, LIBRARY_META, LIBRARY_SEED, SAMPLE_MEMBERSHIP, WIKI_NOTE_SEED, WIKI_SEED } from './workspace'
+import { MANUSCRIPTS, DUPLICATE_REVIEW, LIBRARY_META, LIBRARY_SEED, SAMPLE_MEMBERSHIP, NOTE_SEED } from './workspace'
 import type {
   AgentRun, Candidate, ChatMessage, ComparisonRow, Coverage, Decision, DraftSentence, DraftSnapshot, FileVersion, Finding, FindingDecision, SearchAngle, Session,
-  TaskEvent, Topic, TrashItem, WikiPage, WikiProposal, Paper, EvidenceAnchor,
+  TaskEvent, Topic, TrashItem, Paper, EvidenceAnchor,
 } from './types'
 
 export type Tab = 'discover' | 'read' | 'compare' | 'synthesis'
@@ -36,6 +35,8 @@ export interface State {
     selectQuote?:(version:string,passage:string,quote:string)=>void
     saveAnswer?:(message:ChatMessage)=>void
     attachFiles?:(files?:File[])=>void
+    detachFile?:(index:number)=>void
+    homePdfs?: { file_id: string; parsed?: true; previewError?: string }[]
     searchBusy: boolean
   }
   topics: Topic[]
@@ -63,7 +64,6 @@ export interface State {
   purgedPapers: Record<string, { clearExcerpts: boolean }>
   dupReview: 'pending' | 'merged' | 'separate'
   check: { activeId: string; manuscripts: Record<string, ManuscriptCheck> }
-  wiki: { status: TaskState; runId: string | null; pages: WikiPage[]; proposal: WikiProposal | null; active: string; discarded: boolean }
   settings: Settings
   settingsNotice: string | null
   externalGrant: ExternalGrant | null
@@ -84,7 +84,7 @@ export const baseState: State = {
   qaRunning: false,
   comparison: { status: 'idle', rows: [] },
   cited: [],
-  noted: WIKI_NOTE_SEED,
+  noted: NOTE_SEED,
   activeEvidence: null,
   trace: { open: false, focus: null },
   readerPaperId: 'qasper',
@@ -97,7 +97,6 @@ export const baseState: State = {
   check: { activeId: MANUSCRIPTS[0].id, manuscripts: Object.fromEntries(MANUSCRIPTS.map(({ id, sentences }) => [id, {
     status: 'idle', runId: null, checking: null, version: 1, sentences, findings: {}, reviewed: {}, recheck: [], history: [],
   }])) },
-  wiki: { status: 'idle', runId: null, pages: WIKI_SEED, proposal: null, active: WIKI_SEED[0].id, discarded: false },
   settings: {
     model: 'anthropic', tested: {}, budget: { ...unlimitedBudget }, askBeyond: true,
     models: {
@@ -127,6 +126,7 @@ type Action =
   | { type: 'trace'; open: boolean; focus?: string | null }
   | { type: 'reader'; paperId: string }
   | { type: 'drop'; names: string[] }
+  | { type: 'undrop'; index: number }
   | { type: 'session-new'; session: Session }
   | { type: 'session-open'; id: string }
   | { type: 'session-delete'; id: string }
@@ -141,10 +141,6 @@ type Action =
   | { type: 'check-start'; manuscriptId: string; runId: string; sentenceId: string | null }
   | { type: 'check-edit'; manuscriptId: string; sentenceId: string; proposal: string }
   | { type: 'check-review'; manuscriptId: string; sentenceId: string; decision: FindingDecision | undefined }
-  | { type: 'wiki-start'; runId: string }
-  | { type: 'wiki-accept' }
-  | { type: 'wiki-discard' }
-  | { type: 'wiki-open'; id: string }
   | { type: 'settings'; patch: Partial<Settings> }
   | { type: 'model-config'; provider: ModelProvider; patch: Partial<ModelConfig> }
   | { type: 'model-tested'; provider: ModelProvider }
@@ -163,15 +159,6 @@ export function sourceStatus(s: State, paperId: string) {
 
 export const evidenceAvailable = (s: State, id: string) =>
   !!EVIDENCE[id] && sourceStatus(s, EVIDENCE[id].paperId) === 'available'
-
-export const wikiEvidenceAvailable = (s: State, id: string) =>
-  evidenceAvailable(s, id) && s.library.includes(EVIDENCE[id].paperId)
-
-export function wikiComparisonRows(s: State) {
-  if (s.comparison.status !== 'done') return []
-  const rows = s.comparison.rows.filter((row) => row.cells.every((cell) => cell.status === 'sourced' && cell.evidenceId))
-  return rows.every((row) => row.cells.every((cell) => wikiEvidenceAvailable(s, cell.evidenceId!))) ? rows : []
-}
 
 function checkSourceAvailable(s: State, citeKeys: Record<string, string>, cite: string) {
   const paperId = citeKeys[cite]
@@ -280,8 +267,6 @@ function applyEvent(s: State, e: TaskEvent): State {
       return updateManuscript(s, manuscriptId, { ...check, recheck: check.recheck.filter((item) => item !== id),
         findings: { ...check.findings, [id]: e.finding } })
     }
-    case 'wiki-proposal':
-      return s.wiki.runId === e.runId ? { ...s, wiki: { ...s.wiki, proposal: e.proposal } } : s
     case 'done': {
       const run = s.runs[e.runId]
       if (!run) return s
@@ -301,7 +286,6 @@ function applyEvent(s: State, e: TaskEvent): State {
         const entry = manuscriptForRun(s, e.runId)
         return entry ? updateManuscript(next, entry[0], { ...entry[1], status: 'done', runId: null, checking: null }) : next
       }
-      if (run.task === 'Wiki draft' && s.wiki.runId === e.runId) next.wiki = { ...s.wiki, status: 'done' }
       if (run.task === 'Comparison') next.comparison = { ...s.comparison, status: 'done', verdict: e.verdict, summary: e.summary }
       if (run.task === 'Question') {
         next.qaRunning = false
@@ -340,9 +324,6 @@ function reducer(s: State, a: Action): State {
         library: s.library, trash, paperTopics, purgedPapers: s.purgedPapers, cited: s.cited, noted: s.noted,
         dupReview: s.dupReview, check: s.check, settings: s.settings,
         externalGrant: s.externalGrant && s.runs[s.externalGrant.runId]?.task === 'Citation check' ? s.externalGrant : null,
-        wiki: s.wiki.status === 'running' ? {
-          ...s.wiki, status: 'idle', runId: null, proposal: null, active: s.wiki.pages[0].id,
-        } : s.wiki,
         messages: s.messages.filter((m) => sessions.some((x) => x.id === m.sessionId)),
         activeSessionId: sessions.some((x) => x.id === s.activeSessionId) ? s.activeSessionId : null,
         route: s.route.view === 'topic' && s.route.topicId !== a.id ? s.route : { view: 'home' } }
@@ -431,6 +412,8 @@ function reducer(s: State, a: Action): State {
       return { ...s, readerPaperId: a.paperId, activeEvidence: null }
     case 'drop':
       return { ...s, dropped: [...s.dropped, ...a.names] }
+    case 'undrop':
+      return { ...s, dropped: s.dropped.filter((_, i) => i !== a.index) }
     case 'lib-delete': {
       if (!s.library.includes(a.paperId)) return s
       const item: TrashItem = { paperId: a.paperId, topics: topicsOfPaper(s, a.paperId), when: 'Just now' }
@@ -499,35 +482,6 @@ function reducer(s: State, a: Action): State {
       else delete reviewed[a.sentenceId]
       return updateManuscript(s, a.manuscriptId, { ...c, reviewed })
     }
-    case 'wiki-start':
-      if (s.wiki.status === 'running' || s.wiki.proposal) return s
-      return { ...s, activeEvidence: null, wiki: {
-        ...s.wiki, runId: a.runId, active: 'draft', status: 'running', proposal: null, discarded: false,
-      } }
-    case 'wiki-accept': {
-      const p = s.wiki.proposal
-      if (!p || s.wiki.status !== 'done') return s
-      const { changes } = reviewWikiProposal(p, s.wiki.pages, (id) => wikiEvidenceAvailable(s, id))
-      if (!changes.length) return s
-      let pages = s.wiki.pages
-      for (const { current, proposed, count } of changes) {
-        pages = upsert(pages, {
-          ...proposed,
-          statements: [...(current?.statements ?? []), ...proposed.statements],
-          relations: [...(current?.relations ?? []), ...proposed.relations],
-          questions: [...(current?.questions ?? []), ...proposed.questions],
-          revisions: [{ when: 'Just now', who: 'You', what: `Accepted ${count} ${count === 1 ? 'addition' : 'additions'} from the agent draft` }, ...proposed.revisions],
-        })
-      }
-      return { ...s, activeEvidence: null, wiki: { ...s.wiki, status: 'idle', runId: null, proposal: null, active: changes[0].proposed.id, pages } }
-    }
-    case 'wiki-discard':
-      if (!s.wiki.proposal) return s
-      return { ...s, activeEvidence: null, wiki: {
-        ...s.wiki, status: 'idle', runId: null, proposal: null, active: s.wiki.pages[0].id, discarded: true,
-      } }
-    case 'wiki-open':
-      return { ...s, route: { view: 'wiki' }, activeEvidence: null, wiki: { ...s.wiki, active: a.id } }
     case 'settings':
       return { ...s, settings: { ...s.settings, ...a.patch } }
     case 'model-config': {
@@ -715,7 +669,7 @@ function useActions(dispatch: React.Dispatch<Action>, getState: () => State) {
     refineDiscovery: () => runDiscovery(getState().discovery.question, true),
     decide: (candidateId: string, decision: Decision) => dispatch({ type: 'decide', candidateId, decision }),
 
-    async ask(text: string) {
+    async ask(text: string, _passage?: { source_version_id: string; passage_id: string; quote: string }) {
       const s = getState()
       const papers = papersOfTopic(s, DEMO_TOPIC)
       const script = [...QUESTIONS, SEED_QUESTION].find((q) => q.text === text)
@@ -744,6 +698,7 @@ function useActions(dispatch: React.Dispatch<Action>, getState: () => State) {
     showTrace: (open: boolean, focus?: string | null) => dispatch({ type: 'trace', open, focus }),
     setReader: (paperId: string) => dispatch({ type: 'reader', paperId }),
     drop: (names: string[]) => dispatch({ type: 'drop', names }),
+    undrop: (index: number) => dispatch({ type: 'undrop', index }),
 
     deletePaper: (paperId: string) => dispatch({ type: 'lib-delete', paperId }),
     restorePaper: (paperId: string) => dispatch({ type: 'lib-restore', paperId }),
@@ -759,22 +714,6 @@ function useActions(dispatch: React.Dispatch<Action>, getState: () => State) {
     reviewFinding: (manuscriptId: string, sentenceId: string, decision: FindingDecision | undefined) =>
       dispatch({ type: 'check-review', manuscriptId, sentenceId, decision }),
 
-    runWikiDraft(noteIds: string[], includeComparison: boolean) {
-      const s = getState()
-      if (s.wiki.status === 'running' || s.wiki.proposal) return
-      const notes = [...new Set(noteIds)].filter((id) => s.noted.includes(id) && wikiEvidenceAvailable(s, id))
-      const comparison = includeComparison ? wikiComparisonRows(s) : []
-      if (!notes.length && !comparison.length) return
-      const config = prepareRun([...notes, ...comparison.flatMap((row) => row.cells.map((c) => c.evidenceId))]
-        .flatMap((id) => id && EVIDENCE[id] ? [EVIDENCE[id].paperId] : []))
-      if (!config) return
-      const runId = id('run')
-      dispatch({ type: 'wiki-start', runId })
-      start(runId, wikiScript(runId, buildWikiProposal(notes, comparison, s.wiki.pages)), config)
-    },
-    acceptWiki: () => dispatch({ type: 'wiki-accept' }),
-    discardWiki: () => dispatch({ type: 'wiki-discard' }),
-    openWikiPage: (pageId: string) => dispatch({ type: 'wiki-open', id: pageId }),
     updateSettings: (patch: Partial<Settings>) => dispatch({ type: 'settings', patch }),
     configureModel: (provider: ModelProvider, patch: Partial<ModelConfig>) => dispatch({ type: 'model-config', provider, patch }),
     testModel: (provider: ModelProvider) => dispatch({ type: 'model-tested', provider }),

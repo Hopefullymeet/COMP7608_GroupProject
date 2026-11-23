@@ -103,14 +103,13 @@ export function TopicView({ topicId, tab, windowControls, comparison, liveResear
             {papers.length > 0 && <>
               <h2>{tr('Papers in this topic')}</h2>
               <ul className="topic-links">
-                {papers.map((id) => {
-                  const wikiPage = state.wiki.pages.find((p) => p.paperId === id)
-                  return <li key={id}>
-                    <button className="link-btn" onClick={() => act.navigate({ view: 'library', paperId: id })}>{PAPERS[id].title}</button>
-                    {wikiPage && <button className="link-btn quiet" aria-label={tr('Open Wiki page for {0}', PAPERS[id].title)} onClick={() => act.openWikiPage(wikiPage.id)}>{tr('Wiki')}</button>}
-                  </li>
-                })}
+                {papers.map((id) => <li key={id}>
+                  <button className="link-btn" onClick={() => act.navigate({ view: 'library', paperId: id })}>{PAPERS[id].title}</button>
+                </li>)}
               </ul>
+              <button className="link-btn" onClick={() => act.navigate({ view: 'wiki', topicId })}>
+                <Icon name="book" size={13} />{' '}{tr('Open this topic’s Wiki')}
+              </button>
             </>}
             {state.topics.some((t) => t.id === DEMO_TOPIC) && <button className="primary" onClick={() => act.enterTopic(DEMO_TOPIC)}>{tr('Explore the scripted demo')}</button>}
           </section> : <div className="empty-state">

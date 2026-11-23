@@ -127,12 +127,13 @@ export function useTask(api: Client, onFinished: (task: string, result: Finished
     attach(started.task_id, started)
     return started
   }
-  const prepare = (input: TaskInput, { startImmediately = false } = {}) => exclusive(async () => {
+  const prepare = (input: TaskInput, { startImmediately = false, onPrepared }: { startImmediately?: boolean; onPrepared?: () => void } = {}) => exclusive(async () => {
     const params = { ...input, operation_id: operation() }
     const result = await retryWrite(() => api.call('task.prepare', params))
     const prepared = { input, ...result, startKey: operation() }
     if (startImmediately) return startPrepared(prepared)
     setConfirmation(prepared)
+    onPrepared?.()
   })
   const start = () => confirmation && exclusive(() => startPrepared(confirmation))
   const cancel = () => task && exclusive(async () => {

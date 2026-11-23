@@ -6,7 +6,7 @@ import { Icon } from '../components/Icon'
 import type { Located, Note } from '../api/library'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 
-export function EvidenceLink({ id, onOpen }: { id: string; onOpen?: (item: Located) => void }) {
+export function EvidenceLink({ id, onOpen, label }: { id: string; onOpen?: (item: Located) => void; label?: string }) {
   const { tr } = useLanguage()
   const { api, report } = useWorkspace()
   const [item, setItem] = useState<Located>()
@@ -22,7 +22,7 @@ export function EvidenceLink({ id, onOpen }: { id: string; onOpen?: (item: Locat
         className="src-btn"
         onClick={() => void api.call('evidence.open', { anchor_id: id }).then(onOpen ?? setItem).catch(report)}
       >
-        <Icon name="quote" size={13} />{' '}{tr('View source')}
+        <Icon name="quote" size={13} />{' '}{label ?? tr('View source')}
       </button>
       {item && (
         <Dialog title={tr('Source evidence')} onClose={() => setItem(undefined)}>

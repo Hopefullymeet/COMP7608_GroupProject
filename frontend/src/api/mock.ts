@@ -25,6 +25,7 @@ import type {
 import { citationFixture } from './citationFixture'
 import type { Manuscript } from './citation'
 import { researchFixture, type ResearchFixture } from './researchFixture'
+import { createWikiEngine, type StoredWiki } from './wikiEngine'
 import { asLocated, emptyLibrary, type LibraryFixture } from './library'
 import { libraryFixture } from './libraryFixture'
 
@@ -47,6 +48,7 @@ type State = {
   activity: Activity[]
   manuscripts: Record<string, Manuscript[]>
   research: ResearchFixture
+  wiki?: Record<string, StoredWiki>
   shelf: LibraryFixture
   topics: Topic[]
   sessions: Record<string, Session[]>
@@ -87,7 +89,7 @@ export function createMock(): Client {
     watches: [],
     activity: [],
     manuscripts: {},
-    research: { comparisons: {}, wiki: {} },
+    research: { comparisons: {} },
     shelf: emptyLibrary(),
     topics: [],
     sessions: {},
@@ -108,34 +110,46 @@ export function createMock(): Client {
   state.activity ??= []
   const shelf = libraryFixture(state, evidence, (versions) => {
     const records: { kind: string; label: string }[] = []
-    const has = (anchors: string[]) =>
-      anchors.some((a) =>
-        versions.includes(
-          (a === evidence.anchor.anchor_id ? evidence.source : state.shelf.anchors[a]?.source)
-            ?.source_version_id,
-        ),
-      )
     for (const c of Object.values(state.research?.comparisons ?? {}).flat())
       if (c.source_versions.some((v) => versions.includes(v)))
         records.push({ kind: 'Comparison', label: c.question })
-    for (const wiki of Object.values(state.research?.wiki ?? {}))
-      for (const page of wiki.pages) {
-        for (const s of page.statements)
-          if (has(s.anchor_ids)) records.push({ kind: 'Wiki statement', label: s.text })
-        for (const r of page.relations)
-          if (has([...r.anchor_ids, ...r.counter_anchor_ids]))
-            records.push({ kind: 'Wiki relationship', label: r.from + ' → ' + r.to })
-      }
     for (const d of Object.values(state.manuscripts ?? {}).flat())
       for (const s of d.versions[0].sentences)
         if (s.cites.some((v) => versions.includes(v)))
           records.push({ kind: 'Manuscript', label: d.name + ' · ' + s.text })
     return records
   })
-  state.research ??= { comparisons: {}, wiki: {} }
+  state.research ??= { comparisons: {} }
   state.manuscripts ??= {}
   const research = researchFixture(state, asLocated(evidence))
   const citation = citationFixture(state, asLocated(evidence))
+  const wiki = createWikiEngine({
+    records: () => (state.wiki ??= {}),
+    model: () => {
+      const selected = state.config.models.find((m) => m.id === state.config.model_id)
+      return selected && !selected.local ? { model: selected.model, endpoint: selected.endpoint } : undefined
+    },
+    material: (topic) => {
+      const anchors = [asLocated(evidence), ...Object.values(state.shelf.anchors)]
+      return {
+        title: state.topics.find((t) => t.topic_id === topic)?.title ?? '',
+        papers: state.library.filter((p) => p.topic_ids.includes(topic)).map((p) => {
+          const version = p.source_versions[0]
+          return {
+            id: version.source_version_id, title: p.alias ?? p.title, full_text: version.available_scope === 'full_text',
+            chunks: anchors.filter((a) => a.source.source_version_id === version.source_version_id).slice(0, 3)
+              .map((a) => ({ text: a.quote, anchor_ids: [a.anchor_id] })),
+          }
+        }),
+        notes: (state.shelf.notes[topic] ?? []).map((n) => ({ id: n.note_id + ':' + n.revision, text: n.text, anchor_ids: n.anchor_ids })),
+        turns: (state.sessions[topic] ?? []).flatMap((s) => state.turns[s.session_id] ?? []).map((t) => ({
+          id: t.task_id, question: t.question,
+          sentences: t.answer.sentences.filter((x) => x.anchor_ids.length).map((x) => ({ text: x.text, anchor_ids: [...x.anchor_ids] })),
+        })),
+        findings: [],
+      }
+    },
+  })
   const listeners = new Map<string, Set<(event: TaskEvent) => void>>()
   const active = (run: Run) => run.events.at(-1)?.type !== 'task.finished'
   const save = () => localStorage.setItem(key, JSON.stringify(state))
@@ -158,7 +172,7 @@ export function createMock(): Client {
     if (
       body.type === 'task.finished' &&
       body.payload.status === 'completed' &&
-      (effective.kind === 'paper_comparison' || effective.kind === 'wiki_draft')
+      effective.kind === 'paper_comparison'
     )
       research.generate(effective, task)
     if (
@@ -280,10 +294,9 @@ export function createMock(): Client {
         { type: 'task.finished', payload: { status: 'completed', result: { record_id: task } } },
       ]
     }
-    if (input.kind === 'paper_comparison' || input.kind === 'wiki_draft') {
-      const stages = input.kind === 'paper_comparison' ? ['read', 'align', 'compare'] : ['collect', 'propose']
+    if (input.kind === 'paper_comparison') {
       return [
-        ...stages.map((stage): EventBody => ({ type: 'task.progress', payload: { stage, message: stage } })),
+        ...['read', 'align', 'compare'].map((stage): EventBody => ({ type: 'task.progress', payload: { stage, message: stage } })),
         { type: 'task.finished', payload: { status: 'completed', result: { record_id: task } } },
       ]
     }
@@ -519,6 +532,7 @@ export function createMock(): Client {
   const handlers: { [M in Method]: (params: Methods[M][0]) => Methods[M][1] } = {
     ...shelf.handlers,
     ...research.handlers,
+    ...wiki.handlers,
     ...citation.handlers,
     'reader.pdf': () => { throw new Error('PDF reading requires the desktop workspace.') },
     'reader.marks': () => ({ items: [] }),
@@ -532,6 +546,7 @@ export function createMock(): Client {
     'visual.objects': () => ({ items: [] }),
     'visual.search': () => ({ items: [], skipped: 0 }),
     'visual.crop': () => { throw new Error('PDF regions require the desktop workspace.') },
+    'library.preview_pdf': () => { throw new Error('PDF import requires the desktop workspace.') },
     'library.import_pdf': () => { throw new Error('PDF import requires the desktop workspace.') },
     'literature.refs': () => ({ items: [], pending_versions: [] }),
     'source.page': () => { throw new Error('PDF rendering requires the desktop workspace.') },
@@ -830,7 +845,7 @@ export function createMock(): Client {
                 ]
               : scoped.kind === 'paper_import'
                 ? []
-                : scoped.kind === 'wiki_draft' || scoped.kind === 'paper_comparison'
+                : scoped.kind === 'paper_comparison'
                   ? [
                       {
                         endpoint: selectedModel.endpoint,
@@ -858,6 +873,8 @@ export function createMock(): Client {
                           data_categories: [
                             'Question and recent conversation',
                             'Selected material versions and passages',
+                            ...(scoped.kind === 'reading_qa' && state.wiki?.[scoped.topic_id]?.entries.length
+                              ? ['Compact memory from the current topic Wiki'] : []),
                           ],
                         },
                       ],

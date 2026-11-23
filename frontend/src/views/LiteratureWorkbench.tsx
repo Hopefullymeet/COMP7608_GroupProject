@@ -12,7 +12,6 @@ import { AnswerText } from '../components/AnswerText'
 import { PaperImportDialog, usePdfDrop } from './PaperImportDialog'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { useStore } from '../data/store'
-import { PageHead } from '../components/PageHead'
 
 const PdfReader = lazy(() => import('./PdfReader'))
 
@@ -26,25 +25,6 @@ const relationLabel: Record<string, string> = {
 }
 function entryTitle(entry: OutlinePoint | PaperRelation) {
   return 'title' in entry ? entry.title : entry.subject
-}
-
-export function TopicWikiPage() {
-  const { tr } = useLanguage()
-  const { state, act } = useStore()
-  const [selected, select] = useState('')
-  const topic = selected || state.topics[0]?.id
-  return <div className="page">
-    <PageHead title={tr('Evidence Wiki')} sub="" icon="book">
-      {topic && <button className="icon-btn synthesis-mobile-back" aria-label={tr('Open topic')}
-        onClick={() => act.openTopic(topic, 'synthesis')}><Icon name="arrowLeft" size={16} /></button>}
-      {topic && <select className="lib-select" aria-label={tr('Research topic')} value={topic}
-        onChange={(event) => select(event.currentTarget.value)}>
-        {state.topics.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
-      </select>}
-    </PageHead>
-    {topic ? <LiteratureWorkbench key={topic} topicId={topic} initialView="wiki" /> :
-      <p className="page-body">{tr('Create a topic to start its Wiki.')}</p>}
-  </div>
 }
 
 export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
@@ -208,7 +188,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
           </button>
           <button className="link-btn" disabled={workspace.busy}
             onClick={() => void workspace.write('reader.answer_save', { ...scope, answer_id: answer.id }).then(() => setView('wiki')).catch(workspace.report)}>
-            {tr('Save answer to Topic Wiki')}
+            {tr('Save answer to the Wiki')}
           </button>
         </article>)}
         {view === 'outline' && <form className="synthesis-question" onSubmit={(event) => {
@@ -230,7 +210,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
         {results?.active_task_id && <p role="status">{tr('Researching the selected papers…')}</p>}
         <nav className="synthesis-views" aria-label={tr('Research results')}>
           <button className="ghost-btn" aria-pressed={view === 'outline'} onClick={() => setView('outline')}>{tr('Outline')}</button>
-          <button className="ghost-btn" aria-pressed={view === 'wiki'} onClick={() => setView('wiki')}>{tr('Topic Wiki')}</button>
+          <button className="ghost-btn" aria-pressed={view === 'wiki'} onClick={() => setView('wiki')}>{tr('Saved findings')}</button>
         </nav>
         {view === 'outline' && outline && <>
           {results && results.items.length > 1 && <label className="synthesis-history">{tr('Previous outlines')}
@@ -286,7 +266,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
             {anchors(outline.read_anchor_ids, 'Read passage')}
           </details>}
           {wiki && !!(outline.points.length || outline.relations.length) && <button className="ghost-btn"
-            onClick={() => { setChecked([]); setReview(true) }}>{tr('Review for Wiki')}</button>}
+            onClick={() => { setChecked([]); setReview(true) }}>{tr('Save to the Wiki')}</button>}
         </>}
         {view === 'wiki' && !!papers.length && <details className="synthesis-item">
           <summary>{tr('Paper cards')}</summary>
@@ -310,7 +290,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
           </>}
           {'claims' in item.entry && item.entry.claims.map((claim, i) => <p key={i}>{claim.text}</p>)}
           {anchors(item.anchor_ids)}
-        </article>) : <p className="fine">{tr('Review and save findings from an outline to build this topic’s Wiki.')}</p>)}
+        </article>) : <p className="fine">{tr('Review and save findings from an outline. Saved findings feed this topic’s Wiki.')}</p>)}
       </div>
 
       <aside className="synthesis-reader" aria-label={tr('Papers and source evidence')}>
@@ -425,7 +405,7 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
       {exported.length > 0 && <Dialog title={tr('Export evidence')} onClose={() => setExported([])}>
         {exported.map((file) => <p key={file.name}><button className="link-btn" onClick={() => downloadText(file)}>{file.name}</button></p>)}
       </Dialog>}
-      {review && outline && <Dialog title={tr('Save findings to Topic Wiki')} onClose={() => setReview(false)}>
+      {review && outline && <Dialog title={tr('Save findings to the Wiki')} onClose={() => setReview(false)}>
         {[...outline.points, ...outline.relations].map((item) => {
           const previous = wiki?.items.find((saved) => saved.id === item.prior_id)
           return <div className="synthesis-review-item" key={item.id}>

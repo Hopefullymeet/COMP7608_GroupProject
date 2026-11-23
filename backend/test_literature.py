@@ -150,6 +150,29 @@ class LiteratureTest(unittest.TestCase):
         self.assertEqual(outline["points"][0]["title"], "Benchmark")
         self.assertTrue(outline["points"][0]["claims"][0]["contributions"][0]["anchor_ids"])
 
+    def test_preview_pdf_reuses_parsing_without_saving_a_paper(self):
+        pdf = {"name": "New source.pdf",
+               "content": base64.b64encode(sample_pdf("The PDF contains evidence text.")).decode()}
+        self.assertEqual(self.call("library.preview_pdf", **pdf), {"parsed": True})
+        self.call("library.preview_pdf", error="INVALID_PDF", name=pdf["name"], content="invalid")
+        self.assertEqual(self.call("library.list", topic_id=self.other)["items"], [])
+        with patch("workbench.extract_pdf", side_effect=AssertionError("PDF was parsed a second time")):
+            imported = self.call("library.import_pdf", topic_id=self.other, **pdf)
+        doc = self.call("source.read", topic_id=self.other, source_version_id=imported["source_version_id"])
+        self.assertEqual(doc["passages"][0]["text"], "The PDF contains evidence text.")
+
+    def test_parsed_pdf_chunks_become_topic_wiki_entries_with_page_evidence(self):
+        entries = self.call("wiki.get", topic_id=self.topic)["entries"]
+        pdf = [e for e in entries if e["origin"] == "pdf"]
+        self.assertEqual({e["text"].split(":")[0] for e in pdf}, {"Alpha", "Beta"})
+        for entry in pdf:
+            located = self.call("evidence.open", topic_id=self.topic, anchor_id=entry["anchor_ids"][0])
+            self.assertEqual(located["read_scope"], "full_text")
+            self.assertIn(located["quote"], entry["text"])
+        self.assertEqual(self.call("wiki.get", topic_id=self.other)["entries"], [])
+        again = self.call("wiki.get", topic_id=self.topic)["entries"]
+        self.assertCountEqual([e for e in again if e["origin"] == "pdf"], pdf)
+
     def test_pdf_round_trip_and_topic_boundaries(self):
         duplicate = self.save_pdf("Alpha duplicated", "Alpha proposes the benchmark for evidence attribution.")
         self.assertTrue(duplicate["duplicate"])

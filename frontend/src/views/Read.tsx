@@ -1,7 +1,9 @@
 import { count, useLanguage } from '../i18n'
-import { lazy, Suspense, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { NEW_SESSION, allEvidence, currentTopic, evidenceFor, paperFor, papersOfTopic, sourceStatus, useStore } from '../data/store'
 import { QUESTIONS } from '../data/scripts'
+import { quoteOffsets } from '../components/quoteRange'
+import { EvidencePopover } from '../components/EvidencePopover'
 import { Icon, Spinner } from '../components/Icon'
 import { scrollWithin } from '../components/util'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
@@ -90,7 +92,26 @@ function AgentMessage({ m }: { m: ChatMessage }) {
   )
 }
 
-function Chat({ controls, selections = [], onSource }: {
+type Annotation = { id: string; version: string; quote: string; passage?: string; selection?: Selection }
+
+function useAnnotations() {
+  const [items, setItems] = useState<Annotation[]>([])
+  const input = useRef<HTMLTextAreaElement>(null)
+  const [added, setAdded] = useState(0)
+  function add(item: Annotation) {
+    setItems(old => old.some(a => a.id === item.id) ? old : [...old, item])
+    setAdded(n => n + 1)
+  }
+  function remove(items: Annotation[]) {
+    setItems(old => old.filter(a => !items.includes(a)))
+  }
+  return { items, add, remove, added, input }
+}
+type Annotations = ReturnType<typeof useAnnotations>
+type AskRegion = (annotation: Annotation, question: string) => Promise<boolean>
+
+function Chat({ controls, selections = [], onSource, annotations, askRegion, blocked }: {
+  annotations: Annotations; askRegion?: AskRegion; blocked?: string
   controls: ReactNode; selections?: ReaderAnswer[]; onSource?: (answer: ReaderAnswer) => void
 }) {
   const { tr } = useLanguage()
@@ -108,8 +129,20 @@ function Chat({ controls, selections = [], onSource }: {
 
   const send = async (t: string, fromComposer = false) => {
     if (!t.trim() || state.qaRunning || !canAsk) return
-    const accepted = await act.ask(t.trim())
-    if (accepted && fromComposer) setText((current) => current === t ? '' : current)
+    const attached = fromComposer ? annotations.items : []
+    if (fromComposer && blocked) return
+    const region = attached.find(a => a.selection?.medium === 'image') ??
+      (attached.length === 1 && attached[0].selection ? attached[0] : undefined)
+    const quotes = attached.filter(a => a !== region).map(a => paperFor(state, a.version).short + ' · “' + a.quote + '”')
+    const question = [t.trim(), ...quotes].join('\n\n')
+    if (region && askRegion) {
+      if (!await askRegion(region, question)) return
+    } else {
+      const first = attached.find(a => a.passage)
+      if (!await act.ask(question, first && { source_version_id: first.version, passage_id: first.passage!, quote: first.quote })) return
+    }
+    annotations.remove(attached)
+    if (fromComposer) setText((current) => current === t ? '' : current)
   }
 
   const suggestions = (state.mainline
@@ -163,12 +196,24 @@ function Chat({ controls, selections = [], onSource }: {
           </div>
         )}
         <div className="composer">
-          <textarea value={text} rows={2} placeholder={messages.length ? tr('Ask a follow-up…') : tr('Ask about these papers…')} aria-label={tr('Ask a follow-up')}
+          {annotations.items.length > 0 && <div className="chat-annotations">
+            <button type="button" className="annotation-count"><Icon name="message" size={14} />
+              {tr(annotations.items.length === 1 ? '{0} annotation' : '{0} annotations', annotations.items.length)}</button>
+            <div className="annotation-details">
+              {annotations.items.map(a => <div className="annotation-row" key={a.id}>
+                <div><strong>{paperFor(state, a.version).short}{a.selection && ' · ' + tr('PDF page {0}', a.selection.page)}</strong>
+                  <p>{a.quote || tr('Selected region')}</p></div>
+                <button type="button" className="icon-btn sm" aria-label={tr('Remove annotation')} onClick={() => annotations.remove([a])}><Icon name="x" size={14} /></button>
+              </div>)}
+            </div>
+          </div>}
+          {blocked && <p className="fine">{blocked}</p>}
+          <textarea ref={annotations.input} value={text} rows={2} placeholder={messages.length ? tr('Ask a follow-up…') : tr('Ask about these papers…')} aria-label={tr('Ask a follow-up')}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(text, true) } }} />
           <div className="composer-bar">
             <span className="grow" />
-            <button className="send" disabled={state.qaRunning || !canAsk || !text.trim()} onClick={() => void send(text, true)} aria-label={tr('Send')}><Icon name="arrowUp" size={16} /></button>
+            <button className="send" disabled={state.qaRunning || !canAsk || !!blocked || !text.trim()} onClick={() => void send(text, true)} aria-label={tr('Send')}><Icon name="arrowUp" size={16} /></button>
           </div>
         </div>
       </div>}
@@ -347,18 +392,24 @@ function Reader({ pdf }: { pdf?: PdfActions }) {
   useEffect(() => { setMode('reading') }, [paper?.id, state.activeEvidence?.id, pdf?.location])
   const scrollTimer=useRef<ReturnType<typeof setTimeout>>()
   useEffect(()=>()=>clearTimeout(scrollTimer.current),[paper?.id,state.activeSessionId])
+  const active = state.activeEvidence
+  const evidence = active && evidenceFor(state, active.id)
+  const [missing, setMissing] = useState<typeof active>()
+  const citation = useMemo(() => active && evidence ? {
+    anchor: active.anchor, quote: evidence.quote, passage: paper?.passages.find(p => p.id === evidence.passageId)?.text, onMissing: () => setMissing(active),
+  } : undefined, [active, evidence, paper?.passages])
   if (!paper) return <div className="empty-state"><h2>{tr('No papers in this topic')}</h2><button className="primary" onClick={() => act.openTopic(currentTopic(state), 'discover')}>{tr('Find papers')}</button></div>
 
   const choices = (papers.some((p) => p.id === paper.id) ? papers : [paper, ...papers]).map((p) => {
     const version = p.short === `${p.title} · ${p.id}` ? p.id.slice(0, 8) : undefined
     return { paper: p, label: version ? p.title : p.short, version }
   })
-  const withPdf = Boolean(pdf && paper.pdfAvailable)
+  const withPdf = Boolean(pdf && paper.pdfAvailable && (!active || (active.pdfPage && active !== missing)))
   const location = pdf?.location?.version === paper.id ? pdf.location : undefined
   const evidencePage = state.activeEvidence?.pdfPage
-  const currentLocation = location ?? (state.activeEvidence
+  const currentLocation = state.activeEvidence
     ? { page: evidencePage && evidencePage > 0 ? evidencePage : 1, rect: state.activeEvidence.region }
-    : undefined)
+    : location
   const used = new Set<string>()
   state.messages.filter((m) => m.sessionId === state.activeSessionId)
     .forEach((m) => m.segments.forEach((s) => s.evidenceId && used.add(s.evidenceId)))
@@ -394,7 +445,7 @@ function Reader({ pdf }: { pdf?: PdfActions }) {
       {pdf && withPdf ? <><Suspense fallback={<p className="pt-pdf-loading" role="status">{tr('Opening PDF…')}</p>}>
         <PdfReader key={paper.id} topic={currentTopic(state)} version={paper.id} page={currentLocation?.page}
           session={state.activeSessionId ?? undefined} resume={!location && !state.activeEvidence}
-          target={currentLocation?.rect}
+          target={currentLocation?.rect} citation={citation}
           onAsk={(selection) => pdf.ask(paper.id, selection)} onFind={pdf.find} onPaperInfo={setMode}
           onWiki={() => act.navigate({ view: 'wiki', topicId: currentTopic(state) })} />
       </Suspense>
@@ -438,9 +489,10 @@ function Reader({ pdf }: { pdf?: PdfActions }) {
                 {state.mainline ? paper.passages.map((p) => {
                   const active = state.activeEvidence && evidenceFor(state, state.activeEvidence.id)?.passageId === p.id
                   const quote=active&&state.activeEvidence?evidenceFor(state,state.activeEvidence.id)?.quote:''
-                  const at=quote?p.text.indexOf(quote):-1
-                  return <section key={p.id} data-passage-id={p.id}>{p.page>0&&<h3>{p.section}{' '}{tr('· p.')}{' '}{p.page}</h3>}<p onMouseUp={()=>{const text=window.getSelection()?.toString().trim();if(text&&p.text.includes(text))state.mainline?.selectQuote?.(paper.id,p.id,text)}} className={`abstract${active ? ' located-passage' : ''}`} key={p.id}
-                    data-ev-anchor={active ? state.activeEvidence?.anchor : undefined}>{quote&&at>=0?<>{p.text.slice(0,at)}<mark>{quote}</mark>{p.text.slice(at+quote.length)}</>:p.text}</p><button className="link-btn quiet" onClick={()=>state.mainline?.bookmark?.(paper.id,p.id)}>{tr('Bookmark passage')}</button></section>
+                  const match = quote ? quoteOffsets(p.text, quote) : undefined
+                  return <section key={p.id} data-passage-id={p.id}>{p.page>0&&<h3>{p.section}{' '}{tr('· p.')}{' '}{p.page}</h3>}<p onMouseUp={()=>{const text=window.getSelection()?.toString().trim();if(text&&p.text.includes(text))state.mainline?.selectQuote?.(paper.id,p.id,text)}} className="abstract">
+                    {match ? <>{p.text.slice(0, match[0])}<mark className="on" data-ev-anchor={state.activeEvidence?.anchor}>{p.text.slice(...match)}</mark>{p.text.slice(match[1])}</> : p.text}
+                  </p><button className="link-btn quiet" onClick={()=>state.mainline?.bookmark?.(paper.id,p.id)}>{tr('Bookmark passage')}</button></section>
                 }) : <p className="abstract">{paper.passages.map((p) => <PassageText key={p.id} p={p} highlight={used} />)}</p>}
               </>}
               {!state.mainline && paper.stored !== 'full-text' && <div className="fulltext-note">
@@ -464,14 +516,15 @@ function Reader({ pdf }: { pdf?: PdfActions }) {
   )
 }
 
-function ReadingSplit({ live = false, selections, onSource, reader }: {
+function ReadingSplit({ live = false, selections, onSource, reader, annotations, askRegion, blocked }: {
+  annotations: Annotations; askRegion?: AskRegion; blocked?: string
   live?: boolean
   selections?: ReaderAnswer[]
   onSource?: (answer: ReaderAnswer) => void
   reader: ReactNode
 }) {
   const { tr } = useLanguage()
-  const { state } = useStore()
+  const { state, act } = useStore()
   const layout = useRef<HTMLDivElement>(null)
   const toggleChat = useRef<HTMLButtonElement>(null)
   const restoreChat = useRef<HTMLButtonElement>(null)
@@ -498,13 +551,25 @@ function ReadingSplit({ live = false, selections, onSource, reader }: {
     if (state.activeEvidence?.scroll) setCollapsed((current) => current === 'paper' ? undefined : current)
   }, [state.activeEvidence])
 
+  useEffect(() => {
+    if (!annotations.added) return
+    setCollapsed(undefined)
+    const frame = requestAnimationFrame(() => annotations.input.current?.focus())
+    return () => cancelAnimationFrame(frame)
+  }, [annotations.added, annotations.input])
+
   const paperLabel = tr(collapsed === 'paper' ? 'Show paper pane' : 'Hide paper pane')
   const chatLabel = tr(collapsed === 'chat' ? 'Show conversation pane' : 'Hide conversation pane')
 
   return <div ref={layout} className={`read${dragging ? ' read--resizing' : ''}`}
     data-collapsed={collapsed} style={{ '--read-chat-width': `${share * 100}%` } as CSSProperties}>
+    <EvidencePopover onAsk={(id) => {
+      const evidence = evidenceFor(state, id)
+      annotations.add({ id, version: evidence.paperId, quote: evidence.quote, passage: evidence.passageId })
+      act.closeEvidence()
+    }} />
     <div className="read-chat-pane" id={chatId} hidden={collapsed === 'chat'}>
-      <Chat selections={selections} onSource={onSource && ((answer) => {
+      <Chat annotations={annotations} askRegion={askRegion} blocked={blocked} selections={selections} onSource={onSource && ((answer) => {
         if (collapsed === 'paper') setCollapsed(undefined)
         onSource(answer)
       })} controls={<>
@@ -567,16 +632,14 @@ function ReadingSplit({ live = false, selections, onSource, reader }: {
   </div>
 }
 
-function LiveReading({ topic, session }: { topic: string; session: string }) {
+function LiveReading({ topic, session, annotations }: { topic: string; session: string; annotations: Annotations }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
   const workspace = useWorkspace()
   const [location, setLocation] = useState<PdfActions['location']>()
   const [finding, setFinding] = useState(false)
-  const [picked, setPicked] = useState<{ version: string; selection: Selection }>()
-  const [question, setQuestion] = useState('')
   const answers = useRead('reader.answers', { topic_id: topic, session_id: session })?.items.slice().reverse()
-  const vision = useRead('visual.capabilities', {}, picked?.selection.medium === 'image')
+  const vision = useRead('visual.capabilities', {}, annotations.items.some(a => a.selection?.medium === 'image'))
   const papers = papersOfTopic(state, topic).map((id) => paperFor(state, id)).filter((paper) => paper.pdfAvailable)
   const names = Object.fromEntries(papers.map((paper) => [paper.id, paper.short]))
 
@@ -590,12 +653,20 @@ function LiveReading({ topic, session }: { topic: string; session: string }) {
   }
 
   function ask(version: string, selection: Selection) {
-    setQuestion('')
-    setPicked({ version, selection })
+    annotations.add({ id: JSON.stringify([version, selection.page, selection.rect]), version, quote: selection.quote, selection })
   }
 
   return <>
-    <ReadingSplit live selections={answers} onSource={(answer) => open(answer.source_version_id, answer.page, answer.rect)}
+    <ReadingSplit live annotations={annotations}
+      blocked={annotations.items.filter(a => a.selection?.medium === 'image').length > 1 ? tr('Send one image region at a time.') :
+        annotations.items.some(a => a.selection?.medium === 'image') && !vision?.vision ? tr('Configure a local vision model to ask about images.') : undefined}
+      askRegion={async (a, question) => {
+        const { page, rect, rects, medium } = a.selection!
+        let accepted = false
+        await workspace.prepare({ topic_id: topic, session_id: session, kind: 'reader_question',
+          input: { source_version_id: a.version, question, page, rect, rects, medium } }, () => { accepted = true })
+        return accepted
+      }} selections={answers} onSource={(answer) => open(answer.source_version_id, answer.page, answer.rect)}
       reader={<Reader pdf={{ location, open, ask, find: () => setFinding(true) }} />} />
     {finding && <FigureSearch topic={topic} versions={papers.map((paper) => paper.id)} names={names}
       onOpen={(figure) => open(figure.source_version_id, figure.page, figure.rect)}
@@ -603,26 +674,6 @@ function LiveReading({ topic, session }: { topic: string; session: string }) {
         open(figure.source_version_id, figure.page, figure.rect)
         ask(figure.source_version_id, { page: figure.page, rect: figure.rect, rects: [figure.rect], quote: figure.caption, medium: 'image' })
       }} onClose={() => setFinding(false)} />}
-    {picked && <Dialog title={tr('Ask about this selection')} onClose={() => setPicked(undefined)}>
-      <form className="pt-reader-note" onSubmit={(event) => {
-        event.preventDefault()
-        if (!question.trim()) return
-        const { page, rect, rects, medium } = picked.selection
-        void workspace.prepare({ topic_id: topic, session_id: session, kind: 'reader_question',
-          input: { source_version_id: picked.version, question: question.trim(), page, rect, rects, medium } })
-        setPicked(undefined)
-      }}>
-        {picked.selection.quote && <blockquote className="evidence-excerpt">{picked.selection.quote}</blockquote>}
-        <textarea autoFocus required maxLength={2000} aria-label={tr('Question')}
-          placeholder={tr('Ask a follow-up…')} value={question} onChange={(event) => setQuestion(event.currentTarget.value)} />
-        {picked.selection.medium === 'image' && vision && !vision.vision &&
-          <p className="fine">{tr('Configure a local vision model to ask about images.')}</p>}
-        <div className="dialog-actions">
-          <button type="button" className="ghost-btn" onClick={() => setPicked(undefined)}>{tr('Cancel')}</button>
-          <button className="primary" disabled={workspace.busy || !question.trim() || (picked.selection.medium === 'image' && !vision?.vision)}>{tr('Ask AI')}</button>
-        </div>
-      </form>
-    </Dialog>}
   </>
 }
 
@@ -632,8 +683,14 @@ export function Read() {
   if (!state.activeSessionId) {
     return <div className="empty-state"><Icon name="message" size={22} /><h2>{tr('No sessions yet')}</h2><p>{tr('Create a session to start asking about the papers in this topic.')}</p><button className="primary" onClick={() => act.newSession(currentTopic(state))}><Icon name="plus" size={15} />{' '}{tr('New session')}</button></div>
   }
+  return <ReadingSession key={state.activeSessionId} session={state.activeSessionId} />
+}
+
+function ReadingSession({ session }: { session: string }) {
+  const { state } = useStore()
+  const annotations = useAnnotations()
   if (state.mainline && !state.mainline.demo) {
-    return <LiveReading key={state.activeSessionId} topic={currentTopic(state)} session={state.activeSessionId} />
+    return <LiveReading annotations={annotations} topic={currentTopic(state)} session={session} />
   }
-  return <ReadingSplit reader={<Reader />} />
+  return <ReadingSplit annotations={annotations} reader={<Reader />} />
 }

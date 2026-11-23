@@ -4,6 +4,7 @@ import type { MetadataRecord } from '../api/library'
 import { isTauri } from '../api/desktop'
 import { pdfInput, pickPdfs } from '../api/pdf'
 import { Dialog } from '../components/PageHead'
+import { Icon } from '../components/Icon'
 import { useWorkspace } from '../data/WorkspaceProvider'
 import { useLanguage } from '../i18n'
 
@@ -146,9 +147,11 @@ export function PaperImportDialog({ topics, initialTopic, initialTitle = '', ini
         <input className="text-field" value={title} disabled={processing} maxLength={160}
           onChange={(event) => setTitle(event.currentTarget.value)} />
       </label>}
-      <button className="ghost-btn" disabled={processing} onClick={() => void pickPdfs(!paperId).then(queueFiles)}>{tr('Add PDFs')}</button>
-      {!paperId && <div className="rename-field">
-        <textarea className="text-field" aria-label={tr('Paste DOI or arXiv IDs')} placeholder={tr('Paste DOI or arXiv IDs')}
+      <button type="button" className="topic-drop" disabled={processing} onClick={() => void pickPdfs(!paperId).then(queueFiles)}>
+        <Icon name="paperclip" size={16} /><span>{tr('Drop PDF files here, or click to choose')}</span>
+      </button>
+      {!paperId && <div className="paper-import-ids">
+        <textarea className="text-field" rows={2} aria-label={tr('Paste DOI or arXiv IDs')} placeholder={tr('Paste DOI or arXiv IDs')}
           value={input} disabled={processing} onChange={(event) => setInput(event.currentTarget.value)} />
         <button className="link-btn" disabled={!input.trim() || processing} onClick={queueIdentifiers}>{tr('Add identifiers')}</button>
       </div>}

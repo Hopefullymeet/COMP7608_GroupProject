@@ -1,8 +1,8 @@
 import type { ScriptItem } from './runtime'
 import type { MANUSCRIPTS } from './workspace'
-import type { AgentStep, DraftSentence, Finding, StepKind, TaskEvent, WikiProposal } from './types'
+import type { AgentStep, DraftSentence, Finding, StepKind, TaskEvent } from './types'
 
-// Scripted agent runs for the Citation check and Evidence wiki pages.
+// Scripted agent runs for the Citation check page.
 
 const at = (delay: number, event: TaskEvent): ScriptItem => ({ delay, event })
 
@@ -124,24 +124,4 @@ export function checkScript(runId: string, manuscript: typeof MANUSCRIPTS[number
   out.push(at(300, { type: 'done', runId, status: incomplete ? 'partial' : 'done',
     summary: incomplete ? 'Some claims need material or a citation choice.' : 'Findings delivered for draft v' + version + '.' }))
   return out
-}
-
-// ---------- Evidence wiki ----------
-
-export function wikiScript(runId: string, proposal: WikiProposal): ScriptItem[] {
-  const { noteIds, comparisonEvidenceIds } = proposal.inputs
-  return [
-    at(0, { type: 'run', run: { id: runId, task: 'Wiki draft', label: 'Draft a concept page', status: 'running', steps: [] } }),
-    at(500, step(runId, 'plan', 'Group your material into one concept page', {
-      detail: `Selected notes: ${noteIds.length}. Selected comparison passages: ${comparisonEvidenceIds.length}.`,
-      tokens: 700, ms: 1500,
-    })),
-    at(300, step(runId, 'tool', 'Collect the selected passages', {
-      call: `collect_evidence(ids=${JSON.stringify([...new Set([...noteIds, ...comparisonEvidenceIds])])})`, ms: 300, tokens: 900,
-    })),
-    at(500, step(runId, 'observe', `${proposal.page.statements.length} sourced statements prepared for review`)),
-    at(300, step(runId, 'stop', 'Preview changes before writing to the Wiki', { tokens: 380, ms: 800 })),
-    at(0, { type: 'wiki-proposal', runId, proposal }),
-    at(0, { type: 'done', runId, status: 'done', summary: 'Proposal ready to review.' }),
-  ]
 }

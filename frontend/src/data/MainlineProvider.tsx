@@ -31,6 +31,12 @@ import { useRead, useWorkspace } from './WorkspaceProvider'
 import { operation, retryWrite, useTask } from './useTask'
 
 type Request = { message_id: string; anchor_id: string }
+type HomeFile = Picked & {
+  pdf?: File | string
+  parsing?: Promise<void>
+  parsed?: true
+  previewError?: string
+}
 const evidenceId = (message: string, anchor: string) => JSON.stringify([message, anchor])
 const discoveryKey = (topic: string, search: string) => `papertrace-discovery-task/${topic}/${search}`
 const emptyTrace = { open: false, focus: null }
@@ -47,7 +53,6 @@ const defaultView = {
   runOrder: [],
   noted: [],
   trace: emptyTrace,
-  wiki: { ...baseState.wiki, pages: [] },
 }
 
 function answerMessages(session: string, { task_id, question, answer }: Turn): [ChatMessage, ChatMessage] {
@@ -135,7 +140,9 @@ export function MainlineProvider({
   children: React.ReactNode
 }) {
   const workspace = useWorkspace()
-  const [files, setFiles] = useState<(Picked & { pdf?: File | string })[]>([])
+  const [files, setFiles] = useState<HomeFile[]>([])
+  const [importingPdfs, setImportingPdfs] = useState(false)
+  const pdfQueue = useRef(Promise.resolve())
   const { tr } = useLanguage()
   const selection = useRef<{ source_version_id: string; passage_id: string; quote: string }>()
   const { act: prototypeActions } = useStore()
@@ -147,6 +154,22 @@ export function MainlineProvider({
   const [error, setError] = useState('')
   const [ready, setReady] = useState(false)
   const availableTopics = useRead('topic.list', {}, ready && !demo)
+  function addHomePdfs(pdfs: (File | string)[]) {
+    const added = pdfs.map((pdf): HomeFile => {
+      const file_id = operation()
+      const name = typeof pdf === 'string' ? pdf.split(/[\\/]/).at(-1) ?? pdf : pdf.name
+      const update = (result: Pick<HomeFile, 'parsed' | 'previewError'>) =>
+        setFiles((old) => old.map((file) => file.file_id === file_id ? { ...file, ...result } : file))
+      const parsing = pdfQueue.current
+        .then(() => pdfInput(pdf))
+        .then((input) => api.call('library.preview_pdf', input))
+        .then(({ parsed }) => update({ parsed }), (error) => update({ previewError: errorText(error) }))
+      pdfQueue.current = parsing
+      return { file_id, name, pdf, parsing }
+    })
+    setFiles((old) => [...old, ...added])
+  }
+
   useEffect(() => {
     if (!availableTopics) return
     setView((previous) => ({ ...previous, topics: availableTopics.items.map((item) => {
@@ -213,9 +236,7 @@ export function MainlineProvider({
       if (!valid || e.payload.type !== 'drop') return
       const paths = e.payload.paths
       if (!demo) {
-        setFiles((old) => [...old, ...paths.filter((path) => path.toLowerCase().endsWith('.pdf')).map((path) => ({
-          file_id: path, name: path.split(/[\\/]/).at(-1) ?? path, pdf: path,
-        }))])
+        addHomePdfs(paths.filter((path) => path.toLowerCase().endsWith('.pdf')))
         return
       }
       void workspace
@@ -538,16 +559,22 @@ export function MainlineProvider({
       )
       creation.current = undefined
       rememberSession(topicId, session_id)
-      openTopic(topicId, !demo && files.length ? 'synthesis' : 'discover', session_id, question || title)
+      openTopic(topicId, !demo && files.length ? 'read' : 'discover', session_id, question || title)
       if (demo && files.length) {
         await workspace.prepare({ kind: 'paper_import', input: { topic_id: topicId, files: files.map((f) => f.file_id) } })
       } else if (files.length) {
+        setImportingPdfs(true)
         const errors: string[] = []
         for (const file of files) {
           if (!file.pdf) continue
-          try { await workspace.write('library.import_pdf', { topic_id: topicId, ...await pdfInput(file.pdf) }) }
-          catch (error) { errors.push(file.name + ': ' + errorText(error)) }
+          try {
+            await file.parsing
+            await workspace.write('library.import_pdf', { topic_id: topicId, ...await pdfInput(file.pdf) })
+          } catch (error) {
+            errors.push(file.name + ': ' + errorText(error))
+          }
         }
+        setImportingPdfs(false)
         if (errors.length) setError(errors.join(' '))
       }
       setFiles([])
@@ -683,9 +710,8 @@ export function MainlineProvider({
     })
   }
 
-  async function ask(text: string): Promise<boolean> {
+  async function ask(text: string, passage = selection.current): Promise<boolean> {
     if (busy || loadingSession || !session || reading.task) return false
-    const passage = selection.current
     return (await status(async () => {
       const { items } = await api.call('library.list', { topic_id: topic })
       const sources = items.flatMap((paper) =>
@@ -766,7 +792,6 @@ export function MainlineProvider({
     reading_qa: 'Question',
     discovery: 'Discovery',
     paper_import: 'Import',
-    wiki_draft: 'Wiki draft',
     paper_comparison: 'Comparison',
     literature_synthesis: 'Literature synthesis',
     citation_audit: 'Citation check',
@@ -918,13 +943,15 @@ export function MainlineProvider({
           else openTopic(item.topic_id, item.target, item.session_id)
         },
       })),
+      detachFile: (index) => setFiles((old) => old.filter((_, i) => i !== index)),
+      homePdfs: demo ? undefined : files,
       attachFiles: (incoming) => {
+        if (!demo) {
+          if (incoming?.length) addHomePdfs(incoming)
+          else void pickPdfs().then(addHomePdfs).catch(reveal)
+          return
+        }
         void status(async () => {
-          if (!demo) {
-            const picked = incoming?.length ? incoming : await pickPdfs()
-            setFiles((old) => [...old, ...picked.map((file) => ({ file_id: operation(), name: file.name, pdf: file }))])
-            return
-          }
           const selected =
             incoming?.length
               ? incoming.map((f) => ({ file_id: f.name, name: f.name }))
@@ -1071,6 +1098,9 @@ export function MainlineProvider({
   return (
     <StoreContext.Provider value={{ state, act }}>
       {children}
+      {importingPdfs && (
+        <div className="mainline-task-actions" role="status">{tr('Importing starting PDFs…')}</div>
+      )}
       {activeTask.task && (
         <div className="mainline-task-actions">
           <button className="ghost-btn sm" disabled={activeTask.busy} onClick={activeTask.cancel}>

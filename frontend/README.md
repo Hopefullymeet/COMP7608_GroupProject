@@ -21,22 +21,22 @@ pnpm --dir frontend install --frozen-lockfile
 ### 2. 打包便携版
 
 ```powershell
-pnpm --dir frontend desktop:build --config src-tauri/tauri.portable.conf.json
+pnpm --dir frontend desktop:build
 ```
 
 此命令会先构建前端，再编译 Tauri 桌面程序。仓库当前配置生成可直接运行的 EXE，安装程序打包已关闭。
 
 ### 3. 找到并启动 EXE
 
-默认输出为 `frontend/src-tauri/target/release/papertrace.exe`（相对于仓库根目录）。构建成功后，在资源管理器双击该文件，或在仓库根目录运行：
+打包命令会将便携版输出到仓库根目录的 `release/papertrace.exe`。构建成功后，在资源管理器双击该文件，或在仓库根目录运行：
 
 ```powershell
-.\frontend\src-tauri\target\release\papertrace.exe
+.\release\papertrace.exe
 ```
 
-如设置了 `CARGO_TARGET_DIR`，请在该输出目录的 `release/` 下查找。便携版在 EXE 旁的 `papertrace-data/` 保存工作区数据，因此请从可写目录启动。桌面端直接连接本地工作区；契约样例可在浏览器中使用。
+Cargo 仍在其目标目录保留编译产物，便携版的发布路径固定为仓库根目录的 `release/papertrace.exe`。便携版在 EXE 旁的 `papertrace-data/` 保存工作区数据，因此请从可写目录启动。桌面端直接连接本地工作区；契约样例可在浏览器中使用。
 
-如需使用 WebView 默认用户资料目录，运行 `pnpm --dir frontend desktop:build` 生成标准版。两种构建使用相同的默认输出路径。
+如需使用 WebView 默认用户资料目录，运行 `pnpm --dir frontend exec tauri build` 生成标准版。标准版默认输出到 `frontend/src-tauri/target/release/papertrace.exe`。
 
 ## 开发模式与浏览器预览
 
@@ -53,7 +53,7 @@ pnpm --dir frontend desktop:build --config src-tauri/tauri.portable.conf.json
 
 1. Home 点 **Try the demo**，在 Discover 确认检索范围，将 PubMedQA 加入主题。Read & ask 直接提问，默认以当前主题库中所有有摘要或正文的文献为来源。点出处定位原文，在原文旁保存笔记。侧栏可回到最近会话。
 2. Library 选择同一主题，点 **Import papers** 导入两份演示材料；重复导入进入人工复核。选择论文可查看文件版本、标签和主题归属。移入回收站前可查看影响，恢复后重新可读。
-3. 主题的 Compare 页选择两篇论文并确认维度，查看每格的依据或缺口，可修订后保存为笔记。Evidence wiki 选择来源笔记并生成草稿，在差异预览中选定变更后采纳。
+3. 主题的 Compare 页选择两篇论文并确认维度，查看每格的依据或缺口，可修订后保存为笔记。在 Read & ask 提问后打开 Wiki，确认新回答已被捕获、翻书动画后摘要更新，再用「记住……」「忘掉……」对话修改条目。
 4. Citation check 打开样例稿件或粘贴 Markdown，选择句子和目标材料后运行独立回查。审阅意见与改稿分别保存。预览措辞和引用，生成新稿版本，再运行回查。稿件、报告、比较 CSV、笔记、书目和证据可从此页导出。
 5. Models & services 可保存服务配置、测试连接、设置预算、审查只读授权及校验备份。Home 的研究更新可打开相关记录和可恢复任务。
 

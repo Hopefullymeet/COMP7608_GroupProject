@@ -9,7 +9,8 @@
 | [pdf-reader.md](pdf-reader.md) | PDF 批注、选区问答及按描述找图表 |
 | [pdf-citations.md](pdf-citations.md) | 本地引用索引、PDF 稿件回查和选定证据导出 |
 | [literature-synthesis.md](literature-synthesis.md) | 主题 PDF 全文、跨论文证据提纲、Wiki 审阅与换版 |
-| [comparison-wiki.md](comparison-wiki.md) | 论文比较、概念与关系、草稿及逐项审阅 |
+| [comparison-wiki.md](comparison-wiki.md) | 两篇论文比较、修订与存为笔记 |
+| [topic-wiki.md](topic-wiki.md) | 主题 Wiki：按主题累积的长期记忆、捕获触发器、整理与对话 |
 | [library-reading.md](library-reading.md) | 资料导入、复核与回收、主题归档、全文与笔记 |
 | [protocol.md](protocol.md) | 共用协议：通信、标识、写入重试、任务与事件、通用错误、证据定位 |
 | [discover-read-locate.md](discover-read-locate.md) | 主线「发现 → 加入主题 → 阅读问答 → 定位原文」的方法、类型和联调样例 |
@@ -24,6 +25,7 @@
 | | 修改主题和会话名称 | `topic.rename`、`session.rename` | [方法与类型](discover-read-locate.md#11-方法与类型) | |
 | | 查看主题和会话 | `topic.list`、`session.list` | [已细化](discover-read-locate.md#11-方法与类型) | [待办与变化](services-workspace.md) |
 | | 导入材料 | `file.pick`、`file.stage_drop`、`paper_import` | [已细化](library-reading.md) | |
+| | 解析起始 PDF | `library.preview_pdf` | [已实现](literature-synthesis.md) | 桌面 RPC 模式 |
 | | 归档与恢复主题、会话 | `workspace.archive/archived/unarchive` | [已细化](library-reading.md) | |
 | Discover | 发起或细化检索 | `task.prepare`、`task.start`（`discovery`） | [已细化](discover-read-locate.md#21-发现论文) | [按来源能力开放会议筛选](services-workspace.md) |
 | | 读回检索与候选 | `discovery.latest`、`discovery.get` | [已细化](discover-read-locate.md#12-检索与候选) | |
@@ -44,9 +46,11 @@
 | | 移出主题、回收站、恢复与清理 | `library.organize/impact/trash/restore/purge` | [已细化](library-reading.md) | |
 | | 保存或清除论文别名 | `library.set_alias` | [已细化](library-reading.md) | 在阅读目录中编辑 |
 | | 标签与批量操作、来源更新 | `library.catalog/organize` | [已细化](library-reading.md) | |
-| Evidence Wiki | 浏览概念页与关系 | `wiki.list` | [已细化](comparison-wiki.md) | |
-| | 生成或重生成草稿 | `task.start`（`wiki_draft`） | [已细化](comparison-wiki.md) | |
-| | 审阅、接受或丢弃草稿 | `wiki.review` | [已细化](comparison-wiki.md) | |
+| Wiki | 读取主题 Wiki 与整理状态 | `wiki.get` | [已实现](topic-wiki.md) | 桌面 RPC、契约样例与脚本演示 |
+| | 问答、PDF 解析、笔记与发现自动累积 | 捕获触发器 | [已实现](topic-wiki.md#1-累积捕获触发器) | 后端写入与任务结束时触发 |
+| | 整理或重新整理 | `wiki.refresh` | [已实现](topic-wiki.md#2-整理概述何时生成) | 新增 5 条捕获后自动整理 |
+| | 对话、要求记住或忘掉 | `wiki.chat`、`wiki.clear_chat` | [已实现](topic-wiki.md) | |
+| | 添加、编辑、置顶或删除条目 | `wiki.edit` | [已实现](topic-wiki.md) | |
 | Citation check | 添加稿件、识别论述和引用 | `draft.import/list` | [已细化](citation-export.md) | |
 | | 引用建议 | `task.start`（`citation_suggest`） | [已细化](citation-export.md) | |
 | | 独立回查 | `task.start`（`citation_audit`） | [已细化](citation-export.md) | |

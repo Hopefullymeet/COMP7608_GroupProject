@@ -1,9 +1,9 @@
 import { WorkspaceProvider } from './data/WorkspaceProvider'
 import { ServicesPage } from './views/ServicesPage'
 import { CitationPage } from './views/CitationPage'
-import { ComparePage, WikiPage } from './views/ResearchPages'
+import { ComparePage } from './views/ResearchPages'
+import { WikiPage, WorkspaceWikiSource } from './views/WikiPage'
 import { LibraryPage } from './views/LibraryPage'
-import { TopicWikiPage } from './views/LiteratureWorkbench'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
@@ -21,7 +21,7 @@ const desktop = isTauri()
 const useRpc = desktop
 const demo = !desktop && new URLSearchParams(window.location.search).get('mode') === 'contract'
 const api = useRpc ? createDesktop() : demo ? createMock() : null
-const app = <App liveResearch={useRpc} comparison={api?<ComparePage/>:undefined} pages={api ? { library:<LibraryPage/>, wiki:useRpc ? <TopicWikiPage/> : <WikiPage/>, check:<CitationPage/>,settings:<ServicesPage/> } : undefined} windowControls={desktop ? <WindowControls /> : undefined} />
+const app = <App liveResearch={useRpc} comparison={api?<ComparePage/>:undefined} pages={api ? { library:<LibraryPage/>, wiki:<WorkspaceWikiSource><WikiPage/></WorkspaceWikiSource>, check:<CitationPage/>,settings:<ServicesPage/> } : undefined} windowControls={desktop ? <WindowControls /> : undefined} />
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <LanguageProvider>

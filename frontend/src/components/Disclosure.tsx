@@ -1,14 +1,17 @@
 import type { ReactNode } from 'react'
 import { Icon } from './Icon'
 
-export function Disclosure({ className = '', icon, title, children }: {
+export function Disclosure({ className = '', icon, title, children, onOpenChange }: {
   className?: string
   icon?: string
   title: ReactNode
   children: ReactNode
+  onOpenChange?: (open: boolean) => void
 }) {
   return (
-    <details className={`disclosure ${className}`} onKeyDown={(event) => {
+    <details className={`disclosure ${className}`}
+      onToggle={onOpenChange && ((event) => onOpenChange(event.currentTarget.open))}
+      onKeyDown={(event) => {
       if (event.key !== 'Escape' || !event.currentTarget.open) return
       event.stopPropagation()
       event.preventDefault()

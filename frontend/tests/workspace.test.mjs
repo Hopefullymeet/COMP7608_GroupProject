@@ -270,3 +270,56 @@ test('desktop adapter sends JSON-RPC IDs, surfaces errors and detaches a task ch
   mismatch = true
   await assert.rejects(api.call('protocol.version', {}), /Invalid response/)
 })
+
+test('topic Wiki captures topic activity, consolidates, chats and edits', async () => {
+  const api = client()
+  const realNow = Date.now
+  let clock = realNow()
+  Date.now = () => clock
+  try {
+    const { topic_id } = await api.call('topic.create', { operation_id: op(), title: 'pubmedqa.pdf' })
+    const empty = await api.call('wiki.get', { topic_id })
+    assert.equal(empty.status, 'empty')
+    assert.ok(empty.transfer, 'A remote model discloses what the Wiki sends')
+
+    const search = await start(api, { kind: 'discovery', topic_id, input: { query: 'PubMedQA' } })
+    const { search_id, candidates } = (await finish(api, search.task_id)).result
+    await api.call('candidate.decide', { operation_id: op(), topic_id, search_id, candidate_id: candidates[0].candidate_id, decision: 'add' })
+    const captured = await api.call('wiki.get', { topic_id })
+    const paper = captured.entries.find((e) => e.kind === 'paper')
+    assert.equal(paper.origin, 'paper')
+    assert.equal(paper.anchor_ids.length, 1)
+    assert.equal((await api.call('wiki.get', { topic_id })).entries.length, captured.entries.length, 'Activity is captured once')
+
+    assert.equal((await api.call('wiki.refresh', { topic_id, operation_id: op() })).status, 'generating')
+    clock += 3000
+    const ready = await api.call('wiki.get', { topic_id })
+    assert.equal(ready.status, 'ready')
+    assert.doesNotMatch(ready.headline, /\.pdf/, 'A topic named after a file is described by its research')
+    assert.ok(ready.entries.some((e) => e.entry_id === paper.entry_id), 'Captured entries survive a local summary')
+
+    await api.call('wiki.chat', { topic_id, operation_id: op(), text: 'Remember that I only need biomedical data' })
+    await assert.rejects(api.call('wiki.chat', { topic_id, operation_id: op(), text: 'again' }))
+    clock += 2000
+    const replied = await api.call('wiki.get', { topic_id })
+    const change = replied.thread.at(-1).changes[0]
+    const added = replied.entries.find((e) => e.entry_id === change.entry_id)
+    assert.deepEqual([added.kind, added.origin, added.pinned], ['preference', 'chat', true])
+
+    const edited = await api.call('wiki.edit', { topic_id, operation_id: op(), action: 'update', entry_id: added.entry_id, text: 'Biomedical only' })
+    assert.equal(edited.entries.find((e) => e.entry_id === added.entry_id).origin, 'user')
+
+    for (let i = 0; i < 5; i++)
+      await api.call('note.save', { topic_id, operation_id: op(), text: 'Note ' + i, anchor_ids: [], origin: 'user' })
+    const auto = await api.call('wiki.get', { topic_id })
+    assert.equal(auto.status, 'generating', 'Five new captures start a summary without a click')
+    clock += 3000
+    const refreshed = await api.call('wiki.get', { topic_id })
+    assert.equal(refreshed.new_since_summary, 0)
+    assert.equal(refreshed.entries.filter((e) => e.origin === 'note').length, 5)
+    assert.ok(refreshed.entries.some((e) => e.text === 'Biomedical only'))
+    assert.equal((await api.call('wiki.clear_chat', { topic_id, operation_id: op() })).thread.length, 0)
+  } finally {
+    Date.now = realNow
+  }
+})

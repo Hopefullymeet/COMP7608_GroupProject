@@ -205,7 +205,7 @@ export function PdfAudit({ topic }: { topic: string }) {
               <button className="ghost-btn" disabled={workspace.busy || saved.includes(finding.finding_id)}
                 onClick={() => void workspace.write('audit.save_to_wiki', { ...target, report_id: report.report_id,
                   finding_id: finding.finding_id }).then(() => setSaved((old) => [...old, finding.finding_id])).catch(workspace.report)}>
-                {tr(saved.includes(finding.finding_id) ? 'Saved to Topic Wiki' : 'Save finding to Topic Wiki')}
+                {tr(saved.includes(finding.finding_id) ? 'Saved to the Wiki' : 'Save finding to the Wiki')}
               </button>}
             {(['accept', 'reject', 'defer'] as const).map((decision) => <button key={decision} className="ghost-btn"
               disabled={workspace.busy || (decision === 'accept' && (finding.needs_review

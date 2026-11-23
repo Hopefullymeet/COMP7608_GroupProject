@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef, type ReactNode } from 'react'
 import { anyRunning, useStore } from '../data/store'
 import { Icon, Spinner } from './Icon'
 
-/** Header for the workspace pages (Library, Evidence wiki, Citation check, Models & services). */
+/** Header for the workspace pages (Library, Citation check, Models & services). */
 export function PageHead({ icon, title, sub, children, trace = false }: {
   icon: string; title: string; sub: string; children?: ReactNode; trace?: boolean
 }) {

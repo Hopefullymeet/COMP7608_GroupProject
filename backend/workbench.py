@@ -1,6 +1,7 @@
 """PaperTrace research task and persistence entry points."""
 
 from collections import Counter
+from threading import Lock
 
 from dsh import DshFailure
 from citations import parse_pdf_index, save_index
@@ -12,6 +13,22 @@ class Workbench:
     def __init__(self, worker, identifier):
         self.worker = worker
         self.new_id = identifier
+        self.pdf_previews = {}
+        self.pdf_preview_lock = Lock()
+
+    def preview_pdf(self, params):
+        _, content = pdf_content(params)
+        checksum = digest(content)
+        with self.pdf_preview_lock:
+            parsed = self.pdf_previews.get(checksum)
+        if parsed is None:
+            pages = extract_pdf(content)
+            parsed = pages, parse_pdf_index(content, pages)
+            with self.pdf_preview_lock:
+                self.pdf_previews[checksum] = parsed
+                if len(self.pdf_previews) > 4:
+                    del self.pdf_previews[next(iter(self.pdf_previews))]
+        return {"parsed": True}
 
     def import_pdf(self, topic, params):
         host = self.worker
@@ -45,7 +62,9 @@ class Workbench:
             raise LiteratureError("IDENTITY_CONFLICT", "This PDF is already attached to a different paper.",
                                   "review_import", -32010)
 
-        pages = extract_pdf(content)
+        with self.pdf_preview_lock:
+            parsed = self.pdf_previews.get(checksum)
+        pages = parsed[0] if parsed else extract_pdf(content)
         version = self.new_id()
         passages = list(make_passages(version, pages))
         scope = "full_text" if passages else "metadata"
@@ -66,7 +85,7 @@ class Workbench:
             first = host.db.execute("SELECT last_insert_rowid()").fetchone()[0] - len(passages) + 1
             host.db.executemany("INSERT INTO passage_lookup VALUES (?, ?, ?, ?, ?)",
                                 ((*p[:4], first + i) for i, p in enumerate(passages)))
-        save_index(host.db, version, parse_pdf_index(content, pages))
+        save_index(host.db, version, parsed[1] if parsed else parse_pdf_index(content, pages))
         return {"paper_id": paper_id, **record, "duplicate": False}
 
     def document(self, source, passage_id=None):
