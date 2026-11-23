@@ -578,6 +578,28 @@ class BibliographyContractTest(unittest.TestCase):
         self.assertIn("result", reply, reply)
         return reply["result"]
 
+    def test_library_trash_restore_and_purge(self):
+        preview = self.call("library.preview_bibliography", **self.topic, format="csl-json",
+                            content=json.dumps({"title": "Selected paper", "DOI": "10.1234/recycle"}))
+        paper = self.call("library.commit_bibliography", **self.topic, preview_id=preview["preview_id"],
+                          item_ids=["1"])["items"][0]
+        selection = {"paper_ids": [paper["paper_id"]]}
+        impact = self.call("library.impact", **selection)
+        self.assertEqual(impact["references"], [{"kind": "Topic", "label": "Evidence"}])
+        self.call("library.set_alias", **self.topic, paper_id=paper["paper_id"], alias="Changed")
+        self.call("library.trash", **selection, revision=impact["revision"], error="STALE_REVISION")
+        revision = self.call("library.impact", **selection)["revision"]
+        for _ in range(2):
+            self.assertEqual(self.call("library.trash", **selection, revision=revision, operation_id="retry"), {"changed": 1})
+        self.assertEqual(self.call("library.list", **self.topic)["items"], [])
+        original, = self.call("library.catalog")["trash"]
+        self.assertEqual(self.call("library.restore", **selection), {"changed": 1, "warnings": []})
+        self.assertEqual(self.call("library.catalog")["papers"], [original])
+        self.call("library.trash", **selection, revision=self.call("library.impact", **selection)["revision"])
+        self.call("library.purge", **selection, revision=revision, clear_excerpts=True, error="STALE_REVISION")
+        self.call("library.purge", **selection, revision=self.call("library.impact", **selection)["revision"], clear_excerpts=True)
+        self.assertEqual(self.call("library.catalog"), {"papers": [], "trash": [], "reviews": []})
+
     def test_library_bibliography_export_is_scoped_and_reuses_stable_citation_keys(self):
         record = {"title": "Evidence & Methods", "author": [{"family": "García", "given": "Ada"},
                   {"literal": "Research and Development"}], "DOI": "10.1234/evidence_main",

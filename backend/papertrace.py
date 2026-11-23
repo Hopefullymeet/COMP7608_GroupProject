@@ -145,6 +145,7 @@ class Worker:
         "services.save",
         "library.commit_identifier", "library.update_metadata", "workspace.archive", "workspace.unarchive", "library.organize",
         "library.preview_bibliography", "library.commit_bibliography", "library.commit_zotero_attachment",
+        "library.trash", "library.restore", "library.purge",
     }
 
     def __init__(self, directory, send):
@@ -557,7 +558,7 @@ class Worker:
                 if (anchor["topic_id"] != topic or value["source_version_id"] != version
                         or value["location"].get("page") != params.get("page")):
                     raise missing("This evidence does not identify the requested page.")
-                source = self.get("source", version)
+                source = self.evidence_source(version)
             else:
                 source = self.source(version, topic)
             return (self.research.document(source) if method == "source.read"
@@ -603,7 +604,7 @@ class Worker:
             topic = self.topic(params) if "topic_id" in params else anchor["topic_id"]
             if topic != anchor["topic_id"]:
                 raise missing("Evidence is outside the selected topic.")
-            source = self.get("source", value["source_version_id"])
+            source = self.evidence_source(value["source_version_id"])
             if value["location"].get("precision") == "region":
                 return {"anchor_id": value["anchor_id"], "topic_id": topic, "read_scope": "full_text",
                         "source": {"source_version_id": source["source_version_id"], "paper_id": source["paper_id"],
@@ -616,6 +617,8 @@ class Worker:
             return self.export_library_bibliography(params)
         if method == "library.organize":
             return self.organize_papers(params)
+        if method in ("library.impact", "library.trash", "library.restore", "library.purge"):
+            return self.recycle_papers(method, params)
         if method == "library.set_alias":
             topic = self.topic(params)
             paper_id = required(params, "paper_id")
@@ -662,7 +665,7 @@ class Worker:
                               self.get("source", v["source_version_id"]).get("page_count"))}
                               for v in p["source_versions"]]} for p in papers]
                 return {"items": items}
-            return {"papers": papers, "reviews": [], "trash": []}
+            return {"papers": papers, "reviews": [], "trash": self.rows("trashed_paper")}
         if method in ("source.read_abstract", "reader.position", "reader.bookmark"):
             source = self.source(required(params, "source_version_id"), self.topic(params))
             if method == "source.read_abstract":
@@ -707,7 +710,7 @@ class Worker:
             value = anchor["value"]
             if value["location"].get("precision") == "region":
                 return self.dispatch("evidence.open", params, after)
-            source = self.get("source", value["source_version_id"])
+            source = self.evidence_source(value["source_version_id"])
             if value["read_scope"] == "full_text":
                 pid = value["location"]["passage_id"]
                 return {"anchor_id": value["anchor_id"], "topic_id": anchor["topic_id"],
@@ -731,12 +734,94 @@ class Worker:
             return self.save_note(params)
         raise RpcError(-32601, "METHOD_NOT_FOUND", "refresh_data", f"Method {method} is not available in the local integration worker.")
 
-    def organize_papers(self, params):
+    def paper_ids(self, params):
         ids = params.get("paper_ids")
         if (not isinstance(ids, list) or not ids or len(ids) > 500
                 or any(not isinstance(pid, str) or not pid.strip() for pid in ids)
                 or len(ids) != len(set(ids))):
             raise invalid("Choose up to 500 distinct papers.")
+        return ids
+
+    def recycle_papers(self, method, params):
+        ids = sorted(self.paper_ids(params))
+        selected = []
+        for pid in ids:
+            row = self.db.execute("SELECT kind, data FROM records WHERE id = ? AND kind IN ('paper', 'trashed_paper')",
+                                  (pid,)).fetchone()
+            if row is None:
+                raise missing("Selected paper was not found.")
+            selected.append((row[0], json.loads(row[1])))
+        if method != "library.impact":
+            expected = "paper" if method == "library.trash" else "trashed_paper"
+            if any(kind != expected for kind, _ in selected):
+                raise invalid("Selection changed. Refresh the library.")
+        papers = [paper for _, paper in selected]
+        if method == "library.restore":
+            warnings = []
+            topics = {t["topic_id"] for t in self.rows("topic")}
+            for paper in papers:
+                for topic in paper["topic_ids"]:
+                    if topic not in topics:
+                        warnings.append(f"{paper['title']}: topic {topic} no longer exists.")
+                paper["topic_ids"] = [t for t in paper["topic_ids"] if t in topics]
+                self.put("paper", paper["paper_id"], paper)
+                self.db.execute("DELETE FROM records WHERE kind = 'trashed_paper' AND id = ?", (paper["paper_id"],))
+            return {"changed": len(ids), "warnings": warnings}
+        versions = {v["source_version_id"] for p in papers for v in p["source_versions"]}
+        anchors = {a["value"]["anchor_id"]: a for a in self.rows("anchor") if a["value"]["source_version_id"] in versions}
+        topics = {t for p in papers for t in p["topic_ids"]}
+        refs = [("Topic", t["topic_id"], t["title"]) for t in self.rows("topic") if t["topic_id"] in topics]
+        refs.extend(("Evidence", aid, a["value"]["quote"]) for aid, a in anchors.items())
+        notes = []
+        for row in self.rows("note"):
+            n = row["value"]
+            if n.get("paper_id") in ids or any(anchors.keys() & set(v["anchor_ids"]) for v in [n, *n["history"]]):
+                refs.append(("Note", n["revision"], n["text"]))
+                notes.append(row)
+        for kind in ("comparison", "synthesis"):
+            for r in self.rows(kind):
+                if versions.intersection(r["source_versions"]):
+                    refs.append((kind, r.get("comparison_id") or r["record_id"], r["question"]))
+        for draft in self.rows("pdf_draft"):
+            if any(set(ids).intersection(v.get("mapping", {}).values()) for v in draft["versions"]):
+                refs.append(("Draft", draft["draft_id"], draft["name"]))
+        revision = digest(encode([selected, sorted(refs)]).encode())
+        if method == "library.impact":
+            return {"references": [{"kind": k, "label": label} for k, _, label in refs], "revision": revision}
+        if required(params, "revision") != revision:
+            raise RpcError(-32020, "STALE_REVISION", "refresh_data", "References changed. Preview the impact again.")
+        if method == "library.trash":
+            self.db.executemany("UPDATE records SET kind = 'trashed_paper' WHERE kind = 'paper' AND id = ?",
+                                [(pid,) for pid in ids])
+        else:
+            if type(params.get("clear_excerpts")) is not bool:
+                raise invalid("Choose whether to clear saved excerpts.")
+            if params["clear_excerpts"]:
+                for row in notes:
+                    n = row["value"]
+                    for v in [n, *n["history"]]:
+                        for aid in anchors.keys() & set(v["anchor_ids"]):
+                            quote = anchors[aid]["value"]["quote"]
+                            if quote:
+                                v["text"] = v["text"].replace(quote, "")
+                    self.put("note", n["note_id"], row)
+                for aid, a in anchors.items():
+                    a["value"]["quote"] = ""
+                    a["value"]["location"].pop("text_excerpt", None)
+                    self.put("anchor", aid, a)
+            for table in ("pdf_files", "paper_passages", "passage_lookup", "citation_index", "citation_refs",
+                          "paper_objects", "reader_marks", "reader_translations"):
+                self.db.executemany(f"DELETE FROM {table} WHERE version_id = ?", [(v,) for v in versions])
+            for p in papers:
+                for v in p["source_versions"]:
+                    version = v["source_version_id"]
+                    self.put("source", version, {"paper_id": p["paper_id"], "source_version_id": version, "passages": []})
+            self.db.executemany("UPDATE records SET kind = 'purged_paper' WHERE kind = 'trashed_paper' AND id = ?",
+                                [(pid,) for pid in ids])
+        return {"changed": len(ids)}
+
+    def organize_papers(self, params):
+        ids = self.paper_ids(params)
         action, value = required(params, "action"), required(params, "value").strip()
         if action not in ("link", "unlink", "tag", "untag"):
             raise invalid("Choose a supported organization action.")
@@ -814,6 +899,12 @@ class Worker:
     def active(self, kind, scope):
         return next((t for t in self.rows("task") if t["kind"] == kind and t["target"] == scope
                      and t["status"] in ("queued", "running")), None)
+
+    def evidence_source(self, version):
+        source = self.get("source", version)
+        if not self.db.execute("SELECT 1 FROM records WHERE kind = 'paper' AND id = ?", (source["paper_id"],)).fetchone():
+            raise RpcError(-32001, "SOURCE_UNAVAILABLE", "refresh_data", "This source is no longer in the library.")
+        return source
 
     def source(self, version, topic, paper=None):
         source = self.get("source", version)
@@ -1077,6 +1168,8 @@ class Worker:
         if isinstance(metadata.get("venue"), dict):
             metadata["venue"] = metadata["venue"]["name"]
         paper = self.find_bibliographic_paper(metadata)
+        if paper is None and any(identity_keys(metadata) & identity_keys(p) for p in self.rows("trashed_paper")):
+            raise RpcError(-32010, "IDENTITY_CONFLICT", "review_import", "Restore the matching paper from Trash first.")
         if target and paper and paper["paper_id"] != target["paper_id"]:
             raise RpcError(-32018, "IDENTIFIER_ALREADY_LINKED", "refresh_data", "Another paper already uses this identifier.")
         paper = target or paper
