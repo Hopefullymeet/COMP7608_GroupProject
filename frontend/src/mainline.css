@@ -295,10 +295,11 @@
 .library-reader > .pt-reader { flex: 1; }
 
 /* One toolbar for the page, its current document or conversation, and its actions. */
-.app { --topic-header-height: 38px; }
+.app { --topic-header-height: 38px; --header-fade: 14px; }
 .app .page-head, .app .topic .topic-head:has(.pt-topic-actions), .app .topic-head {
   display: flex; flex-wrap: nowrap; align-items: center; height: var(--topic-header-height);
-  min-width: 0; gap: 7px; padding: 3px 12px; background: var(--surface); position: relative; z-index: 2;
+  min-width: 0; gap: 7px; padding: 3px 12px; border-bottom: 0; position: relative; z-index: 2;
+  background: linear-gradient(to bottom, var(--surface) calc(100% - var(--header-fade)), transparent);
 }
 .app--desktop .page-head { padding-inline-end: 114px; }
 .app--desktop .main:has(.page) .desktop-drag-area { height: 38px; align-items: center; padding: 3px 8px; z-index: 3; }
@@ -323,7 +324,12 @@
 .header-actions .pt-topic-menu { right: 0; }
 .audit-inspector[hidden] { display: none; }
 .audit-spread:not(.inspecting) { grid-template-columns: minmax(0,1fr); }
-.chat-scroll[data-scrolled], .page-body[data-scrolled], .pt-reader-frame[data-scrolled] {
-  mask-image: linear-gradient(to bottom, transparent, black 14px);
-}
+/* The scroller extends behind the last 14px of the toolbar. Its content
+   stays fully opaque until it crosses the toolbar's bottom edge. */
+.page-head + .page-body.scroll,
+.topic-head + .topic-body:has(> .read) { margin-top: calc(-1 * var(--header-fade)); }
+.page-head + .page-body.scroll::before { content: ''; display: block; height: var(--header-fade); flex: none; }
+.topic-body > .read .chat-scroll { padding-top: calc(12px + var(--header-fade)); }
+.topic-body > .read .pt-reader-frame::before { content: ''; display: block; height: var(--header-fade); }
+.topic-body > .read :is(.pt-paper-directory, .pt-pdf-rail) { top: calc(12px + var(--header-fade)); }
 .header-context[data-truncated] { text-overflow: clip; mask-image: linear-gradient(to right, black calc(100% - 16px), transparent); }

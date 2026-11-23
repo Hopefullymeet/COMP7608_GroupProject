@@ -21,11 +21,7 @@ export function App({ windowControls, pages, comparison, liveResearch }: { windo
   return (
     <div className={windowControls ? 'app app--desktop' : 'app'}>
       <Sidebar />
-      <main className="main" onScrollCapture={event => {
-        const pane = event.target
-        if (pane instanceof HTMLElement && pane.matches('.chat-scroll, .page-body, .pt-reader-frame'))
-          pane.toggleAttribute('data-scrolled', pane.scrollTop > 4)
-      }}>
+      <main className="main">
         {windowControls && r.view !== 'topic' && (
           <div className="desktop-drag-area" data-tauri-drag-region>{windowControls}</div>
         )}

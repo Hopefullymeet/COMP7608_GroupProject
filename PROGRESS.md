@@ -171,3 +171,5 @@ Reading answers now resolve version IDs to paper aliases or titles and localize 
 - 主题与会话搜索移至侧栏「主题」标题旁，默认收起，按 Esc 可清除筛选并收起。已核对 macOS 客户端首页。
 
 - 会话页和引用核查共用 38px 紧凑标题栏，标题旁显示当前会话或稿件，工具可通过图标打开。macOS 客户端已核对会话页，前端测试 7 项通过。
+
+- 顶栏底部移除分隔线，滚动内容越过顶栏下沿才进入栏内的 14px 渐隐区。宽窄窗口已核对边框和重叠位置。
