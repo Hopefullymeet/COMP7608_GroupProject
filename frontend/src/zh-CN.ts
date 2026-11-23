@@ -304,6 +304,7 @@ export const zhCN: Readonly<Record<string, string>> = {
   'Show less': '收起',
   'Show {0} more': '展开其余 {0} 项',
   'Search': '搜索',
+  'Resize sidebar': '调整侧栏宽度',
   'Search topics and sessions': '搜索主题和会话',
   'Workspace': '工作区',
   'New topic': '新建主题',

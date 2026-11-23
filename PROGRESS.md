@@ -197,3 +197,4 @@ Reading answers now resolve version IDs to paper aliases or titles and localize 
 - 自定义角色采用双栏表单。论文问答与 Wiki 对话分别控制个人背景和记忆的使用；旧记录继承原开关。macOS 桌面已核实两个开关和设置表单；后端测试覆盖四种组合。
 - 首页按六个本地时段轮播 24 组双语问候与引文；引文及出处随界面语言切换。加宽标题和新建主题入口，已在宽窄两种视口验证。
 - 侧栏品牌入口改为阅读水獭与 PaperTrace 单行排列，已在 macOS 客户端核对实际显示。
+- 左侧导航默认宽度 216 像素，可拖动边缘并记住宽度，双击恢复默认。
