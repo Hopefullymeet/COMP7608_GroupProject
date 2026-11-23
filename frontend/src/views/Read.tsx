@@ -102,6 +102,7 @@ function AgentMessage({ m }: { m: ChatMessage }) {
           })}
         </div>
       )}
+      {m.wikiTask && state.topics.find(t=>t.id===currentTopic(state))?.wikiTurns?.includes(m.wikiTask) && <small className="wiki-update"><Icon name="wiki" size={13}/>{tr('Wiki updated')}</small>}
       {m.done && state.mainline?.saveAnswer && <button className="link-btn" onClick={()=>state.mainline?.saveAnswer?.(m)}>{tr('Save answer as note')}</button>}
       {m.done && run && (
         <div className="msg-foot">

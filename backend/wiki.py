@@ -90,8 +90,8 @@ class TopicWiki:
             for turn in session["turns"]:
                 sentences = [{"text": clip(s["text"]), "anchor_ids": s["anchor_ids"]}
                              for s in turn["answer"]["sentences"] if s.get("anchor_ids")]
-                answers.append({"id": turn["task_id"], "question": clip(turn["question"]), "sentences": sentences[:4]})
-        answers = answers[:30]
+                answers.append({"id": turn["task_id"], "question": clip(turn["question"]), "sentences": sentences})
+        answers = answers[-100:]
         findings = []
         for item in host.research.wiki(topic)["items"][:30]:
             entry = item["entry"]
@@ -223,11 +223,122 @@ class TopicWiki:
 
     # ---------- capture triggers ----------
 
+    def grow_map(self, wiki, material):
+        topic = wiki["topic_id"]
+        nodes = wiki.setdefault("map_nodes", {})
+        observed = set(wiki.get("map_turns", []))
+        hidden = set(wiki.get("map_hidden", []))
+        changed_tasks = []
+        pending = False
+        def key(*parts):
+            return digest(json.dumps(parts, ensure_ascii=False).encode())[:32]
+        def add(identifier, parent, title, anchors):
+            if identifier in hidden or parent in hidden:
+                return False
+            if identifier in nodes:
+                node = nodes[identifier]
+                merged = list(dict.fromkeys(node["anchors"] + anchors))
+                if merged == node["anchors"]:
+                    return False
+                node["anchors"] = merged
+            else:
+                nodes[identifier] = dict(id=identifier, parent=parent, title=title, anchors=anchors)
+            return True
+        for answer in material["answers"]:
+            if answer["id"] in observed:
+                continue
+            observed.add(answer["id"])
+            question = answer["question"].strip()
+            if not question or re.fullmatch(r"你好[！!。]?|hello[!.]?|hi[!.]?", question, re.I):
+                continue
+            branch = key("direction", question.casefold())
+            if branch in hidden:
+                suggestions = wiki.setdefault("map_questions", [])
+                if question not in suggestions:
+                    suggestions.append(question)
+                    pending = True
+                continue
+            changed = add(branch, "", question, [])
+            for sentence in answer["sentences"]:
+                if add(key(branch, sentence["text"]), branch, sentence["text"], sentence["anchor_ids"]):
+                    changed = True
+            if changed:
+                changed_tasks.append(answer["id"])
+        wiki["map_turns"] = sorted(observed)
+        if changed_tasks or pending:
+            record = self.worker.get("topic", topic)
+            record["wiki_unread"] = True
+            record["wiki_turns"] = list(dict.fromkeys(record.get("wiki_turns", []) + changed_tasks))
+            self.worker.put("topic", topic, record)
+        return bool(changed_tasks or pending)
+
+    def map_edit(self, wiki, params):
+        nodes = wiki.setdefault("map_nodes", {})
+        target = params.get("entry_id", "")
+        action = params["action"]
+        if action == "map_seen":
+            record = self.worker.get("topic", wiki["topic_id"])
+            record["wiki_unread"] = False
+            self.worker.put("topic", wiki["topic_id"], record)
+            return
+        if action in ("map_accept", "map_dismiss"):
+            proposal = wiki.get("map_proposals", {}).pop(target, None)
+            if not proposal:
+                raise missing("This proposal was not found.")
+            if action == "map_accept":
+                self.map_edit(wiki, dict(proposal, confirmed=params.get("confirmed")))
+            return
+        if target and target not in nodes:
+            raise missing("This map node was not found.")
+        text = clip(params.get("text"))
+        if action == "map_add" and text:
+            uid = self.identifier()
+            nodes[uid] = dict(id=uid, parent=target, title=text, anchors=[])
+        elif action == "map_rename" and text:
+            if target:
+                nodes[target]["title"] = text
+            else:
+                wiki["map_title"] = text
+        elif action == "map_remove" and target and params.get("confirmed") is True:
+            parent = nodes[target]["parent"]
+            drop = {target}
+            for child in nodes.values():
+                if child["parent"] == target and not params.get("subtree"):
+                    child["parent"] = parent
+            if params.get("subtree"):
+                while True:
+                    extra = {n["id"] for n in nodes.values() if n["parent"] in drop} - drop
+                    if not extra:
+                        break
+                    drop.update(extra)
+            wiki["map_hidden"] = sorted(set(wiki.get("map_hidden", [])) | drop)
+            for uid in drop:
+                del nodes[uid]
+        else:
+            raise invalid("Check the node, text and deletion confirmation.")
+
+    def map_sources(self, topic, nodes):
+        ids = {a for n in nodes.values() for a in n["anchors"]}
+        if not ids:
+            return {}
+        papers = {p["paper_id"]: p["title"] for p in self.worker.rows("paper") if topic in p["topic_ids"]}
+        sources = {}
+        for row in self.worker.rows("anchor"):
+            a = row["value"]
+            if row.get("topic_id") != topic or a["anchor_id"] not in ids:
+                continue
+            location = a.get("location", {})
+            sources[a["anchor_id"]] = dict(title=papers.get(a.get("paper_id"), ""), quote=a.get("quote", ""),
+                                          page=location.get("page"), scope=a.get("read_scope"))
+        return sources
+
     def capture(self, topic):
         """Turn new topic activity into entries. Runs inside the caller's lock and transaction."""
         wiki = self.load(topic)
         material = self.material(topic)
         seen = set(wiki["observed"])
+        previous_turns = wiki.get("map_turns")
+        map_changed = self.grow_map(wiki, material)
         before = len(wiki["observed"])
         added = 0
         for key, kind, origin, text, anchors in self.observations(topic, material, seen):
@@ -249,7 +360,7 @@ class TopicWiki:
         if start:
             wiki["status"] = "generating"
             self.running.add((topic, "refresh"))
-        if before != len(wiki["observed"]) or start:
+        if before != len(wiki["observed"]) or start or map_changed or previous_turns != wiki["map_turns"]:
             self.store(wiki)
         if start:
             self.spawn(lambda topic: self.generate(topic, automatic=True), topic, "refresh")
@@ -277,6 +388,7 @@ class TopicWiki:
         model = self.model()
         hidden = ("fingerprint", "generator", "observed", "captured_since")
         result = {k: v for k, v in wiki.items() if k not in hidden}
+        result["map_sources"] = self.map_sources(topic, wiki.get("map_nodes", {}))
         result.update(
             sources={"papers": len(material["papers"]), "notes": len(material["notes"]),
                      "answers": len(material["answers"]), "findings": len(material["findings"])},
@@ -325,6 +437,10 @@ class TopicWiki:
         wiki = self.load(topic)
         action = params.get("action")
         entries = wiki["entries"]
+        if isinstance(action, str) and action.startswith("map_"):
+            self.map_edit(wiki, params)
+            self.store(wiki)
+            return self.view(topic, wiki)
         if action == "add":
             text = clip(params.get("text"))
             kind = params.get("kind", "finding")
@@ -337,6 +453,7 @@ class TopicWiki:
                 raise missing("This Wiki entry was not found.")
             if action == "remove":
                 entries.remove(entry)
+                wiki.get("pending_removals", {}).pop(entry["entry_id"], None)
             elif action == "update":
                 text = clip(params.get("text"))
                 if not text:
@@ -480,6 +597,17 @@ class TopicWiki:
             op = change.get("op")
             text = clip(change.get("text"))
             target = next((e for e in entries if e["entry_id"] == change.get("entry_id")), None)
+            if op in ("map_add", "map_rename", "map_remove"):
+                uid = change.get("entry_id", "")
+                if not isinstance(uid, str) or (uid and uid not in wiki.get("map_nodes", {})):
+                    continue
+                proposal = dict(action=op, entry_id=uid, text=text)
+                if op == "map_remove" or (op == "map_rename" and not uid):
+                    if uid or op == "map_rename":
+                        wiki.setdefault("map_proposals", {})[self.identifier()] = proposal
+                elif text:
+                    self.map_edit(wiki, proposal)
+                continue
             if op == "add" and text and not any(e["text"] == text for e in entries):
                 kind = change.get("kind") if change.get("kind") in KINDS else "preference"
                 entry = self.entry(kind, text, [], "chat", pinned=True)
@@ -489,8 +617,7 @@ class TopicWiki:
                 applied.append({"op": "update", "entry_id": target["entry_id"], "text": text, "before": target["text"]})
                 target.update(text=text, origin="chat", pinned=True, updated_at=self.now())
             elif op == "remove" and target:
-                entries.remove(target)
-                applied.append({"op": "remove", "entry_id": target["entry_id"], "text": target["text"]})
+                wiki.setdefault("pending_removals", {})[target["entry_id"]] = target["text"]
         return applied
 
     # ---------- model calls ----------
@@ -552,11 +679,14 @@ class TopicWiki:
                 raise ValueError
             return result
 
+        system += (" For research map changes use map_add, map_rename or map_remove with entry_id as the target "
+                   "(empty string for root), and text. Delete and root rename requests are proposals for review. "
+                   "Do not say they have been completed.")
         history = [{"role": m["role"], "text": m["text"]} for m in wiki["thread"][-THREAD_CONTEXT - 1:-1]]
         return self.request(model, system, {
             "wiki": {"headline": wiki["headline"], "summary": wiki["summary"],
                      "entries": [{k: e[k] for k in ("entry_id", "kind", "text")} for e in wiki["entries"]]},
-            "material": material, "conversation": history, "message": message,
+            "map_nodes": list(wiki.get("map_nodes", {}).values()), "material": material, "conversation": history, "message": message,
         }, parse)
 
 

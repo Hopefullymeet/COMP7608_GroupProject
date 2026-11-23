@@ -59,7 +59,7 @@ function answerMessages(session: string, { task_id, question, answer }: Turn): [
   return [
     { id: `user:${task_id}`, sessionId: session, role: 'user', done: true, segments: [{ text: question }] },
     {
-      id: `answer:${answer.message_id}`,
+      id: `answer:${answer.message_id}`, wikiTask:task_id,
       sessionId: session,
       role: 'agent',
       done: true,
@@ -174,8 +174,8 @@ export function MainlineProvider({
     if (!availableTopics) return
     setView((previous) => ({ ...previous, topics: availableTopics.items.map((item) => {
       const topic = previous.topics.find((candidate) => candidate.id === item.topic_id)
-      return topic ? { ...topic, title: item.title } :
-        { id: item.topic_id, title: item.title, goal: '', scripted: true, paperCount: 0, updated: '' }
+      return topic ? { ...topic, wikiUnread:item.wiki_unread, wikiTurns:item.wiki_turns, title: item.title } :
+        { id: item.topic_id, wikiUnread:item.wiki_unread, wikiTurns:item.wiki_turns, title: item.title, goal: '', scripted: true, paperCount: 0, updated: '' }
     }) }))
   }, [availableTopics])
   const config = useRead('services.get', {}, ready)
@@ -388,7 +388,7 @@ export function MainlineProvider({
         ...state,
         topics: items.map((t) => ({
           id: t.topic_id,
-          title: t.title,
+          title: t.title, wikiUnread:t.wiki_unread, wikiTurns:t.wiki_turns,
           goal: '',
           scripted: true,
           paperCount: 0,

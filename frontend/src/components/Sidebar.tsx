@@ -85,6 +85,7 @@ export function Sidebar() {
           <button key={l.page} className={`side-item ${route.view === l.page ? 'active' : ''}`} aria-current={route.view === l.page ? 'page' : undefined}
             onClick={() => act.navigate({ view: l.page })}>
             <Icon name={l.icon} size={15} /> <span className="grow">{tr(l.label)}</span>
+            {l.page === 'wiki' && state.topics.some(t=>t.wikiUnread) && <i className="wiki-unread" aria-label={tr('Unread')}/>}
             {!state.mainline && l.page === 'library' && state.dupReview === 'pending' && <span className="side-badge" title={tr('1 import needs review')}>1</span>}
           </button>
         ))}

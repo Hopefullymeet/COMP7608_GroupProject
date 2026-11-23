@@ -13,7 +13,7 @@
 | 论文加入主题 | `candidate.decide` 加入，只有摘要或元数据 | 摘要首句或标题，`paper`，`origin=paper`。之后补到全文时再按 PDF 解析捕获 |
 | 笔记 | `note.save`（含修订） | `finding`，`origin=note`，每个修订捕获一次 |
 | 已存发现 | `synthesis.review`、`reader.answer_save`、`reader.mark_to_wiki`、`audit.save_to_wiki` | `finding`，`origin=finding` |
-| Wiki 对话 | 用户说「记住……」「忘掉……」或要求更正 | 立即新增、修改或删除条目，`origin=chat` 并置顶 |
+| Wiki 对话 | 用户说「记住……」「忘掉……」或要求更正 | 新增或修改条目；删除先生成建议，`origin=chat` 并置顶 |
 | 兜底 | `wiki.get` | 补捕获后台解析等未经过写入路径的活动 |
 
 捕获的条目最多保留 80 条。超出时先丢弃最早的未置顶捕获条目，用户条目、对话条目和置顶条目不受影响。
@@ -80,3 +80,11 @@ type Wiki = {
 ## 普通论文问答
 
 `reading_qa` 在准备任务时读取当前主题的 Wiki 标题句、一段相关概述（各最多 200 字）和最多五条记忆（每条最多 180 字）。优先置顶，其次按与问题的词项重合度排序。任务确认显示发送类别，确认指纹覆盖这份记忆。摘要、全文和自定义端点路径都使用它理解问题和偏好，事实结论仍需所选论文原文支持。
+
+## 主题研究地图
+
+桌面端从 `wiki.get` 读取 `map_nodes`。每个节点有稳定 ID、父节点、标题和证据 ID；父节点为空表示直接连接主题。证据详情在 `map_sources` 中按 ID 查找，包含论文标题、引文、来源范围及可用页码。正文入口复用 `evidence.open`。
+
+`wiki.edit` 接受 `map_add`（在指定节点下添加）、`map_rename` 和 `map_remove`。删除需传 `confirmed: true`，默认将子节点上移，传 `subtree: true` 同时删除下级。原论文与证据独立保存。模型建议删除或更改中心标题时，由 Wiki 内的 `map_accept` 或 `map_dismiss` 处理。
+
+`topic.list` 可以返回 `wiki_unread` 和产生更新的会话任务 ID `wiki_turns`。进入对应主题地图后用 `map_seen` 标为已读。会话只展示更新提示，后续讨论留在 Wiki。

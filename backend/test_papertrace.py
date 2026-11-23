@@ -697,6 +697,10 @@ class ContractTest(unittest.TestCase):
 
         self.client.result("wiki.chat", **topic, operation_id="wiki-forget", text="Forget biomedical datasets")
         forgot = self.wiki_until(topic, lambda m: not m["pending_reply"])
+        self.assertIn(added["entry_id"], forgot["pending_removals"])
+        self.assertIn(added["entry_id"], {e["entry_id"] for e in forgot["entries"]})
+        forgot = self.client.result("wiki.edit", **topic, operation_id="confirm-wiki-forget",
+                                    action="remove", entry_id=added["entry_id"])
         self.assertNotIn(added["entry_id"], {e["entry_id"] for e in forgot["entries"]})
 
         self.restart()
@@ -705,6 +709,24 @@ class ContractTest(unittest.TestCase):
         self.assertEqual(kept["entries"], forgot["entries"], "Reopening must not capture the same activity twice")
         cleared = self.client.result("wiki.clear_chat", **topic, operation_id="wiki-clear")
         self.assertEqual(cleared["thread"], [])
+
+    def test_map_removal_requires_confirmation_and_keeps_children(self):
+        topic, _ = self.context()
+        def edit(operation, action, target="", **values):
+            return self.client.call("wiki.edit", **topic, operation_id=operation,
+                                    action=action, entry_id=target, **values)
+        nodes = edit("map-parent", "map_add", text="Research direction")["result"]["map_nodes"]
+        parent = next(iter(nodes))
+        nodes = edit("map-child", "map_add", parent, text="Research question")["result"]["map_nodes"]
+        child = next(uid for uid in nodes if uid != parent)
+        self.assertIn("error", edit("map-unconfirmed", "map_remove", parent))
+        nodes = edit("map-confirmed", "map_remove", parent, confirmed=True)["result"]["map_nodes"]
+        self.assertNotIn(parent, nodes)
+        self.assertEqual(nodes[child]["parent"], "")
+        self.restart()
+        reopened = self.client.result("wiki.get", **topic)
+        self.assertIn(child, reopened["map_nodes"])
+        self.assertNotIn(parent, reopened["map_nodes"])
 
     def test_confirmation_scope_and_idempotent_start(self):
         topic, _ = self.context()

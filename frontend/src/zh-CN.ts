@@ -1190,6 +1190,8 @@ export const zhCN: Readonly<Record<string, string>> = {
   "From a saved finding": "来自已存发现",
   "From Wiki chat": "来自 Wiki 对话",
   "Added by you": "由你添加",
+  "Pending deletion": "建议删除",
+  "Delete this Wiki entry?": "确认删除这条 Wiki 记录？",
   "Wiki updated": "Wiki 已更新",
   "Conversation with the Wiki": "与 Wiki 的对话",
   "Message the Wiki": "给 Wiki 发消息",

@@ -1,0 +1,16 @@
+.research-map {margin:0 0 24px;color:var(--ink,#342b25)}
+.map-heading,.map-heading>div {display:flex;align-items:center;justify-content:space-between}
+.map-heading h2 {font-size:20px;margin:0 0 12px}
+.map-stage {background:#faf8f4;border:1px solid #e7dfd6;border-radius:14px;overflow:auto;max-height:62vh}
+.map-track {display:flex;align-items:center;width:max-content;min-height:200px;padding:24px}
+.map-root,.map-node {position:relative;display:flex;gap:9px;align-items:center;text-align:start;white-space:normal;background:white;color:#473c34;border:1px solid #dcd2c8;border-radius:10px;padding:12px 15px;line-height:1.55;width:215px;font:inherit;font-size:13px}
+.map-root {background:#f5e9dd;font-weight:650}.map-root svg {flex:none}
+.map-node span {margin-left:auto}.map-node.chosen,.map-root.chosen {border-color:#aa6249;background:#fbefe7}
+.map-fork {display:grid;gap:10px;padding-left:26px;position:relative}
+.map-fork:before,.map-node:before {content:'';position:absolute;background:#d3c4b6}
+.map-fork:before {left:12px;top:12%;bottom:12%;width:1px}
+.map-node:before {width:14px;left:-15px;height:1px;top:50%}
+.map-detail {padding:15px 4px}.map-detail h3 {font-size:15px}.map-evidence blockquote {margin:7px 0 15px;border-left:2px solid #caa48a;padding-left:12px;font-family:Georgia,serif}
+.research-map textarea {width:100%;box-sizing:border-box}
+.wiki-unread {display:inline-block;background:#4185e9;border-radius:50%;width:8px;height:8px;flex:none}
+.wiki-update {display:flex;align-items:center;gap:6px;font-size:12px;color:#727976}

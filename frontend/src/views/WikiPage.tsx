@@ -7,9 +7,11 @@ import type { Wiki, WikiEdit, WikiEntry, WikiKind, WikiMessage, WikiMethods, Wik
 import { Icon } from '../components/Icon'
 import { TopicChooser } from '../components/TopicChooser'
 import { HeaderContext, PageHead } from '../components/PageHead'
+import { WikiMap } from './WikiMap'
 import { EvidenceLink } from './Notes'
 
-type Params<M extends keyof WikiMethods> = Omit<WikiMethods[M][0], 'operation_id'>
+type WithoutOperation<T> = T extends unknown ? Omit<T, 'operation_id'> : never
+type Params<M extends keyof WikiMethods> = WithoutOperation<WikiMethods[M][0]>
 /** Where the Wiki page reads and writes: the workspace RPC client or the scripted demo store. */
 export type WikiSource = {
   call: <M extends keyof WikiMethods>(method: M, params: Params<M>) => Promise<Wiki>
@@ -117,7 +119,7 @@ function EntryRow({ entry, onEdit, disabled, Source }: {
         <button className="icon-btn sm" disabled={disabled} aria-label={tr('Edit Wiki entry')} title={tr('Edit')}
           onClick={() => setDraft(entry.text)}><Icon name="edit" size={13} /></button>
         <button className="icon-btn sm" disabled={disabled} aria-label={tr('Forget this entry')} title={tr('Forget')}
-          onClick={() => void onEdit({ action: 'remove', entry_id: entry.entry_id })}><Icon name="trash" size={13} /></button>
+          onClick={() => { if (window.confirm(tr('Delete this Wiki entry?'))) void onEdit({ action: 'remove', entry_id: entry.entry_id }) }}><Icon name="trash" size={13} /></button>
       </div>
     </li>
   )
@@ -139,7 +141,7 @@ function Message({ message }: { message: WikiMessage }) {
   )
 }
 
-function TopicWiki({ topicId }: { topicId: string }) {
+function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; unread?:boolean }) {
   const { tr } = useLanguage()
   const source = useContext(WikiSourceContext)!
   const { call, tick, Source } = source
@@ -155,6 +157,9 @@ function TopicWiki({ topicId }: { topicId: string }) {
   const load = useCallback(() => call('wiki.get', { topic_id: topicId }).then(setWiki, (e) => setError(errorText(e))),
     [call, topicId])
   useEffect(() => { void load() }, [load, tick])
+  useEffect(() => {
+    if (wiki?.map_nodes && unread) void call('wiki.edit', {topic_id:topicId,action:'map_seen',entry_id:''}).catch(e=>setError(errorText(e)))
+  }, [call, topicId, unread, !!wiki?.map_nodes])
   const busy = wiki?.status === 'generating' || !!wiki?.pending_reply
   useEffect(() => {
     if (!busy) return
@@ -214,6 +219,9 @@ function TopicWiki({ topicId }: { topicId: string }) {
   return <>
     <div className="wiki-scroll">
       <div className="wiki-column">
+        {wiki.map_nodes && <WikiMap wiki={wiki} title={title} edit={edit} Source={Source}/>}
+        {wiki.map_nodes && !!Object.keys(wiki.pending_removals ?? {}).length && <p>{tr('Pending deletion')} · {Object.values(wiki.pending_removals!).join(' / ')}</p>}
+        <details open={wiki.map_nodes ? undefined : true}><summary>{tr('Wiki')}</summary>
         {generating ? <FlippingBook label={tr('Generating')} />
           : !summarized ? <section className="wiki-empty">
             <span className="wiki-empty-icon" aria-hidden="true"><Icon name="book" size={30} /></span>
@@ -266,6 +274,7 @@ function TopicWiki({ topicId }: { topicId: string }) {
           </div>
         </form>)}
 
+        </details>
         {(wiki.thread.length > 0 || wiki.pending_reply) && <section className="wiki-thread" aria-label={tr('Conversation with the Wiki')}>
           {wiki.thread.map((m) => <Message key={m.message_id} message={m} />)}
           {wiki.pending_reply && <div className="wiki-msg assistant" role="status" aria-label={tr('Thinking…')}>
@@ -310,8 +319,8 @@ export function WikiPage() {
         onBack={topic ? () => select('') : undefined}>
         {topic && <HeaderContext text={topic.title} />}
       </PageHead>
-      {topic ? <TopicWiki key={topic.id} topicId={topic.id} />
-        : <div className="page-body scroll"><section className="audit-chooser"><TopicChooser onSelect={select} /></section></div>}
+      {topic ? <TopicWiki key={topic.id} topicId={topic.id} title={topic.title} unread={topic.wikiUnread} />
+        : <div className="page-body scroll"><section className="audit-chooser"><TopicChooser wiki onSelect={select} /></section></div>}
     </div>
   )
 }

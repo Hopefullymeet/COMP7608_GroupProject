@@ -39,6 +39,8 @@ export interface EvidenceAnchor {
 }
 
 export interface Topic {
+  wikiUnread?: boolean
+  wikiTurns?: string[]
   id: string
   title: string
   goal: string
@@ -122,6 +124,7 @@ export interface AnswerSegment {
 }
 
 export interface ChatMessage {
+  wikiTask?: string
   id: string
   sessionId: string
   role: 'user' | 'agent'
