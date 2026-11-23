@@ -56,7 +56,9 @@ export function apply(ctx) {
 
 def audit_language(code):
     target = {"en": "English", "zh-CN": "Simplified Chinese"}.get(code, "the language of the manuscript")
-    return f"Write all explanations, judgments and suggestions in {target}. Preserve source quotations verbatim. "
+    return f"Write all explanations, judgments and suggestions in {target}. Preserve source quotations verbatim. " \
+        "Use short Markdown paragraphs separated by blank lines inside explanatory JSON strings. " \
+        "Lead with the conclusion. Give evidence and material limits in separate paragraphs; use bullets for distinct conditions. "
 
 
 class DshFailure(Exception):

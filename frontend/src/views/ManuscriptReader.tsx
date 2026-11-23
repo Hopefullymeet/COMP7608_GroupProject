@@ -1,3 +1,4 @@
+import { AuditText } from '../components/AuditText'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CitationMark, Report, Snapshot } from '../api/citation'
 import { useLanguage } from '../i18n'
@@ -75,18 +76,18 @@ export function ManuscriptReader({ topic, draft, version, report, name, onTools,
         <header><h3 ref={heading}>{tr('Citation check')} {mark.label}</h3>
           <button className="icon-btn" aria-label={tr('Close')} onClick={close}>×</button></header>
         {sentence && <p className="audit-sentence">{sentence.text}</p>}
-        {report?.summaries?.[mark.sentence_id] && <p>{report.summaries[mark.sentence_id]}</p>}
+        {report?.summaries?.[mark.sentence_id] && <AuditText text={report.summaries[mark.sentence_id]}/>}
         {mark.keys.map(key => {
           const f = report?.findings.find(f => f.sentence_id === mark.sentence_id && f.ref_key === key)
           const ref = version.references?.find(r => r.key === key)
           return <section key={key}><h4>{ref?.title || ref?.text || key}</h4>
             {f?.needs_review && <p>{tr('Evidence needs review')}</p>}
-            {f ? f.claims.map((c,i) => <div key={i}><b>{tr(states[c.status])}</b><p>{tr(c.limit)}</p>
+            {f ? f.claims.map((c,i) => <div key={i}><b>{tr(states[c.status])}</b><AuditText text={tr(c.limit)}/>
               {c.anchor_ids[0] && <SourceQuote id={c.anchor_ids[0]}/>}
               {c.anchor_ids.length > 1 && <details><summary>{tr('More evidence')}</summary>
                 {c.anchor_ids.slice(1).map(id => <SourceQuote key={id} id={id}/>)}</details>}</div>)
               : <p>{tr('No check recorded for this citation yet.')}</p>}
-            {f?.chain?.slice(1).map((n,i) => <details key={i}><summary>{n.title}</summary><p>{tr(states[n.status])} {n.limit && tr(n.limit)}</p>
+            {f?.chain?.slice(1).map((n,i) => <details key={i}><summary>{n.title}</summary><b>{tr(states[n.status])}</b>{n.limit && <AuditText text={tr(n.limit)}/>}
               {n.anchor_ids.map(id => <SourceQuote key={id} id={id}/>)}
               {n.link && <a href={n.link} target="_blank" rel="noreferrer">{tr('Source link')}</a>}</details>)}
           </section>

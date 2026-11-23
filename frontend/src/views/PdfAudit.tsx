@@ -1,3 +1,4 @@
+import { AuditText } from '../components/AuditText'
 import { useState } from 'react'
 import { useLanguage } from '../i18n'
 import { pickPdfs, pdfInput, downloadText } from '../api/pdf'
@@ -239,7 +240,7 @@ export function PdfAudit({ topic, initialReport }: { topic: string; initialRepor
         {report.findings.map((finding) => <article className="synthesis-item" key={finding.finding_id}>
           {report.findings.find(f => f.sentence_id === finding.sentence_id) === finding && <>
             <h4>{sentences.find((item) => item.id === finding.sentence_id)?.text}</h4>
-            {report.summaries?.[finding.sentence_id] && <p>{report.summaries[finding.sentence_id]}</p>}
+            {report.summaries?.[finding.sentence_id] && <AuditText text={report.summaries[finding.sentence_id]}/>}
           </>}
           <p className="fine">{bibliography.find(r => r.key === finding.ref_key)?.title}
             {' '}{sentences.find(s => s.id === finding.sentence_id)?.page && <button className="link-btn"
@@ -249,7 +250,7 @@ export function PdfAudit({ topic, initialReport }: { topic: string; initialRepor
           {finding.chain?.slice(1).map((node, i) => <div className="synthesis-claim" key={i}>
             <small>{finding.chain?.[node.parent ?? 0]?.title} → </small><strong>{node.title}</strong>
             <p>{node.same_as != null ? tr('Same source in this chain') : tr(assessment[node.status])}</p>
-            {node.limit && <p>{tr(node.limit)}</p>}
+            {node.limit && <AuditText text={tr(node.limit)}/>}
             {node.link && <a href={node.link} target="_blank" rel="noreferrer">{tr(node.link.startsWith('https://search.crossref.org/') ? 'Search for this paper' : 'Source link')}</a>}
             {node.anchor_ids.map(id => <EvidenceLink key={id} id={id} onOpen={setSource} />)}
           </div>)}
@@ -257,7 +258,7 @@ export function PdfAudit({ topic, initialReport }: { topic: string; initialRepor
           {finding.claims.map((claim, i) => <div key={i}>
             <strong>{tr(assessment[claim.status])}</strong>
             {suggesting && <p>{claim.text}</p>}
-            <p>{tr(claim.limit)}</p>
+            <AuditText text={tr(claim.limit)}/>
             {claim.anchor_ids.map((id) => <EvidenceLink id={id} key={id} onOpen={setSource} />)}
           </div>)}
           <div className="lib-tools">
@@ -277,7 +278,7 @@ export function PdfAudit({ topic, initialReport }: { topic: string; initialRepor
         </article>)}
         {report.whole_document && doc && <section>
           <h3>{tr('Manuscript audit notebook')}</h3>
-          {report.discussion?.map((turn,i) => <article key={i}><strong>{turn.question}</strong><p>{turn.text}</p>
+          {report.discussion?.map((turn,i) => <article key={i}><strong>{turn.question}</strong><AuditText text={turn.text}/>
             {turn.anchor_ids.map(id => <EvidenceLink id={id} key={id} onOpen={setSource}/>)}</article>)}
           <form onSubmit={event => { event.preventDefault(); if (question.trim())
             void wholeAudit(doc.draft_id, version, question.trim()).catch(workspace.report) }}>

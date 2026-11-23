@@ -440,3 +440,10 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .audit-wire { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; fill:none; stroke:#ad5448; stroke-width:1; stroke-dasharray:4 4; }
 .audit-turn { justify-content:center; margin:14px 0; }
 @media(max-width:800px) { .audit-spread.inspecting {grid-template-columns:minmax(0,1fr)} .audit-wire {display:none} }
+
+.audit-prose { line-height: 1.65; overflow-wrap: anywhere; }
+.audit-prose p, .audit-prose h5, .audit-prose ol, .audit-prose ul { margin: .65em 0; }
+.audit-prose h5 { font-size: inherit; }
+.audit-prose ul, .audit-prose ol { padding-inline-start: 1.5em; }
+.audit-prose li + li { margin-top: .25em; }
+.audit-prose pre { overflow-x: auto; }
