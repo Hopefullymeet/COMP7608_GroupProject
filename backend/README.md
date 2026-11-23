@@ -30,11 +30,20 @@ RIS 和 CSL JSON 由标准库读取。书目预览和提交均可离线进行。
 
 ## 配置文本模型
 
-当前文本模型提供方为 DeepSeek。Windows 会自动发现 npm 全局安装的 `@deepseek-ai/dsh`，显式设置 `PAPERTRACE_AGENT_CLI` 时优先使用指定入口。先构建仓库首页链接的运行时版本，将 `PAPERTRACE_AGENT_CLI` 指向构建生成的 `apps/cli/lib/bin.js`，`PAPERTRACE_AGENT_NODE` 指向 Node.js 24.9 或更新版本。Windows 和 macOS 用户可在「模型和服务 → 管理系统凭据」保存或移除 API 密钥。密钥保存在 Windows 凭据库或 macOS 钥匙串的 `PaperTrace/DeepSeek` 项中。若 Windows 凭据管理器拒绝访问，应用会使用当前用户的 Windows DPAPI 将密钥加密保存到 `%LOCALAPPDATA%/PaperTrace/deepseek.dpapi`。没有系统凭据时，应用读取启动环境中的 `DEEPSEEK_API_KEY`。
+开发者可直接构建仓内的 [引擎源码](engine/)。在仓库根目录运行以下命令，使用 Node.js ≥24.9、pnpm 11.28.5 及[引擎开发指南](engine/docs/development.zh.md)列出的本机编译工具。安装阶段使用 CI 模式，避免依赖安装脚本给外层仓库配置 Git 钩子。
 
 ```sh
 (
-  export PAPERTRACE_AGENT_CLI="/path/to/runtime/apps/cli/lib/bin.js"
+  cd backend/engine || exit 1
+  CI=true pnpm install --frozen-lockfile && pnpm run build
+)
+```
+
+Windows 和 macOS 用户可在「模型和服务 → 管理系统凭据」保存或移除 API 密钥。密钥保存在 Windows 凭据库或 macOS 钥匙串的 `PaperTrace/DeepSeek` 项中。若 Windows 凭据管理器拒绝访问，应用会使用当前用户的 Windows DPAPI 将密钥加密保存到 `%LOCALAPPDATA%/PaperTrace/deepseek.dpapi`。没有系统凭据时，应用读取启动环境中的 `DEEPSEEK_API_KEY`。
+
+```sh
+(
+  export PAPERTRACE_AGENT_CLI="$PWD/backend/engine/apps/cli/lib/bin.js"
   export PAPERTRACE_AGENT_NODE="$(command -v node)"
   printf 'DeepSeek API key: '
   read -rs DEEPSEEK_API_KEY
@@ -44,7 +53,7 @@ RIS 和 CSL JSON 由标准库读取。书目预览和提交均可离线进行。
 )
 ```
 
-从仓库根目录运行。请将示例中的运行时路径换成你的构建路径。
+从仓库根目录运行以上启动命令。
 
 默认模型为 `deepseek-flash`，默认端点为 `https://api.deepseek.com`。在「模型与服务」中可修改 OpenAI 兼容基础地址，例如 `https://provider.example/v1`，应用会在基础地址后追加 `/chat/completions`。「测试连接」直接请求已保存的端点并显示结果。问答等 Agent 任务使用 Harness，确认对话框显示实际端点及发送内容。每条模型任务使用独立进程和临时目录。摘要问答读取本轮确认的摘要。全文任务可以检索和补读本轮选定的论文。引用需要在本轮实际读过的段落中逐字找到，语义支撑仍由模型判断。取消只中断当前任务进程。密钥通过环境传给模型进程，不写入工作区。
 
