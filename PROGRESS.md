@@ -208,3 +208,5 @@ Reading answers now resolve version IDs to paper aliases or titles and localize 
 - 顶栏使用透明渐变模糊。Wiki 长页滚动截图验证模糊仅限栏内，轨迹按钮仍可打开。
 
 旧版阅读问答现在可展开已保存的步骤摘要。已核对历史记录中的片段数量，通过前端测试及 macOS 构建。
+
+按最新交互要求移除旧会话步骤摘要。新问答继续保存运行时返回的工具步骤。

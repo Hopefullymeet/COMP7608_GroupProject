@@ -108,7 +108,6 @@ export interface AgentRun {
   label: string
   status: RunStatus
   steps: AgentStep[]
-  historicalReadingSummary?: string
   summary?: string
   configuration?: RunConfiguration
   estimate?: Usage

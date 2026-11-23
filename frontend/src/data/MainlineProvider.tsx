@@ -799,21 +799,9 @@ export function MainlineProvider({
     citation_suggest: 'Citation suggestions',
     resume: 'Resume',
   }
-  function historicalReadingSummary(run: HistoryRun) {
-    if (run.kind !== 'reading_qa') return
-    for (const step of run.steps) {
-      const match = step.detail?.match(/^(Read|Sent) (\d+) approved passage\(s\)/)
-      if (!match) continue
-      if (step.title === 'Read with DeepSeek Harness' && match[1] === 'Read')
-        return tr('Read {0} passages.', match[2])
-      if (step.title === 'Read locally retrieved passages' && match[1] === 'Sent')
-        return tr('Sent {0} retrieved passages to the model.', match[2])
-    }
-  }
   const recorded: AgentRun[] = (history?.items ?? []).map((h) => ({
     id: h.task_id,
     task: labels[h.kind],
-    historicalReadingSummary: historicalReadingSummary(h),
     label: h.label,
     usage: h.usage,
     status: h.status === 'queued' ? 'running' : h.status === 'completed' ? 'done' : h.status,
