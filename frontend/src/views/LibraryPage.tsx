@@ -279,7 +279,7 @@ export function LibraryPage() {
               </section>
               </div>
               {paper && (
-                <aside className="card lib-detail">
+                <aside key={paper.paper_id} className="card lib-detail">
                   <h2>{paper.title}</h2>
                       {tab === 'Papers' && readerTopic && (
                         <button
@@ -298,9 +298,9 @@ export function LibraryPage() {
                       )}
                   {publicIdentity(paper.identity) && <p className="record-meta">{publicIdentity(paper.identity)}</p>}
                   {!demo && tab === 'Papers' &&
-                    <PublicationDetails key={paper.paper_id} paper={paper.paper_id}
+                    <PublicationDetails paper={paper.paper_id}
                       topic={paper.topic_ids.includes(topic) ? topic : paper.topic_ids[0]} />}
-                  <details open key={paper.paper_id}><summary>{tr('Files and versions')}</summary>
+                  <details open><summary>{tr('Files and versions')}</summary>
                   {paper.files.map((f) => (
                     <p key={f.source_version_id}>
                       {f.name} · {tr(f.role.replaceAll('_', ' '))}{' '}
