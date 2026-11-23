@@ -1,3 +1,4 @@
+import { version } from '../../src-tauri/tauri.conf.json'
 import { useState } from 'react'
 import { useLanguage } from '../i18n'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
@@ -8,8 +9,8 @@ import { confirmAction } from '../components/confirmAction'
 export function PersonalSettings() {
   const { tr } = useLanguage()
   const profile=useRead('profile.get',{})
-  return <section className="set-section"><div className="set-intro"><h2>{tr('General')}</h2></div>
-    <div className="set-body"><LanguagePicker/>{profile && <ProfileForm profile={profile}/>}</div>
+  return <section className="set-section"><div className="set-intro"><h2>{tr('General settings')}</h2></div>
+    <div className="set-body"><div className="preference-row"><span>{tr('Language')}</span><LanguagePicker/></div>{profile && <ProfileForm profile={profile}/>}<small className="fine">PaperTrace · {version}</small></div>
   </section>
 }
 

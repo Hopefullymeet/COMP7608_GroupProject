@@ -42,6 +42,7 @@ type Run = {
   script: EventBody[]
 }
 type State = {
+  preset?: 'fixed' | 'agent' | 'wiki'
   profile?: import('./services').PersonalProfile
   config: Config
   grants: Grant[]
@@ -554,6 +555,8 @@ export function createMock(): Client {
     'synthesis.list': () => ({ items: [] }),
     'synthesis.wiki': () => ({ revision: '', items: [] }),
     'synthesis.review': () => { throw new Error('Synthesis review requires the desktop workspace.') },
+    'preset.get': () => ({mode:state.preset ?? 'wiki'}),
+    'preset.save': ({mode}) => ({mode:state.preset=mode}),
     'profile.get': () => state.profile ?? {identity:'',enabled:false,memories:[],revision:''},
     'profile.save': ({identity,enabled,memories}) => state.profile={identity,enabled,memories,revision:crypto.randomUUID()},
     'services.get': () => state.config,

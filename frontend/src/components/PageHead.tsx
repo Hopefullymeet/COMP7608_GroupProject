@@ -44,7 +44,7 @@ export function PageHead({ icon, title, sub, children, trace = false, onBack, ba
   )
 }
 
-export function Dialog({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
+export function Dialog({ title, children, onClose, panelClass = '' }: { panelClass?: string; title: string; children: ReactNode; onClose: () => void }) {
   const { tr } = useLanguage()
   const ref = useRef<HTMLDialogElement>(null)
   useLayoutEffect(() => {
@@ -63,7 +63,7 @@ export function Dialog({ title, children, onClose }: { title: string; children: 
     <dialog ref={ref} className="dialog-backdrop" aria-label={title}
       onCancel={(e) => { e.preventDefault(); onClose() }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="dialog">
+      <div className={'dialog ' + panelClass}>
         <div className="dialog-head">
           <h2>{title}</h2>
           <button className="icon-btn sm" onClick={onClose} aria-label={tr('Close')}><Icon name="x" size={14} /></button>

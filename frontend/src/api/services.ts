@@ -54,6 +54,8 @@ export type Watch = { topic_id: string; search_id: string; interval_days: number
 export type ResumeTask = { kind: 'resume'; topic_id: string; input: { checkpoint_id: string } }
 type Inspection = { preview_id: string; valid: boolean; summary: string; issues: string[] }
 export type ServiceMethods = {
+  'preset.get': [Record<string,never>, {mode: 'fixed' | 'agent' | 'wiki'}]
+  'preset.save': [Write & {mode: 'fixed' | 'agent' | 'wiki'}, {mode: 'fixed' | 'agent' | 'wiki'}]
   'profile.get': [Record<string,never>,PersonalProfile]
   'profile.save': [Write & PersonalProfile,PersonalProfile]
   'services.get': [Record<string, never>, Config]

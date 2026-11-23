@@ -1,5 +1,16 @@
 // Simplified Chinese interface messages, keyed by their English source text.
 export const zhCN: Readonly<Record<string, string>> = {
+  'General settings': '通用设置',
+  'Agent presets': 'Agent 预设',
+  'Choose how new multi-paper outlines gather evidence.': '选择新建多论文提纲时，Agent 如何查找依据。',
+  'Wiki research': '延续 Wiki 研究',
+  'Independent research': '独立查证',
+  'Fixed retrieval': '快速检索',
+  'Default': '当前默认',
+  'Search the selected papers and follow leads from reviewed Wiki entries.': '沿已审阅的 Wiki 线索回到论文原文，也会寻找补充证据。',
+  'Let the agent search and read the selected papers without using the Wiki.': '从选定的论文出发，按需要反复检索和阅读原文。',
+  'Write from a single set of retrieved passages without additional searches.': '使用一次检索返回的原文片段生成提纲。',
+
   'Previous supporting passage': '上一段依据',
   'Next supporting passage': '下一段依据',
   'Back to topics': '返回主题选择',

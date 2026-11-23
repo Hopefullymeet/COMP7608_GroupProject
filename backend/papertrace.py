@@ -146,7 +146,7 @@ class Worker:
         "topic.create", "topic.rename", "session.create", "session.rename", "task.prepare", "task.start", "task.cancel",
         "candidate.decide", "reader.bookmark", "note.save", "library.import_pdf", "library.set_alias", "synthesis.review",
         "reader.mark_save", "reader.mark_delete", "reader.answer_save", "reader.mark_to_wiki",
-        "services.save", "profile.save",
+        "services.save", "profile.save", "preset.save",
         "library.commit_identifier", "library.update_metadata", "workspace.archive", "workspace.unarchive", "library.organize",
         "library.preview_bibliography", "library.commit_bibliography", "library.commit_zotero_attachment",
         "library.trash", "library.restore", "library.purge",
@@ -769,6 +769,14 @@ class Worker:
                         "source": self.research.document(source), "passage_id": pid, "quote": value["quote"],
                         "read_scope": "full_text"}
             return {"anchor": value, "source": source}
+        if method in ("preset.get", "preset.save"):
+            if method == "preset.save":
+                mode = params.get("mode")
+                if mode not in ("fixed", "agent", "wiki"):
+                    raise invalid("Unknown research preset.")
+                self.put("agent_preset", "default", {"mode": mode})
+            row = self.db.execute("SELECT data FROM records WHERE kind='agent_preset' AND id='default'").fetchone()
+            return json.loads(row[0]) if row else {"mode": "wiki"}
         if method == "profile.get":
             return self.user_profile()
         if method == "profile.save":
@@ -1417,10 +1425,16 @@ class Worker:
                 memory = list(memory or []) + self.personal_context(label)
             if memory:
                 task_data["topic_memory"] = memory
+        if kind == "literature_synthesis" and "mode" not in input_:
+            mode = (self.dispatch("preset.get", {}, after)["mode"] if method == "task.prepare"
+                    else confirmation.get("research_mode", "wiki"))
+            input_ = {**input_, "mode": mode}
+            task_data["input"] = input_
         fingerprint = encode([task_data, endpoint, model])
         if method == "task.prepare":
             cid = identifier()
             self.put("confirmation", cid, {"fingerprint": fingerprint, "used": False,
+                                           "research_mode": input_.get("mode"),
                                            "topic_memory": task_data.get("topic_memory")})
             transfers = [{
                 "endpoint": endpoint,

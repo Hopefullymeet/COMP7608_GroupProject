@@ -1,7 +1,8 @@
+import { AgentPresets } from './AgentPresets'
 import { PersonalSettings } from './PersonalSettings'
 import { useLanguage, type Message } from '../i18n'
 import { useEffect, useState } from 'react'
-import { Dialog, PageHead } from '../components/PageHead'
+import { Dialog } from '../components/PageHead'
 import { Icon } from '../components/Icon'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import type { Config, Model, Offer, ServiceMethods } from '../api/services'
@@ -468,20 +469,20 @@ export function ServicesPage() {
     const id = setInterval(refresh, 8000)
     return () => clearInterval(id)
   }, [refresh])
-  return (
-    <div className="page">
-      <PageHead
-        trace
-        title={tr('Settings')} sub=""
-        icon="settings"
-
-      />
-      <div className="page-body scroll settings">
-        <nav className="settings-tabs">{['general','model'].map(id=><button key={id} className={'ghost-btn'+(tab===id?' active':'')} aria-pressed={tab===id} onClick={()=>setTab(id)}>{tr(id==='general'?'General':'Models & services')}</button>)}</nav>
-        {tab==='general' && <PersonalSettings/>}
-        {tab==='model' && config && <SettingsForm key={config.revision} config={config} />}
-        {tab==='model' && demo && <AccessAndBackup />}
-      </div>
+  const sections = [
+    ['general', 'settings', 'General settings'],
+    ['model', 'globe', 'Model'],
+    ['preset', 'trace', 'Agent presets'],
+  ] as const
+  return <div className="settings-layout">
+    <nav aria-label={tr('Settings')}>{sections.map(([id, icon, label]) =>
+      <button key={id} className={'side-item' + (tab === id ? ' active' : '')}
+        aria-pressed={tab === id} onClick={() => setTab(id)}><Icon name={icon} size={16}/>{tr(label)}</button>)}</nav>
+    <div className="settings-content scroll">
+      {tab === 'general' && <PersonalSettings/>}
+      {tab === 'model' && config && <SettingsForm key={config.revision} config={config}/>}
+      {tab === 'model' && demo && <AccessAndBackup/>}
+      {tab === 'preset' && <AgentPresets/>}
     </div>
-  )
+  </div>
 }

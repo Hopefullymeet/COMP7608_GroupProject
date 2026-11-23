@@ -27,7 +27,7 @@ function ShowMore({ hidden, open, onToggle }: { hidden: number; open: boolean; o
   )
 }
 
-export function Sidebar() {
+export function Sidebar({ onSettings }: { onSettings: () => void }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
   const rename = state.mainline?.rename
@@ -177,7 +177,7 @@ export function Sidebar() {
         {(!state.mainline || state.mainline.demo) && <span className="proto-badge">{state.mainline ? tr('Contract demo · mock data') : tr('Prototype · mock data')}</span>}
         {(!state.mainline || state.mainline.demo) && <small>{tr('Local workspace · nothing leaves this page')}</small>}
       </div>
-      <button className={'side-item'+(route.view==='settings'?' active':'')} onClick={()=>act.navigate({view:'settings'})}><Icon name="settings" size={16}/>{tr('Settings')}</button>
+      <button className={'side-item'+(route.view==='settings'?' active':'')} onClick={onSettings}><Icon name="settings" size={16}/>{tr('Settings')}</button>
       {editing && rename && <Dialog title={tr(editing.kind === 'topic' ? 'Rename topic' : 'Rename session')}
         onClose={() => { if (!savingName) setEditing(undefined) }}>
         <form onSubmit={async (event) => {

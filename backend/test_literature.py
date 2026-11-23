@@ -139,6 +139,19 @@ class LiteratureTest(unittest.TestCase):
             time.sleep(.03)
         self.fail("Synthesis did not finish.")
 
+    def test_outline_keeps_preset_selected_at_confirmation(self):
+        args = {"kind": "literature_synthesis", "topic_id": self.topic,
+                "input": {"question": "Which results agree?", "source_versions": self.versions}}
+        self.call("preset.save", mode="fixed")
+        prepared = self.call("task.prepare", **args)
+        self.assertNotIn("Relevant reviewed Wiki entries", prepared["transfers"][0]["data_categories"])
+        self.call("preset.save", mode="wiki")
+        started = self.call("task.start", confirmation_id=prepared["confirmation_id"], **args)
+        with self.worker.lock:
+            self.assertEqual(self.worker.get("task", started["task_id"])["input"]["mode"], "fixed")
+        following = self.call("task.prepare", **args)
+        self.assertIn("Relevant reviewed Wiki entries", following["transfers"][0]["data_categories"])
+
     def test_outline_uses_confirmed_endpoint_when_sdk_cannot_start(self):
         from io import BytesIO
         self.worker.dsh = Dsh("node", "missing-sdk", "test", self.workspace.name)

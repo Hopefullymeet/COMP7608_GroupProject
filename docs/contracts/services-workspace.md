@@ -47,3 +47,7 @@ type Activity={id:Id,topic_id:Id,title:string,detail:string,target:'library'|'re
 - `profile.get` 返回 `identity`、`enabled`、`memories` 和修订号 `revision`。首次读取返回空资料。
 - `profile.save` 带操作 ID 和上次读取的修订号。身份最多 500 字，记忆最多 60 条、每条 400 字。过期修订返回参数错误，避免覆盖另一窗口的修改。
 - 开启后，论文问答和 Wiki 对话可将身份及最多十条偏好作为模型上下文。论文问答完成时，会保存以「记住」或「请记住」开头的明确请求，重复内容只保留一次。资料和偏好用于个性化回答，论文结论仍需原文证据。
+
+### 多论文研究预设
+
+`preset.get` 接收空对象，返回工作区默认的 `{mode}`。初始值为 `wiki`。调用 `preset.save` 时传入操作 ID 和 `mode`，响应为保存后的 `{mode}`。支持固定检索 `fixed`、主动查证 `agent` 和参考已审阅 Wiki 的主动查证 `wiki`。其他值返回参数错误。新提纲在准备任务时确定模式，显式传入的模式优先。之后修改默认值只影响下一次准备任务。

@@ -1,5 +1,5 @@
 import { useLanguage } from './i18n'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useStore } from './data/store'
 import { Sidebar } from './components/Sidebar'
 import { TraceDrawer } from './components/TraceDrawer'
@@ -16,11 +16,12 @@ import { Settings } from './views/Settings'
 export function App({ windowControls, pages, comparison, liveResearch }: { windowControls?: ReactNode; pages?: Partial<Record<'library'|'wiki'|'check'|'settings',ReactNode>>; comparison?:ReactNode; liveResearch?: boolean }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const r = state.route
   const waiting = state.runOrder.map((id) => state.runs[id]).find((run) => run.limit)
   return (
     <div className={windowControls ? 'app app--desktop' : 'app'}>
-      <Sidebar />
+      <Sidebar onSettings={() => setSettingsOpen(true)} />
       <main className="main">
         {windowControls && r.view !== 'topic' && (
           <div className="desktop-drag-area" data-tauri-drag-region>{windowControls}</div>
@@ -32,6 +33,9 @@ export function App({ windowControls, pages, comparison, liveResearch }: { windo
           : r.view === 'check' ? <Check />
           : <Settings />)}
       </main>
+      {settingsOpen && <Dialog title={tr('Settings')} onClose={() => setSettingsOpen(false)} panelClass="settings-window">
+        {pages?.settings ?? <Settings />}
+      </Dialog>}
       <TraceDrawer />
       {!(r.view === 'topic' && r.tab === 'read') && <EvidencePopover />}
       {waiting ? <Dialog key={waiting.id} title={tr('Task budget reached')} onClose={() => act.resolveBudget(waiting.id, false)}>
@@ -45,7 +49,7 @@ export function App({ windowControls, pages, comparison, liveResearch }: { windo
         <p className="dialog-text">{tr(state.settingsNotice)}</p>
         <div className="dialog-actions">
           <button className="ghost-btn" onClick={act.clearSettingsNotice}>{tr('Close')}</button>
-          <button className="primary" onClick={() => { act.clearSettingsNotice(); act.navigate({ view: 'settings' }) }}>{tr('Open Models & services')}</button>
+          <button className="primary" onClick={() => { act.clearSettingsNotice(); setSettingsOpen(true) }}>{tr('Open Models & services')}</button>
         </div>
       </Dialog>}
     </div>

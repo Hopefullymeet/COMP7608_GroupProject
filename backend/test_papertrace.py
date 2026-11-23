@@ -743,6 +743,13 @@ class ContractTest(unittest.TestCase):
         self.assertIn(child, reopened["map_nodes"])
         self.assertNotIn(parent, reopened["map_nodes"])
 
+    def test_research_preset_persists_and_rejects_unknown_modes(self):
+        self.assertEqual(self.client.result("preset.get"), {"mode": "wiki"})
+        self.client.result("preset.save", operation_id="fixed-preset", mode="fixed")
+        self.restart()
+        self.assertIn("error", self.client.call("preset.save", operation_id="invalid-preset", mode="other"))
+        self.assertEqual(self.client.result("preset.get"), {"mode": "fixed"})
+
     def test_confirmation_scope_and_idempotent_start(self):
         topic, _ = self.context()
         params = {**topic, "kind": "discovery", "input": {"query": "First query"}}
