@@ -31,6 +31,7 @@ export type Wiki = {
   map_proposals?: Record<string,{action:string;entry_id:string;text:string}>
   history?: {created:string; changes:{id:string;op:string;title:string}[]}[]
   integrity_issues?: string[]
+  documents?: Record<string,{id:string;title:string;entries:string[]}[]>
   map_title?: string
   map_questions?: string[]
   pending_removals?: Record<string,string>

@@ -7,7 +7,7 @@ import type { Wiki, WikiEdit, WikiEntry, WikiKind, WikiMessage, WikiMethods, Wik
 import { Icon } from '../components/Icon'
 import { TopicChooser } from '../components/TopicChooser'
 import { HeaderContext, PageHead } from '../components/PageHead'
-import { WikiMap } from './WikiMap'
+import { WikiDirectory } from './WikiDirectory'
 import { EvidenceLink } from './Notes'
 
 type WithoutOperation<T> = T extends unknown ? Omit<T, 'operation_id'> : never
@@ -219,7 +219,7 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
   return <>
     <div className="wiki-scroll">
       <div className="wiki-column">
-        {wiki.map_nodes && <WikiMap wiki={wiki} title={title} edit={edit} Source={Source}/>}
+        {wiki.map_nodes && <WikiDirectory wiki={wiki} title={title} edit={edit} Source={Source}/>}
         {wiki.map_nodes && !!Object.keys(wiki.pending_removals ?? {}).length && <p>{tr('Pending deletion')} · {Object.values(wiki.pending_removals!).join(' / ')}</p>}
         {!!wiki.integrity_issues?.length && <details><summary>{tr('Links to review')}</summary><ul>{wiki.integrity_issues.map((label,i)=><li key={i}>{label}</li>)}</ul></details>}
         {!!wiki.history?.length && <details><summary>{tr('Update history')}</summary>{wiki.history.map((event,i)=><section key={i}>

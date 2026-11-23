@@ -181,3 +181,5 @@ Reading answers now resolve version IDs to paper aliases or titles and localize 
 - 主题 Wiki 已接入桌面研究地图。CV 工作区已沿会话问题展开结论，并显示 Object-centered image stitching 第 1 页的接缝惩罚原句。节点支持编辑、确认删除以及保留子节点。会话更新提示与主题未读状态分别记录。当前分支按问题文本归集，同义研究方向的自动合并仍待完善。
 
 - Wiki 入口沿用原名。桌面研究地图使用主题色和可独立展开的分支，已在本机 CV 主题验证退出后重新进入仍保留展开状态。内容维护新增历史记录及失效链接检查，前端测试和 macOS 构建通过。
+
+- Wiki 改为逐层文档目录。后端按证据所属论文组织观点，并向 Agent 提供复用条目及跨论文归档规则。桌面 CV 主题的 17 条观点归入 4 篇文档，已点开 LightGlue 并核对第 1、8 页的来源入口。

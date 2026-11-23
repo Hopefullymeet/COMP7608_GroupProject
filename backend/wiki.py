@@ -346,9 +346,29 @@ class TopicWiki:
             if row.get("topic_id") != topic or a["anchor_id"] not in ids:
                 continue
             location = a.get("location", {})
-            sources[a["anchor_id"]] = dict(title=papers.get(a.get("paper_id"), ""), quote=a.get("quote", ""),
+            sources[a["anchor_id"]] = dict(paper_id=a.get("paper_id"), title=papers.get(a.get("paper_id"), ""), quote=a.get("quote", ""),
                                           page=location.get("page"), scope=a.get("read_scope"))
         return sources
+
+    @staticmethod
+    def documents(nodes, sources):
+        """Build document pages without rewriting the user's saved entries or evidence."""
+        pages = {}
+        for node in nodes.values():
+            if not node["anchors"]:
+                continue
+            refs = [sources.get(anchor, {}) for anchor in node["anchors"]]
+            paper_ids = {ref.get("paper_id") for ref in refs}
+            if None in paper_ids:
+                key, title = "unresolved", ""
+            elif len(paper_ids) == 1:
+                key, title = next(iter(paper_ids)), refs[0]["title"]
+            else:
+                key, title = "synthesis", ""
+            siblings = pages.setdefault(node["parent"], {})
+            page = siblings.setdefault(key, {"id": key, "title": title, "entries": []})
+            page["entries"].append(node["id"])
+        return {parent: list(group.values()) for parent, group in pages.items()}
 
     def capture(self, topic):
         """Turn new topic activity into entries. Runs inside the caller's lock and transaction."""
@@ -407,6 +427,7 @@ class TopicWiki:
         hidden = ("fingerprint", "generator", "observed", "captured_since")
         result = {k: v for k, v in wiki.items() if k not in hidden}
         result["map_sources"] = self.map_sources(topic, wiki.get("map_nodes", {}))
+        result["documents"] = self.documents(wiki.get("map_nodes", {}), result["map_sources"])
         result["history"] = [{"created": created, "changes": json.loads(changes)} for created, changes in
                              self.worker.db.execute("SELECT created,changes FROM wiki_history WHERE topic=? ORDER BY id DESC LIMIT 20", (topic,))]
         nodes = wiki.get("map_nodes", {})
@@ -706,6 +727,11 @@ class TopicWiki:
         system += (" For research map changes use map_add, map_rename or map_remove with entry_id as the target "
                    "(empty string for root), and text. Delete and root rename requests are proposals for review. "
                    "Do not say they have been completed.")
+        system += (" Organize the Wiki as browsable documents. Reuse an existing research question or direction "
+                   "as parent; put findings about the same paper together. Update an existing finding when possible. "
+                   "Keep multi-paper comparisons together, retain the exact supporting sources and conditions. "
+                   "Write each finding as a self-contained paragraph naming its subject. Avoid creating a sibling "
+                   "for every sentence, generic greetings or repeated restatements.")
         history = [{"role": m["role"], "text": m["text"]} for m in wiki["thread"][-THREAD_CONTEXT - 1:-1]]
         return self.request(model, system, {
             "wiki": {"headline": wiki["headline"], "summary": wiki["summary"],
