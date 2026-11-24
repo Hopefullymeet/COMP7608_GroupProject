@@ -54,9 +54,10 @@ function PdfSheet({ document, scope, page, width, zoom, rasterZoom, aspectRatio,
   const color = 'amber'
   const [size, setSize] = useState<{ width: number; height: number }>()
   const [ready, setReady] = useState(false)
-  const [error, setError] = useState('')
-  const sourceFallback = useRead('source.page', { ...scope, page }, Boolean(error && !scope.draft_id))
-  const draftFallback = useRead('draft.page', { topic_id: scope.topic_id, draft_id: scope.draft_id ?? '', version_id: scope.source_version_id, page }, Boolean(error && scope.draft_id))
+  const [rasterFailed, setRasterFailed] = useState(false)
+  const [textFailed, setTextFailed] = useState(false)
+  const sourceFallback = useRead('source.page', { ...scope, page }, Boolean(rasterFailed && !scope.draft_id))
+  const draftFallback = useRead('draft.page', { topic_id: scope.topic_id, draft_id: scope.draft_id ?? '', version_id: scope.source_version_id, page }, Boolean(rasterFailed && scope.draft_id))
   const fallback = draftFallback ?? sourceFallback
   const [drawing, setDrawing] = useState<Point[]>([])
   const surface = useRef<HTMLDivElement>(null)
@@ -71,12 +72,13 @@ function PdfSheet({ document, scope, page, width, zoom, rasterZoom, aspectRatio,
     let active = true
     let text: TextLayer | undefined
     setReady(false)
-    setError('')
+    setTextFailed(false)
     void document.getPage(page).then(async pdfPage => {
       if (!active) return
-      const viewport = pdfPage.getViewport({ scale: width / pdfPage.getViewport({ scale: 1 }).width })
+      const original = pdfPage.getViewport({ scale: 1 })
+      const viewport = pdfPage.getViewport({ scale: width / original.width })
       setSize({ width: viewport.width, height: viewport.height })
-      onMeasure(page, viewport.width / viewport.height)
+      onMeasure(page, original.width / original.height)
       const textContentSource = await pdfPage.getTextContent()
       if (!active) return
       overlay.replaceChildren()
@@ -84,7 +86,7 @@ function PdfSheet({ document, scope, page, width, zoom, rasterZoom, aspectRatio,
       text = new TextLayer({ textContentSource, container: overlay, viewport })
       await text.render()
       if (active) setReady(true)
-    }).catch(() => { if (active) setError('This PDF page could not be rendered.') })
+    }).catch(() => { if (active) setTextFailed(true) })
     return () => { active = false; text?.cancel() }
   }, [document, page, width, onMeasure])
 
@@ -96,13 +98,13 @@ function PdfSheet({ document, scope, page, width, zoom, rasterZoom, aspectRatio,
     void document.getPage(page).then(async pdfPage => {
       if (!active) return
       const viewport = pdfPage.getViewport({ scale: width * rasterZoom / pdfPage.getViewport({ scale: 1 }).width })
-      const density = Math.min(window.devicePixelRatio || 1, 2)
+      const density = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(4_194_304 / (viewport.width * viewport.height)))
       const buffer = visible.ownerDocument.createElement('canvas')
       buffer.width = Math.ceil(viewport.width * density)
       buffer.height = Math.ceil(viewport.height * density)
-      const render = pdfPage.render({ canvas: buffer, viewport, transform: [density, 0, 0, density, 0, 0] })
-      cancel = () => render.cancel()
       try {
+        const render = pdfPage.render({ canvas: buffer, viewport, transform: [density, 0, 0, density, 0, 0] })
+        cancel = () => render.cancel()
         await render.promise
         if (!active) return
         const context = visible.getContext('2d')
@@ -110,17 +112,18 @@ function PdfSheet({ document, scope, page, width, zoom, rasterZoom, aspectRatio,
         visible.width = buffer.width
         visible.height = buffer.height
         context.drawImage(buffer, 0, 0)
+        setRasterFailed(false)
       } finally {
         buffer.width = buffer.height = 0
       }
-    }).catch(() => { if (active) setError('This PDF page could not be rendered.') })
+    }).catch(() => { if (active) setRasterFailed(true) })
     return () => { active = false; cancel?.() }
   }, [document, page, width, rasterZoom])
   const [citationBox, setCitationBox] = useState<Rect>()
   useLayoutEffect(() => {
     setCitationBox(undefined)
     if (!citation) return
-    if (error) { citation.onMissing(); return }
+    if (textFailed) { citation.onMissing(); return }
     if (!ready || !layer.current || !surface.current) return
     const range = pdfQuoteRange(layer.current, citation.quote, citation.passage)
     const bounds = range?.getBoundingClientRect()
@@ -134,7 +137,7 @@ function PdfSheet({ document, scope, page, width, zoom, rasterZoom, aspectRatio,
     return () => {
       if (selected?.rangeCount && selected.getRangeAt(0) === range) selected.removeAllRanges()
     }
-  }, [ready, error, citation])
+  }, [ready, textFailed, citation])
   function position(event: ReactPointerEvent): Point {
     const box = surface.current!.getBoundingClientRect()
     return [clamp((event.clientX - box.left) / box.width), clamp((event.clientY - box.top) / box.height)]
@@ -192,7 +195,7 @@ function PdfSheet({ document, scope, page, width, zoom, rasterZoom, aspectRatio,
         onPointerUp={(e) => { end(e); if (tool === 'select') window.requestAnimationFrame(captureText) }}
         onPointerCancel={() => { drawingPointer.current = undefined; strokes.current = []; setDrawing([]) }}
         onKeyUp={captureText}>
-        {error && <p className="pt-pdf-loading" role="status">{tr(error)}</p>}
+        {rasterFailed && !fallback && <p className="pt-pdf-loading" role="status">{tr('This PDF page could not be rendered.')}</p>}
         {fallback && <img className="evidence-pdf-page" alt={tr('Original PDF page {0}', page)}
           src={'data:image/png;base64,' + fallback.png} />}
         <canvas hidden={Boolean(fallback)} ref={canvas} aria-label={tr('Original PDF page {0}', page)} role="img" />
@@ -376,7 +379,21 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
     return first
   }
 
+  const windowFrame = useRef(0)
+  useEffect(() => () => {
+    cancelAnimationFrame(windowFrame.current)
+    windowFrame.current = 0
+  }, [])
   function syncPageWindow(scroller: HTMLDivElement) {
+    if (!document || windowFrame.current) return
+    // Resize, zoom and scroll can all invalidate the same layout in a single frame.
+    windowFrame.current = requestAnimationFrame(() => {
+      windowFrame.current = 0
+      updatePageWindow(scroller)
+    })
+  }
+
+  function updatePageWindow(scroller: HTMLDivElement) {
     if (!document || !pageList.current) return
     const top = scroller.scrollTop
     const total = pageList.current.children.length
