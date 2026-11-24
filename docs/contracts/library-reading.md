@@ -98,3 +98,5 @@ The library inspector displays populated bibliographic fields from the selected 
 `library.import_catalog` accepts an operation ID, scheme, distinct edition, year, HTTPS source URL and UTF-8 CSV content (up to 8 MB). Required columns are venue, venue_type and value. Optional columns include aliases, issns, category and source_url. The bundled CCF and CORE excerpts cover CVPR, ICCV and ECCV only.
 
 On desktop PDF import, publication recognition runs after the PDF is saved. The inspector can retry recognition for existing papers. The worker verifies registry titles against header text, and checks author evidence for a title-search match. Multiple matches require selection. Matched classification entries alone are shown in the inspector.
+
+主题论文文件夹按 topic_id 隔离。library.folders 返回 items（id、name）和以 paper_id 为键的 assignments。library.folder_create 接收 topic_id、name，返回新文件夹；同主题重名或超过 80 字返回 INVALID_PARAMS。library.folder_move 接收 topic_id、paper_ids、folder_id，返回 moved；空 folder_id 表示移回主题根目录。写入沿用 operation_id，跨主题目录会被拒绝，解除主题关联会清除对应归档位置。

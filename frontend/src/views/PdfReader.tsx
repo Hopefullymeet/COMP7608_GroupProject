@@ -154,8 +154,9 @@ function PdfSheet({ document, scope, page, width, zoom, rasterZoom, aspectRatio,
       .map((r) => [clamp((r.left - box.left) / box.width), clamp((r.top - box.top) / box.height),
         clamp((r.right - box.left) / box.width), clamp((r.bottom - box.top) / box.height)])
       .filter((r) => r[2] > r[0] && r[3] > r[1]) as Rect[]
-    const quote = selected.toString().trim().slice(0, 3500)
-    if (rects.length && rects.length <= 150 && quote) setSelection({ page, rect: union(rects), rects, quote, medium: 'text' })
+    const fullText = selected.toString().trim()
+    const quote = fullText.slice(0, 3500)
+    if (rects.length && rects.length <= 150 && quote) setSelection({ page, rect: union(rects), rects, quote, fullText, medium: 'text' })
   }
   function start(event: ReactPointerEvent<HTMLDivElement>) {
     if (!ready || event.button !== 0) return
@@ -248,10 +249,36 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
   session?: string; resume?: boolean
   onAsk?: (selection: Selection) => void; onFind?: () => void; onWiki?: () => void; onPaperInfo?: (mode: 'scan' | 'analysis') => void
 }) {
-  const { tr } = useLanguage()
+  const { tr, language } = useLanguage()
   const workspace = useWorkspace()
   const scope = { topic_id: topic, source_version_id: version, ...(draft && { draft_id: draft }) }
   const { api } = workspace
+  const [draftOpen, openDraft] = useState(false)
+  const [selectedSource, selectSource] = useState('')
+  const translations = useRead('reader.translations', scope, draftOpen && !draft)
+  useEffect(() => { openDraft(false); selectSource('') }, [topic, version])
+  const normalize = (s: string) => s.trim().replace(/\s+/g, ' ')
+  const activeEntry = useRef<HTMLElement>(null)
+  const entries = translations?.items.filter(t => t.target_language === language.toLowerCase())
+  useEffect(() => {
+    const el = activeEntry.current
+    const panel = el?.parentElement
+    if (el && panel) panel.scrollTop += el.getBoundingClientRect().top - panel.getBoundingClientRect().top -
+      (panel.querySelector('header')?.offsetHeight ?? 0)
+  }, [selectedSource, translations])
+  async function translate(s: Selection) {
+    const text = normalize(s.fullText ?? s.quote)
+    setSelection(undefined)
+    window.getSelection()?.removeAllRanges()
+    selectSource(text)
+    openDraft(true)
+    const saved = await api.call('reader.translations', { ...scope, page: s.page })
+    if (saved.items.some(t => t.target_language === language.toLowerCase() && !Object.keys(t.glossary).length &&
+      normalize(t.segments.map(seg => seg.source).join(' ')) === text)) return
+    await workspace.prepare({ topic_id: topic, kind: 'reader_translation', input: {
+      source_version_id: version, target_language: language, selected_text: text, page: s.page, rects: s.rects,
+    } })
+  }
   const marks = useRead('reader.marks', scope)?.items ?? []
   const [document, setDocument] = useState<PDFDocumentProxy>()
   const [width, setWidth] = useState(0)
@@ -696,6 +723,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
         <div className="pt-pdf-menu" onClick={(e) => {
           if ((e.target as HTMLElement).closest('button')) e.currentTarget.closest('details')!.open = false
         }}>
+          {!draft && <button onClick={() => { selectSource(''); openDraft(true) }}>{tr('Parallel translation')}</button>}
           {onPaperInfo && <>
             <button onClick={() => onPaperInfo('scan')}>{tr('Paper details')}</button>
             <button onClick={() => onPaperInfo('analysis')}>{tr('Paper references')}</button>
@@ -746,6 +774,18 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
         }}>{delta < 0 ? '↑' : '↓'}</button>)}
       <button className="link-btn" onClick={() => { showFind(false); setHighlight(undefined) }} aria-label={tr('Close')}>×</button>
     </div>}
+    {draftOpen && <aside className="pt-parallel-draft" aria-label={tr('Parallel translation')}>
+      <header><strong>{tr('Parallel translation')}</strong><button className="link-btn" aria-label={tr('Close')}
+        onClick={() => openDraft(false)}>×</button></header>
+      {entries?.length ? [...entries].sort((a, b) => a.page - b.page ||
+        (a.segments[0]?.rects[0]?.[1] ?? 0) - (b.segments[0]?.rects[0]?.[1] ?? 0)).map(entry => {
+        const active = !!selectedSource && normalize(entry.segments.map(s => s.source).join(' ')) === selectedSource
+        return <article key={entry.translation_id} ref={active ? activeEntry : undefined}>
+          <button className="link-btn" onClick={() => { jump(entry.page, entry.segments[0]?.rects[0]); openDraft(false) }}>{tr('PDF page {0}', entry.page)}</button>
+          {entry.segments.map((s, i) => <div key={i}><p>{s.source}</p><p>{s.translation}</p></div>)}
+        </article>
+      }) : <p>{tr(entries ? 'No saved translations yet.' : 'Loading…')}</p>}
+    </aside>}
     {outlineOpen && <Dialog title={tr('PDF outline')} onClose={() => showOutline(false)}>
       {outline?.length ? outline.map((section, i) => <button className="link-btn pt-outline-link" key={i}
         style={{ paddingInlineStart: Math.min(5, section.depth) * 14 }}
@@ -764,6 +804,7 @@ export default function PdfReader({ topic, version, page, target, citation, onAs
     {selection && !editor && createPortal(
       <div ref={popup} className="pt-selection-actions" role="group" aria-label={tr('Selection actions')}>
         {selection.medium === 'text' && <>
+          {!draft && <button disabled={workspace.busy} onClick={() => void translate(selection).catch(workspace.report)}>{tr('Translate')}</button>}
           <button disabled={workspace.busy} onClick={() => void save('highlight', selection.rects, [], selection.quote, '')}>{tr('Highlight')}</button>
           <button disabled={workspace.busy} onClick={() => void save('underline', selection.rects, [], selection.quote, '')}>{tr('Underline')}</button>
         </>}

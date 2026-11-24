@@ -106,7 +106,7 @@ export interface AgentRun {
   durationSeconds?: number
   id: string
   manuscriptId?: string
-  task: 'Discovery' | 'Question' | 'Comparison' | 'Citation check' | 'Citation suggestions' | 'Import' | 'Resume' | 'Literature synthesis' | 'Ask about selection' | 'Index figure descriptions'
+  task: 'Discovery' | 'Question' | 'Comparison' | 'Citation check' | 'Citation suggestions' | 'Import' | 'Resume' | 'Literature synthesis' | 'Ask about selection' | 'Translate' | 'Index figure descriptions'
   label: string
   status: RunStatus
   steps: AgentStep[]

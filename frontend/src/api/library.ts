@@ -70,6 +70,9 @@ type PaperDetails = {
 }
 export type LibraryMethods = {
   'file.pick': [{ purpose: 'papers' | 'draft' | 'backup' }, { files: Picked[] }]
+  'library.folders': [{ topic_id: string }, FolderList]
+  'library.folder_create': [Write & { topic_id: string; name: string }, { id: string; name: string }]
+  'library.folder_move': [Write & { topic_id: string; folder_id: string; paper_ids: string[] }, { moved: number }]
   'library.set_alias': [Write & { topic_id: string; paper_id: string; alias: string }, { paper_id: string; alias: string }]
   'library.catalog': [Record<string, never>, Catalog]
   'library.preview_bibliography': [Write & { topic_id: string; format: string; content: string }, {
@@ -125,7 +128,9 @@ export type LibraryMethods = {
     Note,
   ]
 }
+export type FolderList = { items: { id: string; name: string }[]; assignments: Record<string, string> }
 export type LibraryFixture = {
+  folders?: Record<string, FolderList>
   entries: Record<string, Partial<PaperEntry>>
   trash: LibraryItem[]
   reviews: Review[]

@@ -597,9 +597,13 @@ class Reader:
                 or len(pages) != len(set(pages)) or (selection and "pages" in params)):
             raise LiteratureError("INVALID_PARAMS", "Select a region or one to eight distinct PDF pages.")
         rectangles = params.get("rects", [])
+        selected_text = params.get("selected_text")
+        if "selected_text" in params and (not selection or not isinstance(selected_text, str)
+                                          or not selected_text.strip() or len(selected_text) > 48_000):
+            raise LiteratureError("INVALID_PARAMS", "Choose a shorter text selection.")
         if selection:
-            if not isinstance(rectangles, list) or not 1 <= len(rectangles) <= 50:
-                raise LiteratureError("INVALID_PARAMS", "Select one to fifty text rectangles.")
+            if not isinstance(rectangles, list) or not 1 <= len(rectangles) <= 150:
+                raise LiteratureError("INVALID_PARAMS", "Select up to 150 text rectangles.")
             for rect in rectangles:
                 region(rect)
         engine = pdf_engine()
@@ -609,7 +613,9 @@ class Reader:
         with engine.open(stream=content, filetype="pdf") as document:
             for number in pages:
                 page = document[number - 1]
-                if selection:
+                if selected_text:
+                    blocks = [(" ".join(selected_text.split()), rectangles)]
+                elif selection:
                     blocks = [(" ".join(" ".join(page.get_textbox(
                         page_rect(page, box, engine)) for box in rectangles).split()), rectangles)]
                 else:
@@ -617,7 +623,8 @@ class Reader:
                 units = [{"id": f"{number}:{index}:{part}", "source": text, "rects": boxes}
                          for index, (body, boxes) in enumerate(blocks, 1)
                          for part, text in enumerate(wrap(body, width=1750), 1)]
-                key = digest(json.dumps([topic, version, number, selection, language.lower(), glossary, *provider, units],
+                identity = [unit["source"] for unit in units] if selected_text else units
+                key = digest(json.dumps([topic, version, number, selection, language.lower(), glossary, *provider, identity],
                                         sort_keys=True, ensure_ascii=False).encode("utf-8"))
                 plans.append({"page": number, "units": units, "key": key})
         if sum(len(u["source"]) for plan in plans for u in plan["units"]) > 48_000:
@@ -629,20 +636,23 @@ class Reader:
 
     def translations(self, topic, params):
         version = params.get("source_version_id")
-        source, _ = self.content(topic, version)
+        source = self.reader_document(topic, version)
         page = params.get("page")
-        if type(page) is not int or not 1 <= page <= source["page_count"]:
+        if "page" in params and (type(page) is not int or not 1 <= page <= source["page_count"]):
             raise LiteratureError("INVALID_PARAMS", "Select a page to read its saved translations.")
         translation_id = params.get("translation_id")
         if "translation_id" in params and (not isinstance(translation_id, str)
                                             or not re.fullmatch(r"[a-f0-9]{64}", translation_id)):
             raise LiteratureError("INVALID_PARAMS", "Choose a valid translation ID.")
-        query = "SELECT data FROM reader_translations WHERE topic_id=? AND version_id=? AND page=?"
-        args = (topic, version, page)
+        query = "SELECT data FROM reader_translations WHERE topic_id=? AND version_id=?"
+        args = (topic, version)
+        if page is not None:
+            query += " AND page=?"
+            args += (page,)
         if translation_id is not None:
             query += " AND cache_key=?"
             args += (translation_id,)
-        rows = self.host.db.execute(query + " ORDER BY rowid DESC", args)
+        rows = self.host.db.execute(query + " ORDER BY page, rowid DESC", args)
         return {"items": [json.loads(row[0]) for row in rows]}
 
     def run_translation(self, task, cancelled):

@@ -537,6 +537,7 @@ export function createMock(): Client {
     ...wiki.handlers,
     ...citation.handlers,
     'reader.pdf': () => { throw new Error('PDF reading requires the desktop workspace.') },
+    'reader.translations': () => ({ items: [] }),
     'reader.marks': () => ({ items: [] }),
     'reader.mark_save': () => { throw new Error('Annotations require the desktop workspace.') },
     'reader.mark_delete': () => { throw new Error('Annotations require the desktop workspace.') },

@@ -27,6 +27,9 @@ export function libraryFixture(
   const unavailable = (): never => {
     throw new Error('Source unavailable. Restore the original version in Library.')
   }
+  function folders(topic: string) {
+    return ((state.shelf.folders ??= {})[topic] ??= { items: [], assignments: {} })
+  }
   function lookup(anchor: string): Located {
     const item = anchor === original.anchor_id ? original : state.shelf.anchors[anchor]
     if (
@@ -141,6 +144,26 @@ export function libraryFixture(
             ? [{ file_id: 'related-work.md', name: 'related-work.md' }]
             : [{ file_id: 'demo-backup', name: 'Local demo backup' }],
     }),
+    'library.folders': ({ topic_id }) => folders(topic_id),
+    'library.folder_create': ({ topic_id, name }) => {
+      const list = folders(topic_id)
+      name = name.trim()
+      if (!name || name.length > 80 || list.items.some(f => f.name.toLowerCase() === name.toLowerCase()))
+        throw new Error('Choose a unique folder name of up to 80 characters.')
+      const folder = { id: id(), name }
+      list.items.push(folder)
+      return folder
+    },
+    'library.folder_move': ({ topic_id, folder_id, paper_ids }) => {
+      const list = folders(topic_id)
+      if ((folder_id && !list.items.some(f => f.id === folder_id)) ||
+        batch(paper_ids, state.library).some(p => !p.topic_ids.includes(topic_id))) throw new Error('Choose a folder in this topic.')
+      for (const pid of paper_ids) {
+        if (folder_id) list.assignments[pid] = folder_id
+        else delete list.assignments[pid]
+      }
+      return { moved: paper_ids.length }
+    },
     'library.set_alias': ({ topic_id, paper_id, alias }) => {
       const paper = state.library.find((item) => item.paper_id === paper_id && item.topic_ids.includes(topic_id))
       if (!paper) throw new Error('Paper is outside the selected topic.')
@@ -171,6 +194,7 @@ export function libraryFixture(
       const selected = batch(paper_ids, state.library)
       for (const p of selected) {
         const entry = (state.shelf.entries[p.paper_id] ??= {})
+        if (action === 'unlink') delete folders(value).assignments[p.paper_id]
         const list = action === 'link' || action === 'unlink' ? p.topic_ids : (entry.tags ??= [])
         if (action === 'link' || action === 'tag') {
           if (!list.includes(value)) list.push(value)

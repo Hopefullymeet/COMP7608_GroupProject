@@ -7,6 +7,7 @@ import { quoteOffsets } from '../components/quoteRange'
 import { EvidencePopover } from '../components/EvidencePopover'
 import { Icon, Spinner } from '../components/Icon'
 import { useAnswerScroll } from '../components/useAnswerScroll'
+import { PaperFolders } from '../components/PaperFolders'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { createPortal } from 'react-dom'
 import { Dialog, HeaderActions } from '../components/PageHead'
@@ -519,6 +520,9 @@ function PaperDirectory({ choices, selected, topicId, onSelect }: {
   const toggle = useRef<HTMLButtonElement>(null)
   const id = useId()
   const [open, setOpen] = useState(false)
+  const [folder, setFolder] = useState('')
+  const folders = useRead('library.folders', { topic_id: topicId }, open && !!topicId)
+  const active = choices.find(c => c.paper.id === selected)?.paper.paperId
   const [editing, edit] = useState<Paper>()
   const [alias, setAlias] = useState('')
   const [saving, setSaving] = useState(false)
@@ -549,7 +553,8 @@ function PaperDirectory({ choices, selected, topicId, onSelect }: {
         <Icon name="paperList" size={17} />
       </button>
       {open && <nav id={id} className="pt-paper-list" aria-label={tr('Papers in this reader')}>
-        {choices.map(({ paper, label, version }) => <div className="pt-paper-row" key={paper.id}>
+        <PaperFolders topic={topicId} folders={folders} filter={folder} onFilter={setFolder} papers={active ? [active] : []} />
+        {choices.filter(c => !folder || (folders && (folders.assignments[c.paper.paperId ?? ''] || '-') === folder)).map(({ paper, label, version }) => <div className="pt-paper-row" key={paper.id}>
           <button className="pt-paper-open" type="button" title={paper.alias ? `${paper.alias} · ${paper.title}` : paper.title}
             aria-pressed={selected === paper.id} onClick={() => { onSelect(paper.id); close() }}>
             <Icon name="file" size={14} />

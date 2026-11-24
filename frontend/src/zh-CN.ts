@@ -1,5 +1,15 @@
 // Simplified Chinese interface messages, keyed by their English source text.
 export const zhCN: Readonly<Record<string, string>> = {
+  'Paper folders': '论文文件夹',
+  'All folders': '全部文件夹',
+  'Outside folders': '未归入文件夹',
+  'Move to folder': '移至文件夹',
+  'New folder': '新建文件夹',
+  'Folder name': '文件夹名称',
+  'Translate': '翻译',
+  'Parallel translation': '对照译稿',
+  'No saved translations yet.': '还没有保存的译文。',
+  'Choose a unique folder name of up to 80 characters.': '请输入未使用的文件夹名称，最多 80 个字符。',
   'Searching paper figures…': '正在查找论文插图…',
   'New reading sessions': '新建阅读会话的默认权限',
   'Allow Wiki and memory updates': '允许更新 Wiki 和记忆',

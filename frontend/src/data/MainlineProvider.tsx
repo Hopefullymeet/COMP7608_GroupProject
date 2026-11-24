@@ -810,6 +810,7 @@ export function MainlineProvider({
     literature_synthesis: 'Literature synthesis',
     citation_audit: 'Citation check',
     reader_question: 'Ask about selection',
+    reader_translation: 'Translate',
     visual_index: 'Index figure descriptions',
     citation_suggest: 'Citation suggestions',
     resume: 'Resume',

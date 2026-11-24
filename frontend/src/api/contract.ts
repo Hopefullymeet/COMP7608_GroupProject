@@ -54,7 +54,8 @@ export type TaskInput = MainTask | WorkspaceTask
 export type Transfer = { endpoint: string; purpose: string; data_categories: NonEmpty<string> }
 export type Issue = { reason: string; retryable: boolean; next_action: string; details?: Record<string, unknown> }
 export type Start = { task_id: Id; run_id: Id; status: 'queued'; scope_id?: Id }
-type Result = Discovery | Reading | ImportResult | {record_id:string; kind?: 'literature_synthesis' | 'citation_audit' | 'reader_question' | 'visual_index'}
+type Result = Discovery | Reading | ImportResult |
+  { kind: 'reader_translation'; pages: { page: number; translation_id: string; cached: boolean }[] } | {record_id:string; kind?: 'literature_synthesis' | 'citation_audit' | 'reader_question' | 'visual_index'}
 export type Finished =
   | { status: 'completed'; result: Result }
   | { status: 'partial'; result: Result; issue: Issue }

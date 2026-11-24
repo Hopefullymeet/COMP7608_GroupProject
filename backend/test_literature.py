@@ -234,6 +234,21 @@ class LiteratureTest(unittest.TestCase):
             page = self.call("source.page", topic_id=self.topic, source_version_id=self.versions[0], page=1)
             self.assertTrue(base64.b64decode(page["png"]).startswith(b"\x89PNG"))
 
+    def test_topic_folders_are_independent_and_unlink_clears_membership(self):
+        pid = self.a["paper_id"]
+        self.call("library.organize", paper_ids=[pid], action="link", value=self.other)
+        for topic in (self.topic, self.other):
+            folder = self.call("library.folder_create", topic_id=topic, name="Methods")["id"]
+            self.call("library.folder_move", topic_id=topic, folder_id=folder, paper_ids=[pid])
+            self.assertEqual(self.call("library.folders", topic_id=topic)["assignments"][pid], folder)
+        self.call("library.folder_move", topic_id=self.topic, folder_id=folder, paper_ids=[pid], error="INVALID_PARAMS")
+        self.call("library.organize", paper_ids=[pid], action="unlink", value=self.topic)
+        self.call("library.organize", paper_ids=[pid], action="link", value=self.topic)
+        self.assertEqual(self.call("library.folders", topic_id=self.topic)["assignments"], {})
+        self.assertEqual(self.call("library.folders", topic_id=self.other)["assignments"][pid], folder)
+        self.call("library.folder_move", topic_id=self.other, folder_id="", paper_ids=[pid])
+        self.assertEqual(self.call("library.folders", topic_id=self.other)["assignments"], {})
+
     def test_organize_batch_preserves_scoped_historic_evidence(self):
         ids = [self.a["paper_id"], self.b["paper_id"]]
         args = {"paper_ids": ids, "action": "tag", "value": " Citation research "}

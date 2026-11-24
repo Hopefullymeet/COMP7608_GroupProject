@@ -151,7 +151,7 @@ class Worker:
         "candidate.decide", "reader.bookmark", "note.save", "library.import_pdf", "library.set_alias", "synthesis.review",
         "reader.mark_save", "reader.mark_delete", "reader.answer_save", "reader.mark_to_wiki",
         "services.save", "profile.save", "preset.save",
-        "library.choose_publication", "library.import_catalog", "library.commit_identifier", "library.update_metadata", "workspace.archive", "workspace.unarchive", "library.organize",
+        "library.choose_publication", "library.import_catalog", "library.commit_identifier", "library.update_metadata", "workspace.archive", "workspace.unarchive", "library.organize", "library.folder_create", "library.folder_move",
         "library.preview_bibliography", "library.commit_bibliography", "library.commit_zotero_attachment",
         "library.trash", "library.restore", "library.purge",
         "wiki.refresh", "wiki.chat", "wiki.edit", "wiki.clear_chat",
@@ -704,6 +704,36 @@ class Worker:
                     "passage_id": pid, "quote": value["quote"], "read_scope": value["read_scope"]}
         if method == "library.export_bibliography":
             return self.export_library_bibliography(params)
+        if method in ("library.folders", "library.folder_create", "library.folder_move"):
+            topic = self.topic(params)
+            record = self.get("topic", topic)
+            folders = record.setdefault("paper_folders", [])
+            if method == "library.folders":
+                assignments = {p["paper_id"]: p["folder_ids"][topic] for p in self.rows("paper")
+                               if topic in p["topic_ids"] and topic in p.get("folder_ids", {})}
+                return {"items": folders, "assignments": assignments}
+            if method == "library.folder_create":
+                name = required(params, "name").strip()
+                if not name or len(name) > 80 or any(f["name"].casefold() == name.casefold() for f in folders):
+                    raise invalid("Choose a unique folder name of up to 80 characters.")
+                folder = {"id": identifier(), "name": name}
+                folders.append(folder)
+                self.put("topic", topic, record)
+                return folder
+            target = params.get("folder_id")
+            if target != "" and not any(f["id"] == target for f in folders):
+                raise invalid("Choose a folder in this topic.")
+            papers = [self.get("paper", pid) for pid in self.paper_ids(params)]
+            if any(topic not in p["topic_ids"] for p in papers):
+                raise missing("Paper is outside the selected topic.")
+            for paper in papers:
+                assignments = paper.setdefault("folder_ids", {})
+                if target:
+                    assignments[topic] = target
+                else:
+                    assignments.pop(topic, None)
+                self.put("paper", paper["paper_id"], paper)
+            return {"moved": len(papers)}
         if method == "library.organize":
             return self.organize_papers(params)
         if method in ("library.impact", "library.trash", "library.restore", "library.purge"):
@@ -975,6 +1005,8 @@ class Worker:
             previous = paper.get(field, [])
             if adding == (value in previous):
                 continue
+            if action == "unlink":
+                paper.get("folder_ids", {}).pop(value, None)
             paper[field] = [*previous, value] if adding else [item for item in previous if item != value]
             self.put("paper", paper["paper_id"], paper)
             changed += 1

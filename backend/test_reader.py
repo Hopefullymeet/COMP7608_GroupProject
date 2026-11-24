@@ -106,6 +106,13 @@ class ReaderTest(unittest.TestCase):
         self.assertEqual(cached["translation_scope"]["pages"], [{"page": 1, "status": "cached"}])
         self.assertTrue(run(selection, cached)["result"]["pages"][0]["cached"])
 
+        precise = {**common, "input": {**selection["input"], "selected_text": "Evidence"}}
+        self.assertEqual(run(precise, prepare(precise))["status"], "completed")
+        calls = len(inputs)
+        shifted = {**common, "input": {**precise["input"], "rects": [[.11, .07, .39, .11]]}}
+        self.assertTrue(run(shifted, prepare(shifted))["result"]["pages"][0]["cached"])
+        self.assertEqual(len(inputs), calls)
+        self.assertEqual(inputs[-1][0], ["Evidence"])
         pages = {**common, "input": {**target, "pages": [1, 2]}}
         first = run(pages, prepare(pages))
         self.assertEqual(first["status"], "partial")
@@ -114,7 +121,9 @@ class ReaderTest(unittest.TestCase):
         results = run(pages, prepare(pages))["result"]["pages"]
         self.assertEqual([(row["page"], row["cached"]) for row in results], [(1, True), (2, False)])
         self.assertEqual(sum("Private paragraph outside selection" in text for text, _, _ in inputs), 1)
-        self.assertEqual(len(call(self.worker, "reader.translations", **scope)["items"]), 2)
+        self.assertEqual(len(call(self.worker, "reader.translations", **scope)["items"]), 3)
+        draft = call(self.worker, "reader.translations", topic_id=self.topic, source_version_id=version)["items"]
+        self.assertEqual([item["page"] for item in draft], [1, 1, 1, 2])
         other = call(self.worker, "topic.create", title="Other")["topic_id"]
         with self.assertRaises(RpcError) as denied:
             call(self.worker, "reader.translations", **{**scope, "topic_id": other})

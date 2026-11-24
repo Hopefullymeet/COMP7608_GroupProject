@@ -6,6 +6,7 @@ import { Icon } from '../components/Icon'
 import { useStore } from '../data/store'
 import type { Impact, Picked, Review } from '../api/library'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
+import { PaperFolders } from '../components/PaperFolders'
 import { Notes } from './Notes'
 import { PaperImportDialog, usePdfDrop } from './PaperImportDialog'
 import { PublicationDetails } from '../components/PublicationDetails'
@@ -48,6 +49,8 @@ export function LibraryPage() {
   const [filters, showFilters] = useState(false)
   const [topicFilter, filterTopic] = useState(''),
     [availability, filterScope] = useState('')
+  const [folder, setFolder] = useState('')
+  const folders = useRead('library.folders', { topic_id: topicFilter }, !!topicFilter && tab === 'Papers')
   const [chosen, choose] = useState<string[]>([]),
     [focus, setFocus] = useState(state.route.view === 'library' ? (state.route.paperId ?? '') : '')
   const [topic, setTopic] = useState(''),
@@ -68,6 +71,7 @@ export function LibraryPage() {
   const shown = rows.filter(
     (p) =>
       (!topicFilter || p.topic_ids.includes(topicFilter)) &&
+      (tab !== 'Papers' || !topicFilter || !folder || (folders && (folders.assignments[p.paper_id] || '-') === folder)) &&
       (!availability || p.source_versions.some((v) => v.available_scope === availability)) &&
       [p.title, p.identity, ...p.authors, ...p.tags].join(' ').toLowerCase().includes(query.toLowerCase()),
   )
@@ -198,11 +202,11 @@ export function LibraryPage() {
         </button>}
             </div>
             <div className="lib-tools">
-              {filters && <>
-              <select
+              {(filters || tab === 'Papers') && <select
                 aria-label={tr('Topic membership')}
                 value={topicFilter}
                 onChange={(e) => {
+                  setFolder('')
                   filterTopic(e.target.value)
                   choose([])
                   more(30)
@@ -210,8 +214,10 @@ export function LibraryPage() {
               >
                 <option value="">{tr('Any membership')}</option>
                 {filterTopics.map(({ id, title }) => <option key={id} value={id}>{title}</option>)}
-              </select>
-              <select
+              </select>}
+              {topicFilter && tab === 'Papers' && <PaperFolders key={topicFilter} topic={topicFilter} folders={folders} filter={folder}
+                onFilter={id => { setFolder(id); choose([]); more(30) }} papers={ids} />}
+              {filters && <select
                 aria-label={tr('Reading scope')}
                 value={availability}
                 onChange={(e) => filterScope(e.target.value)}
@@ -220,8 +226,7 @@ export function LibraryPage() {
                 <option value="full_text">{tr('Full text')}</option>
                 <option value="abstract">{tr('Abstract')}</option>
                 <option value="metadata">{tr('Metadata only')}</option>
-              </select>
-              </>}
+              </select>}
               {(checked.length > 0 || (tab === 'Trash' && ids.length > 0)) &&
                 (tab === 'Trash' ? (
                   <>
