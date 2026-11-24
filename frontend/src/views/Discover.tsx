@@ -140,8 +140,6 @@ function MainlineSearch({ question, submit, busy, running }: {
 export function Discover() {
   const { tr } = useLanguage()
   const { state, act } = useStore()
-  const [picked,pick]=useState<string[]>([])
-  const batch=state.candidates.filter(c=>picked.includes(c.id)&&c.decision!=='added'&&c.decision!=='excluded').map(c=>c.id)
   const topicPapers = new Map<string, ReturnType<typeof paperFor>>()
   for (const id of papersOfTopic(state, currentTopic(state))) {
     const paper = paperFor(state, id)
@@ -189,27 +187,17 @@ export function Discover() {
         </div>
       </section>
 
-      {(state.mainline?.watch || batch.length > 0) && (
-        <div className="discovery-tools">
-          {state.mainline?.watch && (
-            <label className="discovery-watch">
-              <Icon name="clock" size={15} />{' '}{tr('Check for changes')}
-              <select aria-label={tr('Search frequency')} value={state.mainline.interval}
-                onChange={(e) => state.mainline?.watch?.(Number(e.target.value))}>
-                <option value={0}>{tr('Off')}</option>
-                <option value={1}>{tr('Daily')}</option>
-                <option value={7}>{tr('Weekly')}</option>
-                <option value={30}>{tr('Monthly')}</option>
-              </select>
-            </label>
-          )}
-          {state.mainline && batch.length > 0 && (
-            <button className="ghost-btn sm" disabled={state.mainline.searchBusy}
-              onClick={() => state.mainline?.addCandidates?.(batch)}>
-              <Icon name="plus" size={14} />{' '}{tr('Add selected to topic ({0})', batch.length)}
-            </button>
-          )}
-        </div>
+      {state.mainline?.watch && (
+        <label className="discovery-watch">
+          <Icon name="clock" size={15} />{' '}{tr('Check for changes')}
+          <select aria-label={tr('Search frequency')} value={state.mainline.interval}
+            onChange={(e) => state.mainline?.watch?.(Number(e.target.value))}>
+            <option value={0}>{tr('Off')}</option>
+            <option value={1}>{tr('Daily')}</option>
+            <option value={7}>{tr('Weekly')}</option>
+            <option value={30}>{tr('Monthly')}</option>
+          </select>
+        </label>
       )}
       <div className="disc-grid">
         <section className="cand-list" aria-label={tr('Candidates')}>
@@ -221,23 +209,15 @@ export function Discover() {
           )}
           {state.angles.map((a) => {
             const items = state.candidates.filter((c) => c.angleId === a.id)
+            if (state.mainline && a.status === 'covered' && !items.length && a.id !== 'results') return null
             return (
               <div key={a.id} className="angle-group">
                 <div className="angle-head">
                   <h2>{tr(a.label)}</h2>
-                  <span className={`status ${a.status}`}>{a.status === 'searching' && <Spinner />}{tr(ANGLE_LABEL[a.status])}</span>
+                  {a.status !== 'covered' && <span className={`status ${a.status}`}>{a.status === 'searching' && <Spinner />}{tr(ANGLE_LABEL[a.status])}</span>}
                 </div>
                 {items.map((c) => (
-                  <div key={c.id}>
-                    {state.mainline && c.decision !== 'added' && c.decision !== 'excluded' && (
-                      <label className="check-row candidate-selection">
-                        <input type="checkbox" checked={picked.includes(c.id)}
-                          onChange={(e) => pick(e.target.checked ? [...picked, c.id] : picked.filter((id) => id !== c.id))} />
-                        {tr('Select candidate')}
-                      </label>
-                    )}
-                    <CandidateCard c={c} disabled={state.mainline && (state.mainline.searchBusy || d.status === 'running')} />
-                  </div>
+                  <CandidateCard key={c.id} c={c} disabled={state.mainline && (state.mainline.searchBusy || d.status === 'running')} />
                 ))}
                 {a.status === 'gap' && (
                   <div className="gap-note"><Icon name="alert" size={15} /> {tr(a.gapReason ?? 'No candidate passed screening for this angle.')}</div>

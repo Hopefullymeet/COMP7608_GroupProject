@@ -116,9 +116,7 @@
 .history-entries { display: grid; gap: 8px; padding: 6px 11px 11px; }
 .history-entries > button { justify-self: start; }
 .settings-save { margin-top: 16px; }
-.discovery-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
-.discovery-watch { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
-.candidate-selection { margin: 0 0 6px 2px; }
+.discovery-watch { margin-bottom: 14px; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
 .paper .located-passage {
   background: var(--accent-soft);
   border-radius: 4px;
@@ -284,7 +282,8 @@
   .topic-head:has(.pt-topic-actions) .head-meta { grid-column: 3; grid-row: 1; }
   .pt-topic-actions { grid-column: 1 / -1; grid-row: 2; justify-self: end; }
 }
-.pt-topic-actions summary { display: inline-flex; list-style: none; align-items: center; gap: 6px; cursor: pointer; }
+.pt-topic-actions summary { display: inline-flex; list-style: none; align-items: center; cursor: pointer; }
+.pt-topic-actions > summary.icon-btn { justify-content: center; }
 .pt-topic-actions summary::-webkit-details-marker { display: none; }
 .pt-topic-menu { position: absolute; z-index: 15; inset-inline-end: 0; min-width: max-content; padding: 4px; margin-top: 4px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: var(--shadow); }
 .pt-topic-menu button { display: flex; align-items: center; gap: 7px; width: 100%; text-align: start; padding: 8px 10px; border-radius: 4px; }

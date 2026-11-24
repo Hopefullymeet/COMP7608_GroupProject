@@ -257,7 +257,7 @@ class CredentialTest(unittest.TestCase):
             os.environ["PAPERTRACE_AGENT_CLI"] = str(Path(directory) / "explicit.js")
             self.assertEqual(Dsh.configured(directory).cli, Path(os.environ["PAPERTRACE_AGENT_CLI"]).resolve())
 
-    def test_messages_transport_uses_protocol_specific_official_root(self):
+    def test_dsh_receives_configured_endpoint(self):
         official = "https://api.deepseek.com/anthropic"
         custom = "https://model.example.org/v1"
         with tempfile.TemporaryDirectory() as directory:
@@ -268,7 +268,7 @@ class CredentialTest(unittest.TestCase):
                 with self.subTest(endpoint=endpoint):
                     runtime.for_model("test-model", endpoint).write_patch(path, root, None)
                     provider = next(row for row in json.loads(path.read_text()) if row.get("id") == "llm-deepseek")
-                    self.assertEqual(provider["config"]["baseURL"], custom if endpoint == custom else official)
+                    self.assertEqual(provider["config"]["baseURL"], endpoint)
 
     def test_model_runtime_prefers_system_credential_and_snapshots_it(self):
         runtime = Dsh("node", __file__, None, ".", use_system_credential=True)

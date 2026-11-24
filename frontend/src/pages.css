@@ -475,6 +475,8 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .settings-layout { display: grid; grid-template-columns: 150px minmax(0, 1fr); min-height: 0; gap: 20px; }
 .settings-layout > nav { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; }
 .settings-content { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 8px 18px 0; }
+.settings-model-panel { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; min-width: 0; }
+.settings-model-panel > .settings-save { margin: 0; padding-top: 10px; border-top: 1px solid var(--line); background: var(--surface); gap: 8px; }
 .settings-content .set-section { grid-template-columns: minmax(0, 1fr); padding: 10px 0 20px; gap: 16px; }
 .preference-row { display: flex; align-items: center; justify-content: space-between; }
 @media (max-width: 620px) {

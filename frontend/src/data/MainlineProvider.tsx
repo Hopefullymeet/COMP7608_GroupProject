@@ -901,27 +901,6 @@ export function MainlineProvider({
     mainline: {
       demo,
       pages: ['library', 'wiki', 'check', 'settings'],
-      addCandidates: (ids) =>
-        void status(async () => {
-          if (!search) return
-          const errors: string[] = []
-          for (const id of ids)
-            try {
-              await keyedWrite(JSON.stringify([search.search_id, id, 'added']), (operation_id) =>
-                api.call('candidate.decide', {
-                  operation_id,
-                  topic_id: topic,
-                  search_id: search.search_id,
-                  candidate_id: id,
-                  decision: 'add',
-                }),
-              )
-            } catch (cause) {
-              errors.push(errorText(cause))
-            }
-          await Promise.all([refreshSearch(topic, search.search_id), refreshLibrary(topic)])
-          if (errors.length) setError(errors.join(' '))
-        }),
       venueFilter: config?.services.some(
         (s) => s.kind === 'search' && s.enabled && s.fields.includes('venue'),
       ),

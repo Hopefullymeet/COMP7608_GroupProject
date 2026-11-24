@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '../components/PageHead'
 import { Icon } from '../components/Icon'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
+import { errorText } from '../api/contract'
+import { defaultConfig, unlimitedBudget } from '../api/services'
 import type { Config, Model, Offer, ServiceMethods } from '../api/services'
 
 function CredentialDialog({ model, onClose, onSaved }: { model: Model; onClose: () => void; onSaved: () => void }) {
@@ -70,15 +72,16 @@ function CredentialDialog({ model, onClose, onSaved }: { model: Model; onClose: 
   )
 }
 
-function SettingsForm({ config }: { config: Config }) {
+function SettingsForm({ config, modelPage = false }: { config: Config; modelPage?: boolean }) {
   const { tr } = useLanguage()
   const { write, busy, report, demo, refresh } = useWorkspace()
-  const [saveResult, setSaveResult] = useState<Config>(),
+  const [saveResult, setSaveResult] = useState<{ base: string; config: Config }>(),
+    [saveError, setSaveError] = useState(''),
     [edits, set] = useState<Config>(),
     [saving, setSaving] = useState(false),
     [test, setTest] = useState<{ id: string; result: Message }>(),
     [managingCredentials, setManagingCredentials] = useState(false)
-  const saved = saveResult && saveResult.revision !== config.revision ? saveResult : config
+  const saved = saveResult?.base === config.revision ? saveResult.config : config
   const draft = edits ?? saved
   const selected = draft.models.find((m) => m.id === draft.model_id) ?? draft.models[0]
   const credentials = config.models.find((m) => m.id === selected?.id)
@@ -114,13 +117,37 @@ function SettingsForm({ config }: { config: Config }) {
   async function save() {
     const { revision, ...fields } = draft
     setSaving(true)
+    setSaveError('')
     try {
       const result = await write('services.save', { ...fields, base_revision: revision })
-      setSaveResult(result)
+      if (fields.models.some(model => {
+        const stored = result.models.find(item => item.id === model.id)
+        return !stored || stored.model.trim() !== model.model.trim() ||
+          stored.endpoint.trim().replace(/\/+$/, '') !== model.endpoint.trim().replace(/\/+$/, '')
+      })) {
+        setSaveError('The saved model or endpoint differs from your changes.')
+        set({ ...draft, revision: result.revision })
+        return
+      }
+      setSaveResult({ base: config.revision, config: result })
       set(undefined)
+      setTest(undefined)
+    } catch (error) {
+      setSaveError(errorText(error))
     } finally {
       setSaving(false)
     }
+  }
+  function restoreDefaults() {
+    const defaults = demo ? defaultConfig() : {
+      ...saved,
+      models: saved.models.map(model => ({ ...model, model: model.id, endpoint: 'https://api.deepseek.com' })),
+      budget: { ...unlimitedBudget },
+      ask_before_overage: true,
+    }
+    set({ ...defaults, revision: saved.revision })
+    setTest(undefined)
+    setSaveError('')
   }
   const tryService = (id: string) =>
     void write('services.test', { id })
@@ -133,6 +160,7 @@ function SettingsForm({ config }: { config: Config }) {
   )
   return (
     <>
+      <div className={modelPage ? 'settings-content scroll' : undefined}>
       <section className="set-section">
         <div className="set-intro">
           <h2>{tr('Model')}</h2>
@@ -188,10 +216,6 @@ function SettingsForm({ config }: { config: Config }) {
               </div>
               {!demo && <p className="fine">{tr('Use an OpenAI-compatible base URL. The connection test uses the saved URL, model ID and API key.')}</p>}
               <div className="set-controls">
-                {dirty && (
-                  <button className="primary" disabled={!valid || busy || saving}
-                    onClick={() => void save().catch(report)}>{tr('Save settings')}</button>
-                )}
                 <button
                   className="ghost-btn"
                   disabled={dirty || busy}
@@ -309,22 +333,28 @@ function SettingsForm({ config }: { config: Config }) {
           </div>
         </section>
       ))}
+      {modelPage && demo && <AccessAndBackup/>}
+      </div>
       <div className="lib-tools settings-save">
         <button
           className="primary"
-          disabled={!valid || !dirty || busy || saving}
-          onClick={() => void save().catch(report)}
+          disabled={!valid || !dirty || saving}
+          onClick={() => void save()}
         >
           {tr('Save settings')}
         </button>
+        {modelPage && <button className="ghost-btn" disabled={saving} onClick={restoreDefaults}>
+          {tr('Restore defaults')}
+        </button>}
         {dirty && (
-          <button className="ghost-btn" disabled={saving} onClick={() => set(undefined)}>
+          <button className="ghost-btn" disabled={saving} onClick={() => { set(undefined); setSaveError('') }}>
             {tr('Discard edits')}
           </button>
         )}
         <span className="record-meta" role="status">
           {tr(saving ? 'Saving settings…' : dirty ? 'Unsaved changes' : 'Settings saved')}
         </span>
+        {saveError && <span className="set-error" role="alert">{tr(saveError)}</span>}
         {!valid && (
           <span className="set-error" role="alert">
             {tr('Check model endpoints, IDs and budget limits.')}
@@ -463,7 +493,7 @@ export function ServicesPage() {
   const { tr } = useLanguage()
   const [tab,setTab]=useState('general')
   const config = useRead('services.get', {})
-  const { demo, refresh } = useWorkspace()
+  const { refresh } = useWorkspace()
   useEffect(() => {
     const id = setInterval(refresh, 8000)
     return () => clearInterval(id)
@@ -477,10 +507,9 @@ export function ServicesPage() {
     <nav aria-label={tr('Settings')}>{sections.map(([id, icon, label]) =>
       <button key={id} className={'side-item' + (tab === id ? ' active' : '')}
         aria-pressed={tab === id} onClick={() => setTab(id)}><Icon name={icon} size={16}/>{tr(label)}</button>)}</nav>
-    <div className="settings-content scroll">
+    <div className={tab === 'model' ? 'settings-model-panel' : 'settings-content scroll'}>
       {tab === 'general' && <PersonalSettings/>}
-      {tab === 'model' && config && <SettingsForm key={config.revision} config={config}/>}
-      {tab === 'model' && demo && <AccessAndBackup/>}
+      {tab === 'model' && config && <SettingsForm config={config} modelPage/>}
       {tab === 'preset' && <RoleSettings/>}
     </div>
   </div>
@@ -499,7 +528,7 @@ export function FirstRunSettings() {
   const ready = config.models.some(m => m.id === config.model_id && (m.local || m.credential_configured))
   if (!ready && stage === 'api-deferred') return null
   return <Dialog title={tr(ready ? 'Set up your research assistant' : 'Connect your model')} onClose={finish} panelClass="first-run-settings">
-    {ready ? <RoleSettings onSaved={finish}/> : <SettingsForm key={config.revision} config={config}/>}
+    {ready ? <RoleSettings onSaved={finish}/> : <SettingsForm config={config}/>}
     <button className="link-btn" onClick={finish}>{tr('Set up later')}</button>
   </Dialog>
 }

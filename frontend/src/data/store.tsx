@@ -25,7 +25,6 @@ export interface State {
     demo: boolean; papers: Record<string, Paper>; evidence: Record<string, EvidenceAnchor>
     search: (query: string, filters?: { year_from?: number; year_to?: number; venue?:string }) => void
     pages?:Page[]
-    addCandidates?:(ids:string[])=>void
     venueFilter?:boolean
     interval?:number
     watch?:(days:number)=>void

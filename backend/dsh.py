@@ -18,7 +18,6 @@ from credentials import deepseek_api_key
 
 
 ENDPOINT = "https://api.deepseek.com"
-MESSAGES_ENDPOINT = ENDPOINT + "/anthropic"
 MODEL = "deepseek-flash"
 ANSWER_LAYOUT = (
     "Write the sentences array first. Put each distinct point in its own concise sentence entry. "
@@ -433,14 +432,12 @@ class Dsh:
                 for pid, version, page, text in rows}
 
     def write_patch(self, patch, root, plugin):
-        # The official Messages API has a different root from Chat Completions.
-        messages_root = MESSAGES_ENDPOINT if self.endpoint.rstrip("/") in (ENDPOINT, ENDPOINT + "/v1") else self.endpoint
         patch.write_text(json.dumps([
             *({"id": item, "disabled": True} for item in (*DISABLED_TOOLS, "session-log-deepseek",
                                                           "plugin-package-inventory-deepseek")),
             {"id": "system-prompt", "config": {"personaPrefix": AGENT_POLICY}},
             {"id": "sandbox-policy", "config": {"mode": "read-only", "workspaceRoot": str(root)}},
-            {"id": "llm-deepseek", "config": {"apiKeyEnv": "DEEPSEEK_API_KEY", "baseURL": messages_root,
+            {"id": "llm-deepseek", "config": {"apiKeyEnv": "DEEPSEEK_API_KEY", "baseURL": self.endpoint,
                                              "thinking": "disabled",
                                              "retryPolicy": {"mode": "normal", "maxRetries": 0}}},
             *([{"insert": [{"id": "papertrace-paper-tools", "name": str(plugin)}]}] if plugin else []),
