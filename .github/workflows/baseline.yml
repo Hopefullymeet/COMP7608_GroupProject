@@ -1,0 +1,23 @@
+name: Baseline contract tests
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  client-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: tests/baseline
+      - name: Run baseline against client mock
+        working-directory: tests/baseline
+        run: npm test

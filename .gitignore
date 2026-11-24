@@ -4,3 +4,5 @@
 /frontend/src-tauri/.cargo/config.toml
 
 /.versions/
+.DS_Store
+/data-preparation.zip

@@ -1,0 +1,33 @@
+{
+  "run_id": "assistant_full_source_review_20261121",
+  "reviewed_at": "2026-11-21T21:47:02.242070+08:00",
+  "source_files": {
+    "review/cases.jsonl": "74f2492930d3966b3f86f81a7042f05b14de9d9ea8f5137bbbd18ab23f46f888",
+    "review/relations.jsonl": "f73dcbfc00bc19a48e42d56980b7fe1aa37c112ff6311713b0ef3313742e2705",
+    "review/task_inputs.jsonl": "1e858b37b3f20c2be86e0a50ca335e56dba0a2b39054ce0661837da57b0034a1",
+    "manifest.json": "f39ab4dbab9fc63154d45985ef28ddb4b46a2ba4ad007b8ed5a07873492d8988"
+  },
+  "backup_zip_sha256": "feb5b8bfb3eba34bdc3510ab072a0b4ef6b3aec2baf90e66bec7a02891e19a76",
+  "original_pdf_hashes": {
+    "dpr": "2abfc7991519be2b8ce30215905516fdb593218b7bf59e50ece0d8a088a7c4d5",
+    "fid": "a0b8708f35c78bc5799322a91e042f33233a5e48226c400843082c8a76b01175",
+    "s2orc": "f83d85b272d5efd7acb01016732d6577260b3b40fa894da16f2d82efc8597ff7",
+    "qasper": "b15b4378988ed4e553dd312eaf334411abcf1fb28c53b846d360435eb55cd193",
+    "fever": "5d328bad901f488c4cff1dd073b55e30653b29c9c21c48700b926421cb84c9f7",
+    "scifact": "e51a1fab569f2dcb00f7806fe95094e25a34c027140709725d3d05b7a0af9ac7",
+    "drqa": "2203d4ee15f47f79505c9740d3c90395562508895c7a9010e18b373eaebade81",
+    "orqa": "8b3e17f84a58ce9b3183e8bcabfd8a0cc377553068540cd56fb6ff7b16b3e006",
+    "alce": "ae9868f07f0f7ffaae5346778f79b7827d9ec6b13b1e6aae4dff6b2ffc37a2e1",
+    "rarr": "012e1231dc847c4cee6c7cb0e6ffee43f5799f70754930c815db1674ceffeab9",
+    "scicite": "01a4727c45f7418c0135124f4ebe61dc13e4bfebba616cef1a43cde1cf56c32f",
+    "scibert": "42e7bb57b92fbe6077c073edaffaf173728b7b685395700ac255ce0359344268",
+    "specter": "f4b6d4e5d82f64e1e37ec5e8341dfe55f26c89dc49ab781555b95fe0c8b608b2",
+    "scitldr": "680fe20d02db3b07b870a382eae4b04718c30988297032f85fb2b7ab2c549600",
+    "vitaminc": "2afdd1fb8129cbde6f766ecaf017d8c0b73530cffcf5000f6725ff900038b83d",
+    "multifc": "7dc00b44bc27bef040ab2168e151d890b9be88720d1b85df992c5ca6c65d94b6",
+    "eraser": "1fe914b02b96e035408c4bc4c457bc3b48caf444e244fe8d93b373b4540b1765",
+    "fever2": "6d777c1f4e6500a9832c20038674b5f9304a9fb621d2c9ac3c16d271ee01822e"
+  },
+  "annotator_kind": "ai_assistant",
+  "human_adjudicated": 0
+}

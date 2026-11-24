@@ -1,0 +1,19 @@
+{
+  "papers": 18,
+  "pdf_pages": 249,
+  "cases": 84,
+  "relations": 14,
+  "exact_span_checks": 152,
+  "task_types": {
+    "reading_qa": 18,
+    "citation_annotation": 18,
+    "citation_check": 42,
+    "literature_discovery": 3,
+    "paper_comparison": 3
+  },
+  "human_adjudicated": 0,
+  "assistant_source_checked_cases": 84,
+  "assistant_source_checked_relations": 14,
+  "status": "passed",
+  "scope": "Data integrity, not semantic accuracy or model performance"
+}
