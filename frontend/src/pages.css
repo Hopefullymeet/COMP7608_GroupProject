@@ -475,17 +475,45 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
 }
-.settings-layout { display: grid; grid-template-columns: 150px minmax(0, 1fr); min-height: 0; gap: 20px; }
-.settings-layout > nav { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; }
+.settings-layout { display: grid; grid-template-columns: 162px minmax(0, 1fr); min-height: 0; gap: 16px; }
+.settings-layout > nav {
+  display: flex; flex-direction: column; gap: 4px; padding: 8px 12px 0 0;
+  border-inline-end: 1px solid var(--line);
+}
 .settings-content { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 8px 18px 0; }
 .settings-model-panel { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; min-width: 0; }
 .settings-model-panel > .settings-save { margin: 0; padding-top: 10px; border-top: 1px solid var(--line); background: var(--surface); gap: 8px; }
 .settings-content .set-section { grid-template-columns: minmax(0, 1fr); padding: 10px 0 20px; gap: 16px; }
-.preference-row { display: flex; align-items: center; justify-content: space-between; }
+.general-settings h2 { color: var(--ink); }
+.preference-list {
+  padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r);
+  background: color-mix(in srgb, var(--sunk) 35%, var(--surface));
+}
+.preference-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 46px; padding-block: 7px; color: var(--ink-2);
+}
+.preference-row + .preference-row { border-top: 1px solid var(--line); }
+.preference-row > :is(select, .ghost-btn, .side-language) { max-width: 60%; }
+.preference-row .side-language { align-self: center; padding: 0; }
+.preference-row .side-language svg { flex: none; }
+.preference-row :is(select, .ghost-btn) { min-height: 32px; background-color: var(--sunk); }
+.preference-row :is(select, .ghost-btn):where(:not(:hover, :focus-visible)) { border-color: var(--line); }
+.preference-row select { padding: 5px 29px 5px 10px; }
+.preference-row select:where(:not(:disabled)) { color: var(--ink); }
+.preference-row .ghost-btn { padding: 5px 10px; }
+.general-settings > .ghost-btn { justify-self: start; }
+.general-settings > .fine { margin: 0; }
+@supports (appearance: base-select) {
+  .preference-row select { padding-inline-end: 10px; }
+}
 @media (max-width: 620px) {
   .dialog.settings-window { padding: 14px; width: calc(100vw - 18px); }
   .settings-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 12px; }
-  .settings-layout > nav { flex-direction: row; flex-wrap: wrap; }
+  .settings-layout > nav {
+    flex-direction: row; flex-wrap: wrap; padding: 0 0 8px;
+    border-inline-end: 0; border-bottom: 1px solid var(--line);
+  }
   .settings-layout > nav .side-item { width: auto; }
   .settings-content .form-grid { grid-template-columns: minmax(0, 1fr); }
 }

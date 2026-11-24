@@ -343,8 +343,6 @@
   .app:has(.audit-header-actions, .wiki-page) > .main { min-height: 0; }
 }
 
-.settings-content .preference-row { min-height: 44px; border-bottom: 1px solid var(--line); gap: 12px; }
-.preference-row select { color: var(--ink); background: var(--sunk); border: 1px solid var(--line); padding: 5px 8px; border-radius: 6px; }
 .chat .answer, .chat .msg.user { font-size: var(--chat-size, 14px); }
 .dialog.first-run-settings .set-section { grid-template-columns: 1fr; }
 html:root[data-theme=dark] {
