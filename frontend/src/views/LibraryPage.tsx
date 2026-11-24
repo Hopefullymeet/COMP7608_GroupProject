@@ -394,7 +394,7 @@ export function LibraryPage() {
         rows.find((row) => row.paper_id === target)?.topic_ids.includes(item.id))}
         initialTopic={topic && (!target || rows.find((row) => row.paper_id === target)?.topic_ids.includes(topic)) ? topic : undefined}
         initialFiles={importing} paperId={target} onClose={() => setImporting(undefined)}
-        onImported={(paper) => setFocus(paper)} onOpenTopic={!target ? (id) => act.openTopic(id, 'synthesis') : undefined} />}
+        onImported={(paper) => setFocus(paper)} onOpenTopic={!target ? (id) => act.openTopic(id, 'read') : undefined} />}
       {files && (
         <Dialog title={tr('Import papers')} onClose={() => setFiles(undefined)}>
           <p>{demo ? tr('Sample material selected for the contract demo.') : tr('Review the selected material.')}</p>

@@ -8,13 +8,11 @@ import { useRead } from '../data/WorkspaceProvider'
 import { Discover } from './Discover'
 import { Read } from './Read'
 import { Compare } from './Compare'
-import { LiteratureWorkbench } from './LiteratureWorkbench'
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'discover', label: 'Discover', icon: 'compass' },
   { id: 'read', label: 'Read & ask', icon: 'book' },
   { id: 'compare', label: 'Compare', icon: 'columns' },
-  { id: 'synthesis', label: 'Synthesize', icon: 'note' },
 ]
 
 function ManuscriptLinks({ topicId }: { topicId: string }) {
@@ -36,7 +34,7 @@ export function TopicView({ topicId, tab, windowControls, comparison, liveResear
   const session = state.sessions.find((s) => s.id === state.activeSessionId && s.topicId === topicId)
   const request = state.messages.find((m) => m.sessionId === session?.id && m.role === 'user')
   const papers = papersOfTopic(state, topicId)
-  const tabs = TABS.filter((item) => item.id === 'synthesis' ? liveResearch : !state.mainline || (item.id !== 'compare' || !!comparison))
+  const tabs = TABS.filter((item) => !state.mainline || item.id !== 'compare' || !!comparison)
 
   return (
     <HeaderActions.Provider value={actions}><div className="topic">
@@ -124,7 +122,7 @@ export function TopicView({ topicId, tab, windowControls, comparison, liveResear
             <p>{tr('The prototype only scripts')}{' '}<strong>{tr('Evidence in scientific QA')}</strong>{tr('. Other topics and their sessions only show how lists behave.')}</p>
             {state.topics.some((t) => t.id === DEMO_TOPIC) && <button className="primary" onClick={() => act.enterTopic(DEMO_TOPIC)}>{tr('Open the scripted topic')}</button>}
           </div>
-        ) : tab === 'synthesis' && liveResearch ? <LiteratureWorkbench key={topicId} topicId={topicId} /> : tab === 'discover' ? <Discover /> : tab === 'read' ? <Read /> : (comparison ?? <Compare />)}
+        ) : tab === 'discover' ? <Discover /> : tab === 'read' ? <Read /> : (comparison ?? <Compare />)}
       </div>
     </div></HeaderActions.Provider>
   )

@@ -240,7 +240,6 @@ export const zhCN: Readonly<Record<string, string>> = {
   'Audit {0}': '核查 {0}',
   'No identifiable in-text citations. Check that this PDF has selectable text and a reference list.': '未识别到正文引用。请检查 PDF 是否可选择文字且包含参考文献。',
   'Some citation markers could not be matched to the bibliography.': '一些正文引用标记未能匹配到参考文献。',
-  'Synthesize': '综合研究',
   'Literature synthesis': '文献综合',
   'Language': '语言',
   '{0} visible candidates': '显示 {0} 篇候选论文',
