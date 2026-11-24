@@ -111,7 +111,7 @@ function ComparisonTable({
                           >
                             {tr(c.status.replaceAll('_', ' '))}
                           </small>
-                          <p>{c.text}</p>
+                          <p>{c.status === 'missing' && c.text === 'No source passage was established.' ? tr(c.text) : c.text}</p>
                           {c.anchor_ids.map((a) => (
                             <EvidenceLink id={a} key={a} />
                           ))}
@@ -206,14 +206,16 @@ function ComparisonTable({
 export function ComparePage() {
   const { tr } = useLanguage()
   const { state, act } = useStore(),
-    { prepare, busy } = useWorkspace()
+    { prepare, busy, setComparisonSlot } = useWorkspace()
   const topic = state.route.view === 'topic' ? state.route.topicId : ''
   const lib = useRead('library.list', { topic_id: topic }, !!topic)
   const records = useRead('comparison.list', { topic_id: topic }, !!topic)
   const [a, setA] = useState(''),
     [b, setB] = useState(''),
-    [question, setQuestion] = useState('How do these papers compare?')
-  const [dims, setDims] = useState('Method, Data split, Metrics, Baseline, Conditions')
+    [questionDraft, setQuestion] = useState<string>(),
+    [dimensionDraft, setDims] = useState<string>()
+  const question = questionDraft ?? tr('How do these papers compare?')
+  const dims = dimensionDraft ?? tr('Method, Data split, Metrics, Baseline, Conditions')
   const options = (lib?.items ?? []).flatMap((p) =>
     p.source_versions.map((v) => ({
       id: v.source_version_id,
@@ -227,7 +229,7 @@ export function ComparePage() {
   const dimensions = [
     ...new Set(
       dims
-        .split(',')
+        .split(/[,，、]/)
         .map((d) => d.trim())
         .filter(Boolean),
     ),
@@ -289,6 +291,7 @@ export function ComparePage() {
             <Icon name="columns" size={15} />{' '}{tr('Compare papers')}
           </button>
         </section>
+        <div key={topic} data-topic={topic} ref={setComparisonSlot} />
         {records?.items.map((c) => (
           <ComparisonTable
             key={c.revision}

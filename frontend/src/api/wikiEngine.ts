@@ -48,6 +48,7 @@ function topicName(source: WikiMaterial) {
 }
 
 export function createWikiEngine(options: {
+  allowEdits?: () => boolean
   records: () => Record<string, StoredWiki>
   material: (topic: string) => WikiMaterial
   model: () => Model | undefined
@@ -132,7 +133,9 @@ export function createWikiEngine(options: {
     const remember = /^\s*(?:please\s+)?(?:remember(?:\s+that)?|记住|请记住)[\s:：,，]*(.+)/is.exec(message)
     const forget = /^\s*(?:please\s+)?(?:forget|忘掉|忘记|请忘记)[\s:：,，]*(.+)/is.exec(message)
     let text: string
-    if (remember) {
+    if ((remember || forget) && options.allowEdits?.() === false) {
+      text = zh ? "当前为仅回答模式，记忆未修改。" : "Answer-only mode. Memory was not changed."
+    } else if (remember) {
       const added = entry('preference', remember[1], [], 'chat', true)
       w.entries.push(added)
       changes.push({ op: 'add', entry_id: added.entry_id, text: added.text })

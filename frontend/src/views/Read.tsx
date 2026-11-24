@@ -56,20 +56,27 @@ function WorkStep({ step }: { step: AgentStep }) {
   const target = query || papers.join('、') || activity?.paper
   const outcome = result ? tr('{0} results', result[1]) : step.detail && tr(step.detail)
   const icon = step.title.includes('search') ? 'search' : step.title === 'paper_read' ? 'book' : 'tool'
-  const label = <><Icon name={icon} size={14} /> {tr(step.title)}{target && <> · {target}</>}</>
+  const label = <>
+    <span className="work-step-icon"><Icon name={icon} size={14} /></span>
+    <span className="work-step-copy"><strong>{tr(step.title)}</strong>
+      {target && <span className="work-step-target">{target}</span>}
+    </span>
+  </>
   if (!fragments.length && !step.call && !activity?.paper)
-    return <li>{label}{outcome && <small> · {outcome}</small>}</li>
-  return <li><details><summary>{label}</summary>
-    {query && activity?.paper && <p>{activity.paper}</p>}
-    {outcome && <small>{outcome}</small>}
-    {step.call && <code>{step.call}</code>}
-    {fragments.map(fragment => <blockquote key={fragment.passage_id}>
-      <strong>{papers.length > 1 && fragment.paper + ' · '}
-        {fragment.page ? tr('PDF page {0}', fragment.page) : tr('Abstract')}
-        {fragment.ordinal != null && ' · ' + tr('Passage {0}', fragment.ordinal + 1)}
-      </strong>
-      <p>{fragment.excerpt}</p>
-    </blockquote>)}
+    return <li className="work-step-row">{label}{outcome && <small>{outcome}</small>}</li>
+  return <li><details><summary className="work-step-row">{label}<Icon className="work-chevron" name="chevronRight" size={13} /></summary>
+    <div className="work-step-evidence">
+      {query && activity?.paper && <p>{activity.paper}</p>}
+      {outcome && <small>{outcome}</small>}
+      {step.call && <code>{step.call}</code>}
+      {fragments.map(fragment => <blockquote key={fragment.passage_id}>
+        <strong>{papers.length > 1 && fragment.paper + ' · '}
+          {fragment.page ? tr('PDF page {0}', fragment.page) : tr('Abstract')}
+          {fragment.ordinal != null && ' · ' + tr('Passage {0}', fragment.ordinal + 1)}
+        </strong>
+        <p>{fragment.excerpt}</p>
+      </blockquote>)}
+    </div>
   </details></li>
 }
 
@@ -84,9 +91,15 @@ function WorkSteps({ run, done }: { run: AgentRun; done: boolean }) {
   if (!visible.length) return null
   const actions = [...new Set(visible.map(step => tr(step.title)))].join(' · ')
   return <details key={String(done) + prefs.collapse} open={!done || prefs.collapse === 'never'} className="chat-work-steps">
-    <summary>{tr(status)}{duration && ' · ' + duration}</summary>
+    <summary className="work-heading">
+      <Icon name="trace" size={16} /><strong>{tr('Research activity')}</strong>
+      <span className="work-status" data-status={run.status}>{tr(status)}</span>
+      {duration && <small>{duration}</small>}
+      <Icon className="work-chevron" name="chevronRight" size={14} />
+    </summary>
     <details className="work-step-group" open={prefs.steps === 'detailed' || !done}>
-      <summary>{actions}</summary>
+      <summary><span>{actions}</span><small>{count(tr, visible.length, 'step')}</small>
+        <Icon className="work-chevron" name="chevronRight" size={13} /></summary>
       <ul>{visible.map(step => <WorkStep key={step.id} step={step} />)}</ul>
     </details>
   </details>
@@ -803,7 +816,14 @@ function ReadingSplit({ selections, onSource, reader, annotations, askRegion, bl
         </button>}
         <button className="icon-btn sm" type="button" title={paperLabel} aria-label={paperLabel}
           aria-controls={paperId} aria-expanded={collapsed !== 'paper'}
-          onClick={() => setCollapsed(collapsed === 'paper' ? undefined : 'paper')}>
+          onClick={() => {
+            if (collapsed === 'paper') {
+              setCollapsed(undefined)
+            } else {
+              act.closeEvidence()
+              setCollapsed('paper')
+            }
+          }}>
           <Icon name="panelRight" size={16} />
         </button>
       </>} />

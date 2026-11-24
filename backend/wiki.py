@@ -351,7 +351,7 @@ class TopicWiki:
                         section = "body"
                     else:
                         section = "abstract_or_front_matter" if has_abstract else "front_matter"
-            sources[a["anchor_id"]] = dict(paper_id=a.get("paper_id"), title=papers.get(a.get("paper_id"), ""), quote=a.get("quote", ""),
+            sources[a["anchor_id"]] = dict(paper_id=a.get("paper_id"), source_version_id=version, title=papers.get(a.get("paper_id"), ""), quote=a.get("quote", ""),
                                           page=location.get("page"), scope=a.get("read_scope"), section=section)
         return sources
 
@@ -448,7 +448,8 @@ class TopicWiki:
         result["map_nodes"] = nodes
         candidates = [e for e in wiki["entries"] if e["kind"] == "finding" and e["anchor_ids"]]
         result["map_sources"] = self.map_sources(topic, nodes,
-                                                 (a for e in candidates for a in e["anchor_ids"]))
+                                                 [a for e in candidates for a in e["anchor_ids"]] +
+                                                 [a for m in wiki["thread"] for a in m.get("anchor_ids", [])])
         result["home_points"] = []
         for entry in candidates:
             anchors = entry["anchor_ids"]
@@ -681,6 +682,9 @@ class TopicWiki:
             model = self.model()
             material = self.material(topic)
             wiki = self.load(topic)
+            evidence_ids = [a for entry in wiki["entries"] for a in entry["anchor_ids"]]
+            evidence = self.map_sources(topic, {}, evidence_ids)
+            material["evidence"] = {a: {"title": src["title"], "quote": src["quote"][:900]} for a, src in evidence.items() if src.get("quote")}
             material["personal_preferences"] = host.personal_context(wiki["thread"][-1]["text"], wiki=True)
             material["allow_wiki_edits"] = host.user_profile()["wiki_access"] == "edit"
         message = wiki["thread"][-1]["text"]
@@ -699,7 +703,10 @@ class TopicWiki:
                 if answer.get("changes") and host.user_profile()["wiki_access"] == "read":
                     reply = ("当前仅允许回答，Wiki 条目未修改。" if CJK.search(message)
                              else "Wiki chat is read-only. No entries were changed.")
+                refs = answer.get("anchor_ids")
+                anchors = list(dict.fromkeys(a for a in refs if isinstance(a, str) and a in material["evidence"]))[:8] if isinstance(refs, list) else []
                 wiki["thread"].append({"message_id": self.identifier(), "role": "assistant", "text": reply,
+                                       **({"anchor_ids": anchors} if anchors else {}),
                                        "created_at": self.now(), **({"changes": changes} if changes else {})})
                 wiki["thread"] = wiki["thread"][-100:]
                 wiki["pending_reply"] = False
@@ -744,8 +751,8 @@ class TopicWiki:
 
     # ---------- model calls ----------
 
-    def request(self, model, system, data, parse):
-        payload = {"model": model["model"], "max_tokens": 3000, "stream": False, "messages": [
+    def request(self, model, system, data, parse, *, max_tokens=3000):
+        payload = {"model": model["model"], "max_tokens": max_tokens, "stream": False, "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": json.dumps(data, ensure_ascii=False)},
         ]}
@@ -788,11 +795,22 @@ class TopicWiki:
             return {"headline": result["headline"], "summary": [p for p in result["summary"] if isinstance(p, str)],
                     "entries": [e for e in entries if isinstance(e, dict)] if isinstance(entries, list) else []}
 
-        return self.request(model, system, {
+        data = {
             "material": material,
             "observations": [{k: e[k] for k in ("kind", "text", "anchor_ids", "origin")} for e in captured],
             "user_entries": [{"kind": e["kind"], "text": e["text"]} for e in kept],
-        }, parse)
+        }
+        # The built-in model can fit a full cited topic summary. Custom endpoints
+        # retain the existing token limit since their output capacity is unknown.
+        budget = 8192 if model["endpoint"] == ENDPOINT else 3000
+        try:
+            return self.request(model, system, data, parse, max_tokens=budget)
+        except ModelFailure as failure:
+            if failure.issue.get("details", {}).get("model_output_stage") != "truncated":
+                raise
+        concise = (" Keep the summary to two short paragraphs and select at most eight entries total. "
+                   "Use only the most relevant evidence IDs for each finding and keep each reason to one sentence.")
+        return self.request(model, system + concise, data, parse, max_tokens=budget)
 
     def model_reply(self, model, material, wiki, message):
         system = (
@@ -809,6 +827,7 @@ class TopicWiki:
                 raise ValueError
             return result
 
+        system += " Return anchor_ids listing only IDs from material.evidence whose quoted passages directly support your reply."
         system += " If allow_wiki_edits is false, answer in read-only mode, with no changes or claims of edits."
         system += (" For research map changes use map_add, map_rename or map_remove with entry_id as the target "
                    "(empty string for root), and text. Delete and root rename requests are proposals for review. "
@@ -880,10 +899,11 @@ def local_reply(wiki, message):
     if forget:
         if not matches:
             return {"reply": "Wiki 中没有找到相关内容。" if zh else "I couldn't find that in this topic's Wiki.", "changes": []}
-        return {"reply": "已从 Wiki 中移除。" if zh else "Removed from this topic's Wiki.",
+        return {"reply": "已提交删除建议，请确认。" if zh else "Removal proposed. Please confirm.",
                 "changes": [{"op": "remove", "entry_id": matches[0]["entry_id"]}]}
     if not matches:
         return {"reply": "这个主题的 Wiki 里还没有相关内容。" if zh
                 else "There is nothing about that in this topic's Wiki yet.", "changes": []}
     lead = "Wiki 中记录了：" if zh else "Here is what the Wiki records:"
-    return {"reply": "\n".join([lead, *("- " + e["text"] for e in matches)]), "changes": []}
+    return {"reply": "\n".join([lead, *("- " + e["text"] for e in matches)]), "changes": [],
+            "anchor_ids": [a for e in matches for a in e["anchor_ids"]]}

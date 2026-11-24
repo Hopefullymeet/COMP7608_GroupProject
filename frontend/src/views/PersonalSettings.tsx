@@ -1,7 +1,7 @@
 import { Dialog } from '../components/PageHead'
 import { type Shortcut, applyPreferencesFile, options, setPreference, usePreferences } from '../data/preferences'
 import { version } from '../../src-tauri/tauri.conf.json'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLanguage } from '../i18n'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import type { PersonalProfile } from '../api/services'
@@ -17,6 +17,15 @@ export function PersonalSettings() {
   const [configError,setConfigError] = useState('')
   const [recording,setRecording] = useState<Shortcut>()
   const [shortcutError,setShortcutError] = useState(false)
+  const permission = useRef<HTMLSelectElement>(null)
+  const focused = useRef(false)
+  useEffect(()=>{
+    if (profile && !busy && !focused.current && permission.current?.closest('.wiki-permission-target')) {
+      focused.current = true
+      permission.current.scrollIntoView({block:'center'})
+      permission.current.focus()
+    }
+  },[profile,busy])
   const labels = {
     appearance: ['Appearance','Light','Dark','Follow system'],
     font: ['Conversation font size','14 px','16 px','18 px','20 px'],
@@ -30,29 +39,31 @@ export function PersonalSettings() {
     settingsKey: ['Open settings','Ctrl / ⌘ + ,','Ctrl / ⌘ + .'],
     links: ['External paper links','Open directly','Confirm before opening','In sidebar'],
   }
-  return <section className="set-section"><h2>{tr('General settings')}</h2>
-    <label className="preference-row">{tr('New reading sessions')}<select disabled={!profile || busy} value={profile?.session_access ?? 'edit'}
-      onChange={e=>profile && void write('profile.save',{...profile,session_access:e.target.value as 'read'|'edit'}).catch(report)}>
-      <option value="edit">{tr('Allow Wiki and memory updates')}</option><option value="read">{tr('Save conversation only')}</option></select></label>
-    <div className="preference-row"><label htmlFor="wiki-permission">{tr('Assistant edits in Wiki chat')}</label>
-      <select id="wiki-permission" disabled={!profile || busy} value={profile?.wiki_access ?? 'edit'}
-        onChange={e=>profile && void write('profile.save',{...profile,wiki_access:e.target.value as 'read'|'edit'}).catch(report)}>
-        <option value="edit">{tr('Allow entry edits')}</option><option value="read">{tr('Answer only')}</option></select></div>
-    <div className="preference-row"><span>{tr('Language')}</span><LanguagePicker/></div>
-    {(Object.keys(options) as (keyof typeof options)[]).map(key=>key === 'findKey' || key === 'settingsKey' ? <div className="preference-row" key={key}><span>{tr(labels[key][0])}</span>
-      <button className="ghost-btn" onClick={()=>{setRecording(key);setShortcutError(false)}} onBlur={()=>setRecording(undefined)}
-        onKeyDown={e=>{
-          if (recording !== key) return
-          e.stopPropagation()
-          if (e.key === 'Tab') return
-          e.preventDefault()
-          if (e.key === 'Escape') {setRecording(undefined);return}
-          if (['Meta','Control','Shift','Alt'].includes(e.key)) return
-          if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || !setPreference(key,e.key.toLowerCase())) {setShortcutError(true);return}
-          setRecording(undefined);setShortcutError(false)
-        }}>{recording === key ? tr(shortcutError ? 'Choose a different shortcut' : 'Press Ctrl / ⌘ and a key') : 'Ctrl / ⌘ + ' + prefs[key].toUpperCase()}</button></div> : <label className="preference-row" key={key}>
-      {tr(labels[key][0])}<select value={prefs[key]} onChange={e=>setPreference(key,e.target.value)}>
-        {options[key].map((value,i)=><option key={value} value={value}>{tr(labels[key][i+1])}</option>)}</select></label>)}
+  return <section className="set-section general-settings"><h2>{tr('General settings')}</h2>
+    <div className="preference-list">
+      <label className="preference-row">{tr('New reading sessions')}<select disabled={!profile || busy} value={profile?.session_access ?? 'edit'}
+        onChange={e=>profile && void write('profile.save',{...profile,session_access:e.target.value as 'read'|'edit'}).catch(report)}>
+        <option value="edit">{tr('Allow Wiki and memory updates')}</option><option value="read">{tr('Save conversation only')}</option></select></label>
+      <div className="preference-row"><label htmlFor="wiki-permission">{tr('Assistant edits in Wiki chat')}</label>
+        <select ref={permission} id="wiki-permission" disabled={!profile || busy} value={profile?.wiki_access ?? 'edit'}
+          onChange={e=>profile && void write('profile.save',{...profile,wiki_access:e.target.value as 'read'|'edit'}).catch(report)}>
+          <option value="edit">{tr('Allow entry edits')}</option><option value="read">{tr('Answer only')}</option></select></div>
+      <div className="preference-row"><span>{tr('Language')}</span><LanguagePicker/></div>
+      {(Object.keys(options) as (keyof typeof options)[]).map(key=>key === 'findKey' || key === 'settingsKey' ? <div className="preference-row" key={key}><span>{tr(labels[key][0])}</span>
+        <button className="ghost-btn" onClick={()=>{setRecording(key);setShortcutError(false)}} onBlur={()=>setRecording(undefined)}
+          onKeyDown={e=>{
+            if (recording !== key) return
+            e.stopPropagation()
+            if (e.key === 'Tab') return
+            e.preventDefault()
+            if (e.key === 'Escape') {setRecording(undefined);return}
+            if (['Meta','Control','Shift','Alt'].includes(e.key)) return
+            if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || !setPreference(key,e.key.toLowerCase())) {setShortcutError(true);return}
+            setRecording(undefined);setShortcutError(false)
+          }}>{recording === key ? tr(shortcutError ? 'Choose a different shortcut' : 'Press Ctrl / ⌘ and a key') : 'Ctrl / ⌘ + ' + prefs[key].toUpperCase()}</button></div> : <label className="preference-row" key={key}>
+        {tr(labels[key][0])}<select value={prefs[key]} onChange={e=>setPreference(key,e.target.value)}>
+          {options[key].map((value,i)=><option key={value} value={value}>{tr(labels[key][i+1])}</option>)}</select></label>)}
+    </div>
     <button className="ghost-btn" onClick={()=>{setConfig(JSON.stringify(prefs,null,2));setConfigError('')}}>{tr('Edit interface configuration')}</button>
     {config !== undefined && <Dialog title={tr('Interface configuration')} onClose={()=>setConfig(undefined)}>
       <textarea aria-label={tr('Interface configuration')} className="text-field" rows={13} value={config} onChange={e=>setConfig(e.target.value)}/>

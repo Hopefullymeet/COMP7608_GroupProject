@@ -550,14 +550,23 @@ class ModelAgent:
         fixed = self.fixed_search(question, sources) if mode == "fixed" else {}
         if mode == "fixed":
             prompt += "\nUse only the following fixed retrieval results: " + json.dumps(list(fixed.values()), ensure_ascii=False)
-        tools = None if mode == "fixed" else ResearchTools(self.workspace, sources, wiki)
+        passage_limit, tool_limit = 36, 18
+        if seed_readings:
+            passage_limit = min(144, max(72, 16 * len(sources)))
+            tool_limit = min(48, max(32, 24 + 2 * len(sources)))
+        tools = None if mode == "fixed" else ResearchTools(self.workspace, sources, wiki,
+                                                            passage_limit=passage_limit)
         if tools and seed_readings:
             initial = tools.initial_readings(question)
             if self.reviewer:
                 initial = self.reviewer.rank(question, initial)
             prompt = self.include_readings(prompt, initial, reading_progress)
             fixed = {p["passage_id"]: p for p in initial}
-        return self.run(prompt, cancelled, tools, progress, reading_progress, fixed=fixed, preview=preview, reading=seed_readings)
+            # Previews are already available to the model. They use their own allowance.
+            tools.read_ids.update(fixed)
+            tools.passage_limit += len(fixed)
+        return self.run(prompt, cancelled, tools, progress, reading_progress, fixed=fixed, preview=preview,
+                        reading=seed_readings, tool_limit=tool_limit, max_steps=16 if seed_readings else 12)
 
     def fixed_search(self, question, sources, limit=36):
         terms = list(dict.fromkeys(re.findall(r"[^\W_]+", question.lower())))[:12]
@@ -610,10 +619,11 @@ class ModelAgent:
         except (ValueError, IndexError, KeyError, TypeError):
             raise failure("MODEL_OUTPUT_INVALID") from None
 
-    def run(self, prompt, cancelled, tools=None, progress=None, reading_progress=None, *, fixed=None, max_steps=12, preview=None, reading=False):
+    def run(self, prompt, cancelled, tools=None, progress=None, reading_progress=None, *,
+            fixed=None, max_steps=12, preview=None, reading=False, tool_limit=18):
         self.check()
         started = time.monotonic()
-        deadline = started + (90 if max_steps == 4 else 180)
+        deadline = started + (90 if max_steps == 4 else 240 if reading else 180)
         messages = [{"role": "system", "content": AGENT_POLICY}, {"role": "user", "content": prompt}]
         seen, trace = dict(fixed or {}), []
         usage = {"model_steps": 0, "tool_calls": 0, "input_tokens": 0, "output_tokens": 0}
@@ -721,20 +731,23 @@ class ModelAgent:
                         if not isinstance(args, dict):
                             raise ValueError
                         activity = {k: args[k] for k in ("query", "version") if isinstance(args.get(k), str)}
-                        result = tools.execute(name, args) if not limited and usage["tool_calls"] <= 18 else {"limit_reached": True}
+                        result = (tools.execute(name, args) if not limited and usage["tool_calls"] <= tool_limit
+                                  else {"limit_reached": True})
                         if isinstance(result, dict) and result.get("limit_reached"):
                             limited = True
-                            detail = "Evidence budget reached."
+                            rows = result.get("passages", [])
+                            detail = (f"{len(rows)} result(s). Evidence budget reached."
+                                      if rows else "Evidence budget reached.")
                         else:
                             rows = result if isinstance(result, list) else [result]
                             detail = f"{len(rows)} result(s)."
-                            if name == "paper_read":
-                                seen.update((row["passage_id"], row) for row in rows)
-                                activity["passages"] = [reading_fragment(row) for row in rows]
                             if name == "paper_search":
                                 if self.reviewer:
                                     result = self.reviewer.rank(args["query"], rows)
                                 detail += " " + args["query"][:180]
+                        if name == "paper_read" and rows:
+                            seen.update((row["passage_id"], row) for row in rows)
+                            activity["passages"] = [reading_fragment(row) for row in rows]
                     except (KeyError, ValueError, TypeError, AttributeError):
                         detail = "Invalid arguments or passage outside the confirmed scope."
                         result = {"error": detail}

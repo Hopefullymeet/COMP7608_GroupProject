@@ -1,6 +1,8 @@
 import { useLanguage } from '../i18n'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Dialog } from '../components/PageHead'
+import { createPortal } from 'react-dom'
+import { Icon } from '../components/Icon'
 import { ScopeDetails } from '../components/ScopeDetails'
 import { errorText, type Client, type Method, type Methods, type WorkspaceTask } from '../api/contract'
 import { operation, retryWrite, useTask } from './useTask'
@@ -12,6 +14,7 @@ type Workspace = {
   tick: number
   demo: boolean
   busy: boolean
+  setComparisonSlot: (element: HTMLDivElement | null) => void
   refresh: () => void
   report: (error: unknown) => void
   write: <M extends WriteMethod>(method: M, params: Payload<Methods[M][0]>) => Promise<Methods[M][1]>
@@ -61,8 +64,12 @@ export function WorkspaceProvider({
   const report = useCallback((cause: unknown) => setNotice(errorText(cause)), [])
   const refresh = useCallback(() => setTick((t) => t + 1), [])
   const taskKey = 'papertrace-workspace-task/' + (demo ? 'demo' : 'rpc')
+  const comparisonKey = taskKey + '/comparison'
+  const [comparisonSlot, setComparisonSlot] = useState<HTMLDivElement | null>(null)
+  const [comparison, setComparison] = useState<{ id: string; topic: string }>()
   const task = useTask(api, () => {
     localStorage.removeItem(taskKey)
+    localStorage.removeItem(comparisonKey)
     refresh()
   })
   const attached = useRef(false)
@@ -70,8 +77,12 @@ export function WorkspaceProvider({
     if (attached.current) return
     attached.current = true
     const saved = localStorage.getItem(taskKey)
-    if (saved) task.attach(saved)
-  }, [taskKey, task])
+    if (saved) {
+      const topic = localStorage.getItem(comparisonKey)
+      if (topic) setComparison({ id: saved, topic })
+      task.attach(saved)
+    }
+  }, [taskKey, comparisonKey, task])
   useEffect(() => {
     if (task.task) localStorage.setItem(taskKey, task.task)
   }, [task.task, taskKey])
@@ -108,8 +119,29 @@ export function WorkspaceProvider({
     return sent
   }
   const busy = Boolean(task.task || task.busy || task.confirmation || pending)
+  function rememberComparison(input: WorkspaceTask | undefined, id?: string) {
+    if (id && input?.kind === 'paper_comparison') {
+      localStorage.setItem(taskKey, id)
+      localStorage.setItem(comparisonKey, input.topic_id)
+      setComparison({ id, topic: input.topic_id })
+    }
+  }
+  const inline = comparison && comparisonSlot?.dataset.topic === comparison.topic &&
+    (!task.task || task.task === comparison.id) ? comparisonSlot : null
+  const taskNotice = task.error || task.connectionError || task.status
+  const readCount = task.preview.progress.match(/^paper_read: (\d+) result\(s\)\./)?.[1]
+  const stageLabels: Record<string, string> = {
+    read: 'Reading the selected papers', reading: 'Reading the selected papers',
+    paper_search: 'Searching for relevant passages', paper_read: 'Reviewing source passages',
+    align: 'Aligning comparison dimensions', compare: 'Building the comparison table',
+  }
   return (
-    <Context.Provider value={{ api, tick, report, refresh, write, prepare: async (input, onPrepared, startImmediately) => { await task.prepare(input, { onPrepared, startImmediately }) }, demo, busy }}>
+    <Context.Provider value={{ api, tick, report, refresh, write, setComparisonSlot, prepare: async (input, onPrepared, startImmediately) => {
+      if (busy) return
+      setComparison(undefined)
+      const started = await task.prepare(input, { onPrepared, startImmediately })
+      rememberComparison(input, started?.task_id)
+    }, demo, busy }}>
       {children}
       {task.confirmation && (
         <Dialog title={tr('Confirm task scope')} onClose={task.dismiss}>
@@ -129,13 +161,31 @@ export function WorkspaceProvider({
             <button className="ghost-btn" onClick={task.dismiss}>
               {tr('Cancel')}
             </button>
-            <button className="primary" disabled={task.busy} onClick={task.start}>
+            <button className="primary" disabled={task.busy} onClick={async () => {
+              const input = task.confirmation?.input
+              const started = await task.start()
+              if (input?.kind === 'paper_comparison') rememberComparison(input, started?.task_id)
+            }}>
               {tr('Confirm and start')}
             </button>
           </div>
         </Dialog>
       )}
-      {task.task && (
+      {inline && (task.task || taskNotice) && createPortal(
+        <section className="card result-card comparison-progress">
+          <header><Icon name="columns" size={18} /><h2>{tr('Comparison progress')}</h2></header>
+          <div className="comparison-progress-body">
+            <p role="status">{taskNotice ? tr(taskNotice) : readCount
+              ? tr('Source passages reviewed in this batch · {0}', readCount)
+              : tr(stageLabels[task.preview.stage ?? ''] || 'Comparing the selected papers')}</p>
+            <div className="lib-tools">
+              {task.task && <button className="ghost-btn sm" disabled={task.busy} onClick={task.cancel}>{tr('Cancel task')}</button>}
+              {task.connectionError && <button className="ghost-btn sm" onClick={task.reconnect}>{tr('Reconnect')}</button>}
+              {!task.task && <button className="ghost-btn sm" onClick={task.clearNotice}>{tr('Close')}</button>}
+            </div>
+          </div>
+        </section>, inline)}
+      {task.task && !inline && (
         <div className="mainline-task-actions" role="status">
           {tr(task.preview.progress || 'Task running')}
           <button className="ghost-btn sm" onClick={task.cancel}>
@@ -146,7 +196,7 @@ export function WorkspaceProvider({
           </button>
         </div>
       )}
-      {(notice || task.error || task.connectionError || task.status) && (
+      {(notice || (!inline && taskNotice)) && (
         <section className="mainline-task-actions workspace-notice" aria-label={tr('Workspace notice')}>
           <p role="alert">{tr(notice || task.error || task.connectionError || task.status)}</p>
           <button

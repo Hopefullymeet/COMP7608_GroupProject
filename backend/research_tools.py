@@ -24,7 +24,7 @@ STRING = {"type": "string"}
 
 
 class ResearchTools:
-    def __init__(self, workspace, sources, wiki, selection=None):
+    def __init__(self, workspace, sources, wiki, selection=None, *, passage_limit=36):
         self.database = workspace / "workspace.sqlite3"
         self.sources = {s["source_version_id"]: s for s in sources}
         self.full = [v for v, s in self.sources.items() if s.get("available_scope") == "full_text"]
@@ -32,7 +32,8 @@ class ResearchTools:
                           for v, s in self.sources.items() for p in s.get("passages", [])}
         self.wiki = wiki
         self.selection = selection
-        self.reads = 0
+        self.passage_limit = passage_limit
+        self.read_ids = set()
         if selection is not None:
             self.schemas = [function("paper_read", "Read one approved passage by its exact ID.", {"id": STRING})]
         else:
@@ -130,5 +131,10 @@ class ResearchTools:
                     offset = self.sources[version].get("body_starts", {}).get(key)
                     if offset:
                         found[key]["body_starts_at"] = offset
-        self.reads += len(found)
-        return {"limit_reached": True} if self.reads > 36 else list(found.values())
+        remaining = self.passage_limit - len(self.read_ids)
+        new_ids = [pid for pid in found if pid not in self.read_ids]
+        self.read_ids.update(new_ids[:remaining])
+        passages = [item for pid, item in found.items() if pid in self.read_ids]
+        if len(new_ids) > remaining:
+            return {"limit_reached": True, "passages": passages}
+        return passages

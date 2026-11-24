@@ -439,17 +439,17 @@ export function CitationPage() {
     <PageHead onBack={selected ? () => { openReport(undefined); setTopic('') } : undefined} backDisabled={busy} sub={tr('Check a manuscript against its selected sources')} trace title={tr('Citation check')} icon="shield">
       <div className="header-actions audit-header-actions" ref={setActions} />
     </PageHead>
-    <div className="page-body scroll">
+    <div className={selected ? 'page-body scroll' : 'page-body topic-chooser-body'}>
       {!selected ? <section className="audit-chooser">
         <TopicChooser onSelect={setTopic} />
-        {history && history.length > 0 && <>
+        {history && history.length > 0 && <section className="audit-history" aria-label={tr('Audit history')}>
           <h3>{tr('Audit history')}</h3>
           <div className="audit-options">{history.map(item => <button key={item.report_id} className="audit-option"
             onClick={() => { openReport(item); setTopic(item.topic_id) }}>
             <span><strong>{item.name}</strong><small className="audit-history-meta">{item.topic_title} · {tr('Check {0}', item.number)}
               {item.started_at && ' · ' + new Date(item.started_at).toLocaleString(language)}</small></span>
             <span aria-hidden="true">›</span></button>)}</div>
-        </>}
+        </section>}
       </section> : demo ? <Manuscripts topic={topic} key={topic}/> : <PdfAudit topic={topic} initialReport={opened} key={topic}/>}
     </div>
   </div></HeaderActions.Provider>

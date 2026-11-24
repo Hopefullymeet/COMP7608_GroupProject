@@ -7,7 +7,21 @@ import { useLanguage } from '../i18n'
 import type { WikiSource } from './WikiPage'
 import './wiki-directory.css'
 
-export function WikiDirectory({wiki, title, edit, Source, refresh, busy}: {wiki: Wiki; title: string; edit: (p: WikiEdit) => Promise<boolean>; Source: WikiSource['Source']; refresh:()=>void; busy:boolean}) {
+function findingsEmptyText(wiki: Wiki, t: (zh: string, en: string) => string) {
+  if (wiki.status === 'generating') return t('正在整理研究要点…', 'Updating research findings…')
+  const findings = wiki.entries.filter(entry => entry.kind === 'finding')
+  if (!findings.length) return t('目前还没有可展示的研究结论。', 'There are no research findings to show yet.')
+  const sections = findings.flatMap(entry => entry.anchor_ids.map(id => wiki.map_sources?.[id]?.section))
+  const count = findings.length
+  const lead = t(`目前已记录 ${count} 条结论，`, `${count} recorded finding${count === 1 ? '' : 's'}. `)
+  if (sections.length && sections.every(section => section && ['abstract', 'front_matter', 'abstract_or_front_matter'].includes(section)))
+    return lead + t('现有引用均来自摘要或前置内容。首页要点需要论文正文依据。', 'All available citations come from abstracts or front matter. Homepage findings require full-text evidence.')
+  if (!sections.includes('body'))
+    return lead + t('尚无可核验的正文引用。', 'None has a verified citation from the body of a paper.')
+  return lead + t('其中有结论附有正文依据，暂无结论被选为首页要点。', 'Some have full-text evidence. None has been selected for the homepage.')
+}
+
+export function WikiDirectory({wiki, title, edit, Source, refresh, busy, assistant, ask}: {assistant: React.ReactNode; ask:(text:string)=>void; wiki: Wiki; title: string; edit: (p: WikiEdit) => Promise<boolean>; Source: WikiSource['Source']; refresh:()=>void; busy:boolean}) {
   const {language} = useLanguage()
   const t = (zh: string, en: string) => language === 'zh-CN' ? zh : en
   const storageKey = 'papertrace.wiki.directory.' + wiki.topic_id
@@ -66,7 +80,7 @@ export function WikiDirectory({wiki, title, edit, Source, refresh, busy}: {wiki:
       {page && <span><Icon name="chevronRight" size={12}/>{t('文档','Document')}</span>}
     </nav>}
     <header><h2>{page?pageName(page):nodes[folder]?.title || title}</h2>
-      {!page && <div>{controls(folder)}</div>}</header>
+      <div>{!page && controls(folder)}{assistant}</div></header>
     {!folder && !page && <>
       {root!==title && <p className="wiki-intro">{root}</p>}
       <small className="fine">{wiki.sources.papers} {t('篇论文','papers')}{wiki.generated_at && <> · {new Date(wiki.generated_at).toLocaleDateString()} · {wiki.generator.kind==='model'?wiki.generator.model:t('本地整理','Local summary')}</>}</small>
@@ -82,21 +96,21 @@ export function WikiDirectory({wiki, title, edit, Source, refresh, busy}: {wiki:
         if (!entry) return null
         const receipt=entry.home_receipt
         return <article className="wiki-finding" key={id}><p>{entry.text}</p>
-          {entry.anchor_ids.filter(a=>wiki.map_sources?.[a]?.section==='body').map(a=>{
+          <div className="wiki-finding-sources">{entry.anchor_ids.filter(a=>wiki.map_sources?.[a]?.section==='body').map(a=>{
             const source=wiki.map_sources![a]
             return <Source key={a} id={a} anchor={'wiki-home-'+a} label={source.title+' · p. '+source.page}/>
-          })}
+          })}</div>
           <Disclosure panel icon="trace" title={t('依据与生成记录','Evidence and provenance')}>
           <p>{receipt ? receipt.model+' · '+new Date(receipt.created).toLocaleString() :
             t('本地规则从已有研究记录中选取。','Selected locally from existing findings.')}</p>
           {receipt && <><p>{receipt.reason}</p><small>{t('整理批次','Run')} · {receipt.run_id}</small></>}
           {entry.anchor_ids.map(evidence)}</Disclosure></article>
       })}
-      {!wiki.home_points?.length && <p className="fine">{t('有正文依据的研究要点会出现在这里。','Findings with full-text evidence appear here.')}</p>}
+      {!wiki.home_points?.length && <p className="wiki-findings-empty">{findingsEmptyText(wiki, t)}</p>}
     </section>}
     {!folder && !page && questions.length>0 && <section className="wiki-home-points">
       <h3>{t('待追问题','Questions to investigate')}</h3>
-      {questions.map(q=><p key={q.entry_id}>{q.text}</p>)}
+      <ul className="wiki-question-list">{questions.map(q=><li key={q.entry_id}>{q.text} <button className="link-btn wiki-question-ask" onClick={()=>ask(q.text)}>{t("追问","Ask")}</button></li>)}</ul>
     </section>}
     {page ? page.entries.filter(id=>nodes[id]).map(id=><article className="wiki-finding" key={id}>
       <p>{nodes[id].title}</p><div className="wiki-finding-tools">

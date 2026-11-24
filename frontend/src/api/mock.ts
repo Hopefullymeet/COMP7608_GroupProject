@@ -126,6 +126,7 @@ export function createMock(): Client {
   const research = researchFixture(state, asLocated(evidence))
   const citation = citationFixture(state, asLocated(evidence))
   const wiki = createWikiEngine({
+    allowEdits: () => state.profile?.wiki_access !== "read",
     records: () => (state.wiki ??= {}),
     model: () => {
       const selected = state.config.models.find((m) => m.id === state.config.model_id)

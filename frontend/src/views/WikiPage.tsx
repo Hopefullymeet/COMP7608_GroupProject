@@ -1,15 +1,17 @@
 import { useAnswerScroll } from '../components/useAnswerScroll'
 import { confirmAction } from '../components/confirmAction'
 import { useLanguage, type Translate } from '../i18n'
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { lazy, Suspense, createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useStore } from '../data/store'
-import { useWorkspace } from '../data/WorkspaceProvider'
+import { usePreferences } from '../data/preferences'
+import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { errorText } from '../api/contract'
 import type { Wiki, WikiEdit, WikiEntry, WikiKind, WikiMessage, WikiMethods, WikiOrigin } from '../api/wiki'
-import { Icon } from '../components/Icon'
+import { AnswerText } from '../components/AnswerText'
+import { Icon, Spinner } from '../components/Icon'
 import { Disclosure } from '../components/Disclosure'
 import { TopicChooser } from '../components/TopicChooser'
-import { HeaderContext, PageHead } from '../components/PageHead'
+import { Dialog, HeaderContext, PageHead } from '../components/PageHead'
 import { WikiDirectory } from './WikiDirectory'
 import { EvidenceLink } from './Notes'
 
@@ -18,6 +20,8 @@ type Params<M extends keyof WikiMethods> = WithoutOperation<WikiMethods[M][0]>
 /** Where the Wiki page reads and writes: the workspace RPC client or the scripted demo store. */
 export type WikiSource = {
   call: <M extends keyof WikiMethods>(method: M, params: Params<M>) => Promise<Wiki>
+  access?: "read" | "edit"
+  settingsAvailable?: boolean
   tick: number
   Source: (props: { id: string; label: string; anchor: string }) => ReactNode
 }
@@ -25,14 +29,17 @@ const WikiSourceContext = createContext<WikiSource | null>(null)
 export const WikiSourceProvider = WikiSourceContext.Provider
 
 export function WorkspaceWikiSource({ children }: { children: ReactNode }) {
+  const profile = useRead("profile.get", {})
   const { api, write, tick } = useWorkspace()
   const call = useCallback(<M extends keyof WikiMethods>(method: M, params: Params<M>): Promise<Wiki> =>
     method === 'wiki.get' ? api.call('wiki.get', params as Params<'wiki.get'>)
       : (write as (m: string, p: unknown) => Promise<Wiki>)(method, params), [api, write])
   const Source = useCallback(({ id, label }: { id: string; label: string }) => <EvidenceLink id={id} label={label} />, [])
-  return <WikiSourceProvider value={{ call, tick, Source }}>{children}</WikiSourceProvider>
+  return <WikiSourceProvider value={{ call, tick, Source, access: profile && (profile.wiki_access ?? "edit"), settingsAvailable: true }}>{children}</WikiSourceProvider>
 }
 
+const PdfReader = lazy(() => import("./PdfReader"))
+const topicDrafts = new Map<string,string>()
 const POLL_MS = 1200
 const KIND_ORDER: WikiKind[] = ['focus', 'paper', 'finding', 'preference', 'open_question']
 const KIND_LABEL: Record<WikiKind, string> = {
@@ -133,11 +140,22 @@ function EntryRow({ entry, onEdit, disabled, Source }: {
   )
 }
 
-function Message({ message }: { message: WikiMessage }) {
+function Message({ message, wiki, Source }: { message: WikiMessage; wiki: Wiki; Source: WikiSource["Source"] }) {
   const { tr } = useLanguage()
+  const [reader,setReader] = useState<{version:string;page:number;title:string}>()
+  if (message.role === 'user') return <div className="msg user" data-answer-id={message.message_id}><p>{message.text}</p></div>
+  const answer = /①.*②/s.test(message.text) ? message.text.replace(/([^\n])([①-⑳])/g, '$1\n$2 ') : message.text
   return (
-    <div className={'wiki-msg ' + message.role} data-answer-id={message.message_id}>
-      <div className="wiki-bubble">{message.text}</div>
+    <div className="msg agent" data-answer-id={message.message_id}>
+      <AnswerText text={answer}/>
+      {message.anchor_ids?.map(id => {
+        const source = wiki.map_sources?.[id]
+        return source && <details key={id} className="wiki-answer-source"><summary><Icon name="quote" size={13}/><span>{source.title}{source.page ? ' · p. ' + source.page : ''}</span><Icon name="chevronDown" size={12}/></summary>
+          <blockquote>{source.quote}</blockquote>{source.source_version_id && source.page ? <button className="link-btn" onClick={()=>setReader({version:source.source_version_id!,page:source.page!,title:source.title})}>{tr('Open in reader')}</button> : <Source id={id} label={tr('Source')} anchor={message.message_id + id}/>}</details>
+      })}
+      {reader && <Dialog title={reader.title} panelClass="wiki-source-reader" onClose={()=>setReader(undefined)}>
+        <Suspense fallback={<p>{tr('Opening PDF…')}</p>}><PdfReader topic={wiki.topic_id} version={reader.version} page={reader.page}/></Suspense>
+      </Dialog>}
       {!!message.changes?.length && <ul className="wiki-changes" aria-label={tr('Wiki updated')}>
         <li className="wiki-changes-head"><Icon name="book" size={12} />{' '}{tr('Wiki updated')}</li>
         {message.changes.map((change) => <li key={change.entry_id + change.op} className={change.op}>
@@ -152,7 +170,19 @@ function Message({ message }: { message: WikiMessage }) {
 function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; unread?:boolean }) {
   const { tr } = useLanguage()
   const source = useContext(WikiSourceContext)!
-  const { call, tick, Source } = source
+  const { call, tick, Source, access } = source
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState(()=>topicDrafts.get(topicId) ?? '')
+  useEffect(()=>{if(draft) topicDrafts.set(topicId,draft); else topicDrafts.delete(topicId)},[draft,topicId])
+  const composer = useRef<HTMLTextAreaElement>(null)
+  const prefs = usePreferences()
+  const { language } = useLanguage()
+  const t = (zh:string,en:string) => language === 'zh-CN' ? zh : en
+  function suggest(question:string) {
+    setOpen(true)
+    setDraft(question)
+    requestAnimationFrame(() => composer.current?.focus())
+  }
   const [wiki, setWiki] = useState<Wiki>()
   const [error, setError] = useState('')
   const [adding, setAdding] = useState<string>()
@@ -219,11 +249,18 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
   const counts = [plural(papers, '{0} paper', '{0} papers'), plural(noteCount, '{0} note', '{0} notes'),
     plural(answers, '{0} question', '{0} questions'), plural(findings, '{0} finding', '{0} findings')].join(' · ')
 
-  return <>
-    <div className="wiki-scroll" ref={scroll.panel} onScroll={scroll.onScroll}>
+  const toggle = <button className="ghost-btn sm" aria-expanded={open} onClick={()=>setOpen(!open)}><Icon name="message" size={14}/>{t('问 Wiki','Ask Wiki')}</button>
+  async function send() {
+    const question = draft.trim()
+    if (!question || busy || working || !access) return
+    if (await run(() => call('wiki.chat',{...scope,text:question}))) setDraft(current=>current === draft ? '' : current)
+  }
+  return <div className="wiki-split">
+    <div className="wiki-scroll">
       <div className="wiki-column">
         {error && <p className="wiki-issue" role="alert">{error}</p>}
-        {wiki.map_nodes && <WikiDirectory wiki={wiki} title={title} edit={edit} Source={Source} refresh={()=>void refresh()} busy={busy || working}/>}
+        {!directory && <header className="wiki-fallback-title"><h2>{title}</h2>{toggle}</header>}
+        {wiki.map_nodes && <WikiDirectory assistant={toggle} ask={suggest} wiki={wiki} title={title} edit={edit} Source={Source} refresh={()=>void refresh()} busy={busy || working}/>}
         {directory && issue && <p className="wiki-issue" role="alert">{issue}</p>}
         {wiki.map_nodes && !!Object.keys(wiki.pending_removals ?? {}).length && <p>{tr('Pending deletion')} · {Object.values(wiki.pending_removals!).join(' / ')}</p>}
         {!!wiki.integrity_issues?.length && <Disclosure panel icon="alert" title={tr('Links to review')}>
@@ -294,20 +331,35 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
         </form>)}
 
         </Disclosure>
+      </div>
+    </div>
+    {open && <aside className="wiki-assistant assistant-chat" aria-label={t('Wiki 助手','Wiki assistant')}>
+      <header><strong>{t('Wiki 助手','Wiki assistant')}</strong><small>{title}</small>
+        {!!wiki.thread.length && !wiki.pending_reply && <button className="icon-btn" disabled={working} title={tr('Clear conversation')} aria-label={tr('Clear conversation')} onClick={async ()=>{if(await confirmAction(tr('Clear conversation'),tr('Cancel'),tr('Clear conversation'))) void run(()=>call('wiki.clear_chat',scope))}}><Icon name="trash" size={14}/></button>}
+        <button className="icon-btn" aria-label={tr('Close')} onClick={()=>setOpen(false)}><Icon name="x" size={16}/></button></header>
+      <div className="wiki-assistant-scroll" ref={scroll.panel} onScroll={scroll.onScroll}>
+        {error && <p role="alert" className="wiki-issue">{error}</p>}
         {(wiki.thread.length > 0 || wiki.pending_reply) && <section className="wiki-thread" aria-label={tr('Conversation with the Wiki')}>
-          {!wiki.pending_reply && <button className="link-btn quiet" onClick={() => void run(() => call('wiki.clear_chat', scope))}>{tr('Clear conversation')}</button>}
-          {wiki.thread.map((m) => <Message key={m.message_id} message={m} />)}
-          {wiki.pending_reply && <div className="wiki-msg assistant" role="status" aria-label={tr('Thinking…')}>
-            <div className="wiki-bubble wiki-typing"><span /><span /><span /></div>
+          {wiki.thread.map((m) => <Message key={m.message_id} message={m} wiki={wiki} Source={Source} />)}
+          {wiki.pending_reply && <div className="msg-who" role="status">
+            <span className="working"><Spinner/>{tr('Thinking…')}</span>
           </div>}
           {issue && !generating && wiki.thread.at(-1)?.role === 'user' && <p className="wiki-issue" role="alert">{issue}</p>}
         </section>}
         <div ref={scroll.space} aria-hidden="true" />
       </div>
-    </div>
-
-
-  </>
+      <footer>
+        {!wiki.thread.length && <div className="suggest-row">{[t('这个主题有哪些研究要点？','What are the main findings?'), t('哪些问题还有待核实？','Which questions remain open?')].map(q=><button className="chip-btn" key={q} onClick={()=>suggest(q)}>{q}</button>)}</div>}
+        {generating && <small role="status">{t('正在整理 Wiki…','Updating Wiki…')}</small>}
+        <form className="composer" onSubmit={e=>{e.preventDefault(); void send()}}>
+          <textarea ref={composer} rows={1} maxLength={2000} value={draft} aria-label={t('向 Wiki 提问','Ask Wiki')} placeholder={access==='edit' ? t(`询问 ${title}，或告诉我需要记住什么…`,`Ask about ${title}, or tell me what to remember…`) : t(`询问 ${title} 主题…`,`Ask about ${title}…`)} onChange={e=>setDraft(e.target.value)}
+            onKeyDown={e=>{if(e.key==='Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (prefs.send==='enter' || e.ctrlKey || e.metaKey)){e.preventDefault();void send()}}}/>
+          <div className="composer-bar"><span className="grow"/><button className="send" disabled={!draft.trim() || busy || working || !access} aria-label={tr('Send')}><Icon name="arrowUp" size={16}/></button></div>
+        </form>
+        <button className="wiki-mode" disabled={!source.settingsAvailable} onClick={()=>window.dispatchEvent(new Event('papertrace:wiki-permission'))}>{!access ? t('正在读取权限…','Loading permission…') : access==='edit' ? t('当前模式：允许修改 Wiki 记忆','Current mode: Wiki memory edits allowed') : t('当前模式：仅回答，不修改记忆','Current mode: answer only')}</button>
+      </footer>
+    </aside>}
+  </div>
 }
 
 export function WikiPage() {
@@ -323,7 +375,7 @@ export function WikiPage() {
         {topic && <HeaderContext text={topic.title} />}
       </PageHead>
       {topic ? <TopicWiki key={topic.id} topicId={topic.id} title={topic.title} unread={topic.wikiUnread} />
-        : <div className="page-body scroll"><section className="audit-chooser"><TopicChooser wiki onSelect={select} /></section></div>}
+        : <div className="page-body topic-chooser-body"><section className="audit-chooser"><TopicChooser wiki onSelect={select} /></section></div>}
     </div>
   )
 }

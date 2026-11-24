@@ -17,7 +17,13 @@ import { Settings } from './views/Settings'
 export function App({ windowControls, pages, comparison, liveResearch }: { windowControls?: ReactNode; pages?: Partial<Record<'library'|'wiki'|'check'|'settings',ReactNode>>; comparison?:ReactNode; liveResearch?: boolean }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
+  const [permissionTarget,setPermissionTarget] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  useEffect(() => {
+    const openPermission = () => { setPermissionTarget(true); setSettingsOpen(true) }
+    window.addEventListener('papertrace:wiki-permission',openPermission)
+    return () => window.removeEventListener('papertrace:wiki-permission',openPermission)
+  }, [])
   const prefs = usePreferences()
   const [link,setLink] = useState<string>()
   useEffect(() => {
@@ -61,7 +67,7 @@ export function App({ windowControls, pages, comparison, liveResearch }: { windo
           : r.view === 'check' ? <Check />
           : <Settings />)}
       </main>
-      {settingsOpen && <Dialog title={tr('Settings')} onClose={() => setSettingsOpen(false)} panelClass="settings-window">
+      {settingsOpen && <Dialog title={tr('Settings')} onClose={() => {setSettingsOpen(false); setPermissionTarget(false)}} panelClass={permissionTarget ? "settings-window wiki-permission-target" : "settings-window"}>
         {pages?.settings ?? <Settings />}
       </Dialog>}
       {link && prefs.links === 'sidebar' && <aside className="external-preview" aria-label={tr('External paper links')}>

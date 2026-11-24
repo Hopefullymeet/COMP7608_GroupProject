@@ -885,7 +885,7 @@ export function MainlineProvider({
     })
   }
   async function archive(kind: 'topic' | 'session', id: string) {
-    if (!await confirmAction(tr(kind === 'topic' ? 'Archive this topic? You can restore it from Library.' : 'Archive this session? You can restore it from Library.'), tr('Cancel'), tr('Archive'))) return
+    if (!await confirmAction(tr(kind === 'topic' ? 'Archive this topic? You can restore it from Library.' : 'Archive this session? You can restore it from Library.'), tr('Cancel'), tr('Confirm archive'))) return
     void status(async () => {
       await workspace.write('workspace.archive', { kind, id })
       if (id === topic || id === session) goHome()
