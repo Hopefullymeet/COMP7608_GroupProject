@@ -1,14 +1,13 @@
-"""Optional pinned-DSH integration check with a deterministic loopback provider."""
+"""Native agent integration check with a deterministic loopback provider."""
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
-import os
 from pathlib import Path
 import threading
 import unittest
 from unittest.mock import patch
 
-from dsh import Dsh, DshFailure
+from model_agent import ModelAgent, ModelFailure
 import test_literature
 
 
@@ -140,7 +139,7 @@ class ScriptedProvider(BaseHTTPRequestHandler):
                            "usage": {"prompt_tokens": 7, "completion_tokens": 3}}]
                 body = ("".join("data: " + json.dumps(frame) + "\n\n" for frame in frames) + "data: [DONE]\n\n").encode()
             else:
-                body = json.dumps({"choices": [{"message": delta, "finish_reason": finish}]}).encode()
+                body = json.dumps({"choices": [{"message": delta, "finish_reason": finish}], "usage": {"prompt_tokens": 7, "completion_tokens": 3}}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream" if self.stream else "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -170,9 +169,8 @@ class ScriptedProvider(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-@unittest.skipUnless(os.environ.get("PAPERTRACE_TEST_DSH_CLI"), "Set PAPERTRACE_TEST_DSH_CLI for the pinned SDK check")
-class DshResearchTest(unittest.TestCase):
-    def test_real_harness_search_read_and_reviewed_wiki(self):
+class ModelResearchTest(unittest.TestCase):
+    def test_search_read_and_reviewed_wiki(self):
         # Reuse the real PDF setup and the same task/approval API as the desktop UI.
         fixture = test_literature.LiteratureTest()
         try:
@@ -186,27 +184,26 @@ class DshResearchTest(unittest.TestCase):
                 server.start()
                 try:
                     worker = fixture.worker
-                    dsh = Dsh(os.environ.get("PAPERTRACE_DSH_NODE", "node"), os.environ["PAPERTRACE_TEST_DSH_CLI"],
-                              "loopback-fixture", Path(fixture.workspace.name))
-                    dsh.endpoint = f"http://127.0.0.1:{provider.server_port}"
-                    worker.dsh = dsh
+                    agent = ModelAgent(Path(fixture.workspace.name), "loopback-fixture")
+                    agent.endpoint = f"http://127.0.0.1:{provider.server_port}"
+                    worker.agent = agent
                     segments = [{"id": "1:1:1", "source": "Citation quality [1]"}]
-                    result = dsh.translate(segments, "zh-CN", {"Citation": "引用"}, threading.Event())
+                    result = agent.translate(segments, "zh-CN", {"Citation": "引用"}, threading.Event())
                     self.assertEqual(result, {"1:1:1": "译文 Citation quality [1]"})
                     payload, tools = provider.translation_requests[0]
                     self.assertEqual(payload["segments"], segments)
                     self.assertEqual(tools, [])
-                    with self.assertRaises(DshFailure) as invalid:
-                        dsh.translate(segments, "en", {}, threading.Event())
+                    with self.assertRaises(ModelFailure) as invalid:
+                        agent.translate(segments, "en", {}, threading.Event())
                     self.assertEqual(invalid.exception.issue["reason"], "MODEL_OUTPUT_INVALID")
                     task = {"kind": "literature_synthesis", "topic_id": fixture.topic,
                             "input": {"source_versions": fixture.versions, "question": "How can answers be supported?"}}
                     prepared = fixture.call("task.prepare", **task)
                     config = fixture.call("services.get")
                     revision = config.pop("revision")
-                    config["models"][0]["endpoint"] = dsh.endpoint
+                    config["models"][0]["endpoint"] = agent.endpoint
                     config["models"][0]["model"] = "deepseek-pro"
-                    config["models"][0]["endpoint"] = dsh.endpoint
+                    config["models"][0]["endpoint"] = agent.endpoint
                     fixture.call("services.save", base_revision=revision, **config)
                     fixture.call("task.start", confirmation_id=prepared["confirmation_id"],
                                  error="CONFIRMATION_REQUIRED", **task)
@@ -216,7 +213,7 @@ class DshResearchTest(unittest.TestCase):
                                 "id": config["model_id"], "operation_id": "probe-1",
                             })["ok"])
                     self.assertEqual(provider.probes, [("deepseek-pro", 16, [])])
-                    self.assertEqual(dsh.model, "deepseek-flash")
+                    self.assertEqual(agent.model, "deepseek-flash")
                     fixture.run_task(fixture.versions)
                     self.assertTrue(provider.research_models)
                     self.assertEqual(set(provider.research_models), {"deepseek-pro"})
@@ -236,7 +233,7 @@ class DshResearchTest(unittest.TestCase):
                     version = fixture.versions[0]
                     sources = [{"source_version_id": version, "title": "Alpha", "available_scope": "full_text"}]
                     steps = []
-                    full, seen, issue = dsh.answer_full_text(
+                    full, seen, issue = agent.answer_full_text(
                         "What benchmark does Alpha define?", sources, threading.Event(),
                         progress=lambda name, detail, activity: steps.append((name, activity)),
                     )
@@ -248,18 +245,18 @@ class DshResearchTest(unittest.TestCase):
                     self.assertGreaterEqual(fragment["page"], 1)
                     self.assertIsNone(issue)
                     self.assertIn(full[0]["references"][0]["passage"]["passage_id"], seen)
-                    full, seen, issue = dsh.answer_full_text("Return an invalid response.", sources, threading.Event())
+                    full, seen, issue = agent.answer_full_text("Return an invalid response.", sources, threading.Event())
                     self.assertEqual(full, [])
                     self.assertTrue(seen)
                     self.assertEqual(issue["reason"], "MODEL_OUTPUT_INVALID")
-                    raw, seen, trace, usage, issue = dsh.audit(
+                    raw, seen, trace, usage, issue = agent.audit(
                         [{"id": "0", "source_version_id": version, "claim": "The paper defines the benchmark."}],
                         [{"source_version_id": version, "title": "Alpha", "available_scope": "full_text"}],
                         threading.Event(),
                     )
                     self.assertIsNone(issue)
                     self.assertEqual(raw["checks"][0]["id"], "0")
-                    suggested, read, trace, _, issue = dsh.suggest_citations(
+                    suggested, read, trace, _, issue = agent.suggest_citations(
                         [{"id": "sentence-1", "text": "The source defines the benchmark."}],
                         [{"source_version_id": version, "title": "Alpha", "available_scope": "full_text"}],
                         threading.Event(), None,
@@ -272,7 +269,7 @@ class DshResearchTest(unittest.TestCase):
                     phrase = "Only these words are in the reader selection."
                     selection = {"paper_id": "selected-paper", "source_version_id": version,
                                  "passages": [{"passage_id": "reader-selection", "page": 1, "text": phrase}]}
-                    answers, observed = dsh.answer("Read my selection.", [selection], threading.Event(),
+                    answers, observed = agent.answer("Read my selection.", [selection], threading.Event(),
                                                    context="selected PDF text")
                     self.assertEqual(list(observed), ["reader-selection"])
                     self.assertEqual(answers[0]["references"][0]["quote"], phrase)

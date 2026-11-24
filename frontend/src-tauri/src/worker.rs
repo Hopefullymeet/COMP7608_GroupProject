@@ -17,10 +17,10 @@ const WORKER: &[u8] = include_bytes!("../../../backend/papertrace.py");
 const LITERATURE: &[u8] = include_bytes!("../../../backend/literature.py");
 const WORKBENCH: &[u8] = include_bytes!("../../../backend/workbench.py");
 const WIKI: &[u8] = include_bytes!("../../../backend/wiki.py");
-const RESEARCH_TOOLS: &[u8] = include_bytes!("../../../backend/research-tools.mjs");
+const RESEARCH_TOOLS: &[u8] = include_bytes!("../../../backend/research_tools.py");
 const CITATIONS: &[u8] = include_bytes!("../../../backend/citations.py");
 const READER: &[u8] = include_bytes!("../../../backend/reader.py");
-const DSH: &[u8] = include_bytes!("../../../backend/dsh.py");
+const MODEL_AGENT: &[u8] = include_bytes!("../../../backend/model_agent.py");
 const CREDENTIALS: &[u8] = include_bytes!("../../../backend/credentials.py");
 const BIBLIOGRAPHY: &[u8] = include_bytes!("../../../backend/bibliography.py");
 const PDF_ENGINE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/pdf-engine.whl"));
@@ -52,7 +52,7 @@ impl Worker {
         fs::create_dir_all(directory).map_err(|error| error.to_string())?;
         let mut hash = DefaultHasher::new();
         WORKER.hash(&mut hash);
-        DSH.hash(&mut hash);
+        MODEL_AGENT.hash(&mut hash);
         CREDENTIALS.hash(&mut hash);
         CITATIONS.hash(&mut hash);
         READER.hash(&mut hash);
@@ -70,11 +70,11 @@ impl Worker {
         fs::create_dir_all(&runtime).map_err(|error| error.to_string())?;
         let script = runtime.join("papertrace.py");
         for (path, contents) in [
-            (&runtime.join("agent.md"), AGENT_POLICY), (&script, WORKER), (&runtime.join("dsh.py"), DSH),
+            (&runtime.join("agent.md"), AGENT_POLICY), (&script, WORKER), (&runtime.join("model_agent.py"), MODEL_AGENT),
             (&runtime.join("credentials.py"), CREDENTIALS),
             (&runtime.join("literature.py"), LITERATURE), (&runtime.join("workbench.py"), WORKBENCH),
             (&runtime.join("wiki.py"), WIKI),
-            (&runtime.join("research-tools.mjs"), RESEARCH_TOOLS),
+            (&runtime.join("research_tools.py"), RESEARCH_TOOLS),
             (&runtime.join("citations.py"), CITATIONS),
             (&runtime.join("reader.py"), READER),
             (&runtime.join("bibliography.py"), BIBLIOGRAPHY),
@@ -98,14 +98,11 @@ impl Worker {
             let root = crate::bundled::prepare(resources.ok_or("Missing desktop resources")?, directory)
                 .map_err(|err| err.to_string())?;
             let python = if cfg!(windows) { "python/python.exe" } else { "python/bin/python3.12" };
-            let node = if cfg!(windows) { "node.exe" } else { "node" };
             let mut command = Command::new(root.join(python));
             command.env_remove("PYTHONHOME")
                 .env("PYTHONNOUSERSITE", "1")
                 .env("PYTHONPATH", root.join("site"))
-                .env("SSL_CERT_FILE", root.join("site/certifi/cacert.pem"))
-                .env("PAPERTRACE_AGENT_NODE", root.join(node))
-                .env("PAPERTRACE_AGENT_CLI", root.join("engine/node_modules/@deepseek-ai/dsh/lib/bin.js"));
+                .env("SSL_CERT_FILE", root.join("site/certifi/cacert.pem"));
             command
         };
         #[cfg(not(feature = "bundled-runtime"))]

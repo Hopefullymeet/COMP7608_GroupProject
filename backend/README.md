@@ -30,32 +30,9 @@ RIS 和 CSL JSON 由标准库读取。书目预览和提交均可离线进行。
 
 ## 配置文本模型
 
-开发者可直接构建仓内的 [引擎源码](engine/)。在仓库根目录运行以下命令，使用 Node.js ≥24.9、pnpm 11.28.5 及[引擎开发指南](engine/docs/development.zh.md)列出的本机编译工具。安装阶段使用 CI 模式，避免依赖安装脚本给外层仓库配置 Git 钩子。
-
-```sh
-(
-  cd backend/engine || exit 1
-  CI=true pnpm install --frozen-lockfile && pnpm run build
-)
-```
-
 Windows 和 macOS 用户可在「模型和服务 → 管理系统凭据」保存或移除 API 密钥。密钥保存在 Windows 凭据库或 macOS 钥匙串的 `PaperTrace/DeepSeek` 项中。若 Windows 凭据管理器拒绝访问，应用会使用当前用户的 Windows DPAPI 将密钥加密保存到 `%LOCALAPPDATA%/PaperTrace/deepseek.dpapi`。没有系统凭据时，应用读取启动环境中的 `DEEPSEEK_API_KEY`。
 
-```sh
-(
-  export PAPERTRACE_AGENT_CLI="$PWD/backend/engine/apps/cli/lib/bin.js"
-  export PAPERTRACE_AGENT_NODE="$(command -v node)"
-  printf 'DeepSeek API key: '
-  read -rs DEEPSEEK_API_KEY
-  printf '\n'
-  export DEEPSEEK_API_KEY
-  VITE_PAPERTRACE_TRANSPORT=rpc pnpm --dir frontend desktop
-)
-```
-
-从仓库根目录运行以上启动命令。
-
-默认模型为 `deepseek-flash`，默认端点为 `https://api.deepseek.com`。在「模型与服务」中可修改 OpenAI 兼容基础地址，例如 `https://provider.example/v1`，应用会在基础地址后追加 `/chat/completions`。「测试连接」直接请求已保存的端点并显示结果。问答等 Agent 任务使用 Harness，确认对话框显示实际端点及发送内容。每条模型任务使用独立进程和临时目录。摘要问答读取本轮确认的摘要。全文任务可以检索和补读本轮选定的论文。引用需要在本轮实际读过的段落中逐字找到，语义支撑仍由模型判断。取消只中断当前任务进程。密钥通过环境传给模型进程，不写入工作区。
+默认模型为 `deepseek-flash`，默认端点为 `https://api.deepseek.com`。在「模型与服务」中可修改 OpenAI 兼容基础地址，例如 `https://provider.example/v1`，应用会在基础地址后追加 `/chat/completions`。「测试连接」直接请求已保存的端点并显示结果。应用内的 Python Agent 负责多轮工具调用，可检索本轮选定的论文、补读同页上下文并核对引句。确认对话框显示端点及发送范围。
 
 在首页输入研究问题（例如 `Which scientific QA datasets use paper abstracts?`）。提交后点 **Find papers**，确认范围并启动，选择 PubMedQA 加入主题。进入 **Read & ask**，询问 `What context does PubMedQA use?`，再点回答中的来源。退出并用同一工作区重开，核对主题、文献和历史回答。
 

@@ -308,9 +308,9 @@ export function LibraryPage() {
                     </div>
                   </header>
                   {!demo && tab === 'Papers' &&
-                    <PublicationDetails paper={paper.paper_id}
+                    <PublicationDetails defaultOpen paper={paper.paper_id}
                       topic={paper.topic_ids.includes(topic) ? topic : paper.topic_ids[0]} />}
-                  <Disclosure panel open icon="file" title={tr('Files and versions')}>
+                  <Disclosure panel icon="file" title={tr('Files and versions')}>
                     {paper.files.map((f) => (
                       <p key={f.source_version_id}>{f.name} · {tr(f.role.replaceAll('_', ' '))}</p>
                     ))}

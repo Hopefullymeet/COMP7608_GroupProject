@@ -1,7 +1,7 @@
 import base64
 from contextlib import closing
 import importlib.util
-from io import BytesIO, StringIO
+from io import BytesIO
 import json
 import os
 from pathlib import Path
@@ -13,13 +13,13 @@ import tempfile
 import threading
 import time
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 from urllib.error import HTTPError
 from uuid import uuid4
 
 from papertrace import Worker
 from credentials import WindowsStore
-from dsh import Dsh, DshFailure, ENDPOINT, read_json_answer
+from model_agent import ModelAgent, ModelFailure, ENDPOINT, read_json_answer
 from bibliography import PublicServiceError, bibliography_records, download_open_pdf, public_pdf_url
 from literature import LiteratureError
 from test_literature import sample_pdf
@@ -199,79 +199,8 @@ class EvidenceTest(unittest.TestCase):
 
 
 class CredentialTest(unittest.TestCase):
-    def test_synthesis_collects_session_events_until_turn_end(self):
-        def event(kind, data, session="reading"):
-            return {"method": "session.event", "params": {"sessionId": session,
-                    "event": {"type": kind, "data": data}}}
-
-        passage = {"passage_id": "p1", "text": "The observed evidence."}
-        result = {"points": [{"title": "Observed findings"}]}
-        events = [{"id": 1, "result": {}},
-                  event("turn/end", {"reason": {"kind": "failed"}}, "other"),
-                  {"id": 2, "result": {"messageId": "m"}},
-                  event("tool/call", {"name": "paper_read", "arguments": "{}", "callId": "c"}),
-                  event("tool/result", {"message": {"toolCallId": "c", "content": [
-                      {"type": "text", "text": json.dumps([passage])}]}}),
-                  event("assistant/message", {"message": {"content": [{"type": "text", "text": json.dumps(result)}]}}),
-                  event("turn/end", {"reason": {"kind": "completed"}})]
-        process = Mock(stdout=StringIO("".join(json.dumps(e) + "\n" for e in events)))
-        with tempfile.TemporaryDirectory() as directory, patch("dsh.subprocess.Popen", return_value=process):
-            root = Path(directory)
-            raw, seen, _, _, issue = Dsh("node", __file__, "test", root).run(
-                root, root / "patch.yml", {}, "question", threading.Event(), research=True)
-        self.assertEqual((raw, seen, issue), (result, {"p1": passage}, None))
-        self.assertEqual([json.loads(c.args[0])["method"] for c in process.stdin.write.call_args_list],
-                         ["initialize", "session/prompt"])
-
-    def test_harness_prompt_startup_failure_survives_closed_stdin(self):
-        process = Mock()
-        process.stdout = StringIO(
-            '{"id":1,"result":{}}\n'
-            '{"id":2,"error":{"code":-32601,"message":"Prompt unavailable"}}\n'
-        )
-        process.stdin.close.side_effect = BrokenPipeError()
-        with tempfile.TemporaryDirectory() as directory, patch("dsh.subprocess.Popen", return_value=process):
-            root = Path(directory)
-            runtime = Dsh("node", __file__, "test-key", root)
-            with self.assertRaises(DshFailure) as error:
-                runtime.run(root, root / "patch.yml", {}, "Test question", threading.Event())
-            self.assertTrue(error.exception.startup)
-            process.wait.assert_called_once()
-
-    @unittest.skipUnless(sys.platform == "win32", "Windows npm layout is required")
-    def test_desktop_finds_installed_harness_without_environment_override(self):
-        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"APPDATA": directory}), patch(
-            "dsh.which", return_value=None
-        ):
-            for name in ("PAPERTRACE_AGENT_CLI", "PAPERTRACE_DSH_CLI"):
-                os.environ.pop(name, None)
-            root = Path(directory) / "npm/node_modules/@deepseek-ai/dsh"
-            cli = root / "lib/bin.js"
-            tools = root / "node_modules/@deepseek-ai/dsh-tools/lib/index.js"
-            for path in (cli, tools):
-                path.parent.mkdir(parents=True)
-                path.touch()
-            configured = Dsh.configured(directory)
-            self.assertEqual(configured.cli, cli.resolve())
-            self.assertEqual(configured.tools_entry(), tools.resolve())
-            os.environ["PAPERTRACE_AGENT_CLI"] = str(Path(directory) / "explicit.js")
-            self.assertEqual(Dsh.configured(directory).cli, Path(os.environ["PAPERTRACE_AGENT_CLI"]).resolve())
-
-    def test_dsh_receives_configured_endpoint(self):
-        official = "https://api.deepseek.com/anthropic"
-        custom = "https://model.example.org/v1"
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            path = root / "profile.json"
-            runtime = Dsh("node", __file__, None, root)
-            for endpoint in (ENDPOINT, ENDPOINT + "/v1/", official, custom):
-                with self.subTest(endpoint=endpoint):
-                    runtime.for_model("test-model", endpoint).write_patch(path, root, None)
-                    provider = next(row for row in json.loads(path.read_text()) if row.get("id") == "llm-deepseek")
-                    self.assertEqual(provider["config"]["baseURL"], endpoint)
-
     def test_model_runtime_prefers_system_credential_and_snapshots_it(self):
-        runtime = Dsh("node", __file__, None, ".", use_system_credential=True)
+        runtime = ModelAgent(".")
         with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "test-fallback"}), patch(
             "credentials.system_key", return_value="test-system-key"
         ) as read:
@@ -284,7 +213,7 @@ class CredentialTest(unittest.TestCase):
 
     def test_connection_uses_saved_endpoint_model_and_key_without_harness(self):
         with tempfile.TemporaryDirectory() as directory, patch(
-            "papertrace.Dsh.configured", return_value=None
+            "papertrace.ModelAgent", return_value=None
         ), patch("papertrace.deepseek_api_key", return_value=None) as key, patch("papertrace.build_opener") as opener:
             worker = Worker(Path(directory), lambda _: None)
             try:
@@ -315,7 +244,7 @@ class CredentialTest(unittest.TestCase):
 
     def test_wiki_model_output_keeps_known_anchors_and_reports_failures(self):
         with tempfile.TemporaryDirectory() as directory, patch(
-            "papertrace.Dsh.configured", return_value=None
+            "papertrace.ModelAgent", return_value=None
         ), patch("wiki.deepseek_api_key", return_value="test-key"):
             worker = Worker(Path(directory), lambda _: None)
             try:
@@ -349,7 +278,7 @@ class CredentialTest(unittest.TestCase):
                 self.assertEqual(json.loads(sent[0]["messages"][1]["content"])["material"]["title"], "检索增强")
 
                 def broken(*args, **kwargs):
-                    raise DshFailure("SERVICE_RATE_LIMITED", True, "retry")
+                    raise ModelFailure("SERVICE_RATE_LIMITED", True, "retry")
 
                 worker.request_model_json = broken
                 with worker.lock, worker.db:
@@ -368,7 +297,7 @@ class CredentialTest(unittest.TestCase):
         for platform in ("win32", "darwin"):
             with self.subTest(platform=platform), tempfile.TemporaryDirectory() as directory, patch.dict(
                 os.environ, {"DEEPSEEK_API_KEY": "test-fallback"}
-            ), patch("papertrace.Dsh.configured", return_value=None), patch("papertrace.store") as vault, patch(
+            ), patch("papertrace.ModelAgent", return_value=None), patch("papertrace.store") as vault, patch(
                 "papertrace.system_key", return_value=None
             ) as key:
                 messages = []

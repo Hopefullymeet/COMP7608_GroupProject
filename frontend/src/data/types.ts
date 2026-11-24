@@ -118,6 +118,7 @@ export interface AgentRun {
 }
 
 export interface AnswerSegment {
+  paragraphStart?: boolean
   text: string
   evidenceId?: string
   evidenceIds?: string[]

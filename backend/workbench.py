@@ -3,7 +3,7 @@
 from collections import Counter
 from threading import Lock
 
-from dsh import DshFailure
+from model_agent import ModelFailure
 from citations import parse_pdf_index, save_index
 from literature import (LiteratureError, digest, entry_anchors, extract_pdf, make_passages,
                         pdf_content, render_pdf_page, synthesis_result)
@@ -276,9 +276,9 @@ class Workbench:
         try:
             with host.lock:
                 sources, wiki = self.scope(task)
-            runtime = host.dsh_for_task(task)
+            runtime = host.agent_for_task(task)
             if not runtime:
-                raise DshFailure("MODEL_UNAVAILABLE", False, "configure_service")
+                raise ModelFailure("MODEL_UNAVAILABLE", False, "configure_service")
 
             def progress(name, detail):
                 with host.lock:
@@ -293,7 +293,6 @@ class Workbench:
             mode = "agent" if dimensions else task["input"].get("mode", "wiki")
             raw, seen, trace, usage, issue = runtime.synthesize(
                 task["input"]["question"], sources, wiki, cancelled, progress, mode=mode, dimensions=dimensions,
-                endpoint_completion=host.request_synthesis,
             )
             with host.lock:
                 current = host.get("task", task_id)
@@ -362,12 +361,12 @@ class Workbench:
                     event = host.finish(current, "partial", result=summary, issue=partial) if partial else (
                         host.finish(current, "completed", result=summary))
                 host.send_events([event])
-        except DshFailure as error:
-            host.fail_dsh(task_id, error.issue)
+        except ModelFailure as error:
+            host.fail_task(task_id, error.issue)
         except Exception as error:
             import sys
             print(f"PaperTrace synthesis: {type(error).__name__}", file=sys.stderr)
-            host.fail_dsh(task_id, {"reason": "TEMPORARILY_UNAVAILABLE", "retryable": True, "next_action": "retry"})
+            host.fail_task(task_id, {"reason": "TEMPORARILY_UNAVAILABLE", "retryable": True, "next_action": "retry"})
         finally:
             with host.lock:
                 host.inflight.pop(task_id, None)

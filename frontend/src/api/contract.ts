@@ -39,7 +39,7 @@ export type Evidence = {
 }
 export type Reading = {
   figures?: import('./reader').PdfObject[]; scope_id: Id; message_id: Id; read_sources: { source_version_id: Id; read_scope: 'none' | Scope }[]
-  sentences: NonEmpty<{ text: string } & (
+  sentences: NonEmpty<{ text: string; paragraph_start?: boolean } & (
     { assessment: 'supported'; anchor_ids: NonEmpty<Id> } |
     { assessment: 'evidence_not_established'; anchor_ids: [] }
   )>

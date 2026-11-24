@@ -16,7 +16,7 @@ import { PublicationDetails } from '../components/PublicationDetails'
 import { AnswerText } from '../components/AnswerText'
 import { errorText } from '../api/contract'
 import type { ReaderAnswer, Rect, Selection } from '../api/reader'
-import type { AgentRun, AgentStep, ChatMessage, Paper, Passage } from '../data/types'
+import type { AnswerSegment, AgentRun, AgentStep, ChatMessage, Paper, Passage } from '../data/types'
 
 const PdfReader = lazy(() => import('./PdfReader'))
 
@@ -89,6 +89,29 @@ function WorkSteps({ run, done }: { run: AgentRun; done: boolean }) {
   </details>
 }
 
+function ReadingCoverage({ segment }: { segment: AnswerSegment }) {
+  const { state } = useStore()
+  const { tr } = useLanguage()
+  const [open, setOpen] = useState(true)
+  const scopes = { none: 0, abstract: 1, full_text: 2 }
+  const labels = { none: 'Not read', abstract: 'Abstract', full_text: 'Full text' }
+  const byPaper = new Map<string, NonNullable<AnswerSegment['readSources']>[number]>()
+  for (const source of segment.readSources ?? []) {
+    const id = paperFor(state, source.source_version_id)?.paperId ?? source.source_version_id
+    const previous = byPaper.get(id)
+    if (!previous || scopes[source.read_scope] > scopes[previous.read_scope]) byPaper.set(id, source)
+  }
+  return <div className="scope-note reading-coverage">
+    <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <Icon name={open ? 'eye' : 'eyeClosed'} size={13} /> {tr('Reading coverage')}
+    </button>
+    {open && (byPaper.size ? <ul className="scope-sources">{Array.from(byPaper, ([id, source], index) => {
+      const paper = paperFor(state, source.source_version_id)
+      return <li key={id}>{paper?.alias || paper?.title || tr('Source {0}', index + 1)} · {tr(labels[source.read_scope])}</li>
+    })}</ul> : <div>{segment.readSources ? tr('No sources read.') : segment.text}</div>)}
+  </div>
+}
+
 function AgentMessage({ m, onSource }: { m: ChatMessage; onSource?: (source: Pick<ReaderAnswer, 'source_version_id' | 'page' | 'rect'>) => void }) {
   const { tr } = useLanguage()
   const { state, act } = useStore()
@@ -104,8 +127,47 @@ function AgentMessage({ m, onSource }: { m: ChatMessage; onSource?: (source: Pic
       if (!citationNumbers.has(id)) citationNumbers.set(id, citationNumbers.size + 1)
     }
   }
-  const AnswerPoint = state.mainline ? 'p' : 'span'
+  function renderSegment(s: AnswerSegment, i: number) {
+    if (s.tone === 'scope' && !s.readSources?.length && m.figures) return null
+    if (s.tone === 'scope') return <ReadingCoverage key={i} segment={s} />
+    if (s.evidenceIds?.length) return <span key={i} className="claim">
+      {s.text}<ClaimSources ids={[...new Set(s.evidenceIds)]} sentence={i + 1} numbers={citationNumbers} />
+    </span>
+    if (s.evidenceIds?.length === 0) return <span key={i} className="claim" title={tr('No verified passage was found.')}>
+      {s.text}
+    </span>
+    if (!s.evidenceId) return <span key={i}>{s.text}</span>
+    const source = evidenceFor(state, s.evidenceId)
+    const status = sourceStatus(state, source.paperId)
+    const jump = status === 'available' && papers.includes(source.paperId)
+    const anchor = `chat-${m.id}-${i}`
+    return (
+      <span key={i} className={`claim ${state.activeEvidence?.id === source.id ? 'on' : ''}`}>
+        {s.text}
+        <button className={`cite ${status !== 'available' ? 'gone' : ''}`} data-ev-anchor={anchor}
+          onClick={() => act.openEvidence(source.id, jump ? `read-${source.id}` : anchor, jump)}
+          aria-label={tr('Show source {0}{1}', citationNumbers.get(source.id)!, status === 'available' ? '' : ` · ${tr(status)}`)}>{citationNumbers.get(source.id)!}</button>
+      </span>
+    )
+  }
 
+  const blocks: ReactNode[] = []
+  let paragraph: ReactNode[] = []
+  function endParagraph() {
+    if (paragraph.length) blocks.push(<p key={`p-${blocks.length}`}>{paragraph}</p>)
+    paragraph = []
+  }
+  m.segments.forEach((segment, i) => {
+    if (!state.mainline || segment.tone === 'scope') {
+      endParagraph()
+      blocks.push(renderSegment(segment, i))
+      return
+    }
+    if (segment.paragraphStart) endParagraph()
+    if (paragraph.length && !/^[\u3400-\u9fff]/u.test(segment.text)) paragraph.push(' ')
+    paragraph.push(renderSegment(segment, i))
+  })
+  endParagraph()
   return (
     <div className="msg agent" data-answer-id={m.id}>
       {!m.done && <div className="msg-who"><span className="working"><Spinner /> {tr(lastStep?.title ?? 'Planning…')}</span></div>}
@@ -115,40 +177,10 @@ function AgentMessage({ m, onSource }: { m: ChatMessage; onSource?: (source: Pic
         title={paperFor(state, f.source_version_id).short} open={onSource && (() => onSource(f))} />)}
       {m.segments.length > 0 && (
         <div className="answer">
-          {m.segments.map((s, i) => {
-            if (s.tone === 'scope' && !s.readSources?.length && m.figures) return null
-            if (s.tone === 'scope') return <div key={i} className="scope-note">
-              <Icon name="eye" size={13} />
-              {s.readSources?.length ? <div>
-                <strong>{tr('Reading coverage')}</strong>
-                <ul className="scope-sources">{s.readSources.map((source, index) => {
-                  const paper = paperFor(state, source.source_version_id)
-                  const label = paper?.alias || paper?.title || tr('Source {0}', index + 1)
-                  const scope = source.read_scope === 'none' ? 'Not read' : source.read_scope === 'abstract' ? 'Abstract' : 'Full text'
-                  return <li key={source.source_version_id}>{label} · {tr(scope)}</li>
-                })}</ul>
-              </div> : s.readSources ? tr('No sources read.') : s.text}
-            </div>
-            if (s.evidenceIds?.length) return <AnswerPoint key={i} className="claim">
-              {s.text}<ClaimSources ids={[...new Set(s.evidenceIds)]} sentence={i + 1} numbers={citationNumbers} />
-            </AnswerPoint>
-            if (s.evidenceIds?.length === 0) return <AnswerPoint key={i} className="claim">
-              {s.text}<span className="cite" title="No Evidence Found">？</span>
-            </AnswerPoint>
-            if (!s.evidenceId) return <AnswerPoint key={i}>{s.text}</AnswerPoint>
-            const source = evidenceFor(state, s.evidenceId)
-            const status = sourceStatus(state, source.paperId)
-            const jump = status === 'available' && papers.includes(source.paperId)
-            const anchor = `chat-${m.id}-${i}`
-            return (
-              <span key={i} className={`claim ${state.activeEvidence?.id === source.id ? 'on' : ''}`}>
-                {s.text}
-                <button className={`cite ${status !== 'available' ? 'gone' : ''}`} data-ev-anchor={anchor}
-                  onClick={() => act.openEvidence(source.id, jump ? `read-${source.id}` : anchor, jump)}
-                  aria-label={tr('Show source {0}{1}', citationNumbers.get(source.id)!, status === 'available' ? '' : ` · ${tr(status)}`)}>{citationNumbers.get(source.id)!}</button>
-              </span>
-            )
-          })}
+          {blocks}
+          {m.done && m.segments.some(s => s.evidenceIds?.length === 0) &&
+            !m.segments.some(s => s.evidenceIds?.length) &&
+            <small>{tr('No verified passage was found.')}</small>}
         </div>
       )}
       {m.done && (run || state.mainline?.saveAnswer) && (

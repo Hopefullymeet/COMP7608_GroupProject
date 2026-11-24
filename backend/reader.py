@@ -14,7 +14,7 @@ import tempfile
 import zipfile
 from textwrap import wrap
 
-from dsh import ENDPOINT
+from model_agent import ENDPOINT
 from literature import LiteratureError, digest
 
 CAPTION = re.compile(r"^(figure|fig\.?|table)\s*([A-Z]?\d+[a-z]?)\s*[:.]", re.I)
@@ -574,8 +574,8 @@ class Reader:
         if medium == "image" and not self.has_vision:
             raise LiteratureError("VISION_UNAVAILABLE", "Configure a local Ollama vision model for image questions.",
                                   "configure_service")
-        if medium == "text" and (not self.host.dsh or not self.host.dsh.key):
-            raise LiteratureError("MODEL_UNAVAILABLE", "Configure DeepSeek Harness for text questions.", "configure_service")
+        if medium == "text" and (not self.host.agent or not self.host.agent.key):
+            raise LiteratureError("MODEL_UNAVAILABLE", "Configure a text model for text questions.", "configure_service")
         return version, page, question
 
     def translation_plan(self, topic, params, model, endpoint):
@@ -646,7 +646,7 @@ class Reader:
         return {"items": [json.loads(row[0]) for row in rows]}
 
     def run_translation(self, task, cancelled):
-        from dsh import DshFailure
+        from model_agent import ModelFailure
         topic, params, key = task["topic_id"], task["input"], task["task_id"]
         version, model = params["source_version_id"], task["dsh_model"]
         try:
@@ -654,7 +654,7 @@ class Reader:
                 plans = self.translation_plan(topic, params, model, task.get("dsh_endpoint", ENDPOINT))
                 if [plan["key"] for plan in plans] != task["translation_keys"]:
                     raise LiteratureError("CONFIRMATION_REQUIRED", "The source changed. Confirm the task again.", "confirm_task")
-            runtime = self.host.dsh_for_task(task)
+            runtime = self.host.agent_for_task(task)
             saved, failures = [], []
             service_issue = None
             for plan in plans:
@@ -685,7 +685,7 @@ class Reader:
                         size += len(unit["source"])
                     translated.update(runtime.translate(segment_batch, params["target_language"],
                                                         params.get("glossary", {}), cancelled))
-                except DshFailure as error:
+                except ModelFailure as error:
                     failures.append({"page": page, **error.issue})
                     if error.issue["next_action"] in ("configure_service", "check_quota"):
                         service_issue = error.issue
@@ -719,16 +719,16 @@ class Reader:
                     event = self.host.finish(current, "completed", result=result)
                 self.host.send_events([event])
         except LiteratureError as error:
-            self.host.fail_dsh(key, {"reason": error.reason, "retryable": False, "next_action": error.action})
+            self.host.fail_task(key, {"reason": error.reason, "retryable": False, "next_action": error.action})
         except Exception as error:
             print(f"PaperTrace translation: {type(error).__name__}", file=sys.stderr)
-            self.host.fail_dsh(key, {"reason": "TEMPORARILY_UNAVAILABLE", "retryable": True, "next_action": "retry"})
+            self.host.fail_task(key, {"reason": "TEMPORARILY_UNAVAILABLE", "retryable": True, "next_action": "retry"})
         finally:
             with self.host.lock:
                 self.host.inflight.pop(key, None)
 
     def run_question(self, task, cancelled):
-        from dsh import DshFailure
+        from model_agent import ModelFailure
         topic, params = task["topic_id"], task["input"]
         key = task["task_id"]
         try:
@@ -748,7 +748,7 @@ class Reader:
                     raise LiteratureError("NO_TEXT_IN_SELECTION", "This region has no readable text. Use an image question.", "correct_request")
                 paper = {"paper_id": source["paper_id"], "source_version_id": version,
                          "passages": [{"passage_id": "reader-selection", "page": page, "text": selected}]}
-                claims, _ = self.host.dsh_for_task(task).answer(
+                claims, _ = self.host.agent_for_task(task).answer(
                     question, [paper], cancelled, context="selected PDF text")
                 answer = "\n".join(claim["text"] for claim in claims)
             with self.host.lock, self.host.db:
@@ -763,13 +763,13 @@ class Reader:
                 self.host.put("reader_answer", key, item)
                 event = self.host.finish(current, "completed", result={"record_id": key, "kind": "reader_question"})
                 self.host.send_events([event])
-        except (LiteratureError, DshFailure) as error:
-            issue = error.issue if isinstance(error, DshFailure) else {
+        except (LiteratureError, ModelFailure) as error:
+            issue = error.issue if isinstance(error, ModelFailure) else {
                 "reason": error.reason, "retryable": error.reason == "VISION_UNAVAILABLE", "next_action": error.action}
-            self.host.fail_dsh(key, issue)
+            self.host.fail_task(key, issue)
         except Exception as error:
             print(f"PaperTrace reader task: {type(error).__name__}", file=sys.stderr)
-            self.host.fail_dsh(key, {"reason": "TEMPORARILY_UNAVAILABLE", "retryable": True, "next_action": "retry"})
+            self.host.fail_task(key, {"reason": "TEMPORARILY_UNAVAILABLE", "retryable": True, "next_action": "retry"})
         finally:
             with self.host.lock:
                 self.host.inflight.pop(key, None)
@@ -819,10 +819,10 @@ class Reader:
                         result = self.host.finish(current, "completed", result=progress)
                     self.host.send_events([result])
         except LiteratureError as error:
-            self.host.fail_dsh(key, {"reason": error.reason, "retryable": True, "next_action": error.action})
+            self.host.fail_task(key, {"reason": error.reason, "retryable": True, "next_action": error.action})
         except Exception as error:
             print(f"PaperTrace visual indexing: {type(error).__name__}", file=sys.stderr)
-            self.host.fail_dsh(key, {"reason": "LAYOUT_FAILED", "retryable": True, "next_action": "retry"})
+            self.host.fail_task(key, {"reason": "LAYOUT_FAILED", "retryable": True, "next_action": "retry"})
         finally:
             with self.host.lock:
                 self.host.inflight.pop(key, None)

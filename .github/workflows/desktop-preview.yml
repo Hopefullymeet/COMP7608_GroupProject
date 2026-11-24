@@ -5,7 +5,8 @@ on:
     branches: [papertrace/settings-backend-4247508]
     paths:
       - '.github/workflows/desktop-preview.yml'
-      - 'backend/engine/packages/session/session-log-deepseek/src/types.ts'
+      - 'backend/model_agent.py'
+      - 'backend/research_tools.py'
       - 'frontend/scripts/release-runtime.py'
       - 'frontend/src-tauri/tauri.release.conf.json'
 permissions:
@@ -35,23 +36,11 @@ jobs:
         with:
           version: 11.28.5
       - uses: astral-sh/setup-uv@v6
-      - name: Build agent from the vendored source
-        working-directory: backend/engine
-        run: |
-          test "$(node -p process.arch)" = "${{ matrix.arch }}"
-          pnpm install --frozen-lockfile
-          pnpm run build:native-system
-          node --import tsx/esm scripts/compile-referenced-projects.ts host-libraries
-          stage="$(node -p "require('node:path').join(process.env.RUNNER_TEMP,'agent')")"
-          hook="$(node -p "require('node:path').resolve('scripts/python-runtime-deploy.pnpmfile.mjs')")"
-          pnpm --filter dsh-python-runtime-closure deploy --prod --config.allow-unused-patches=true --config.node-linker=hoisted "--config.pnpmfile=$hook" --config.link-workspace-packages=true --config.hoist-workspace-packages=false "$stage"
-          node scripts/stage-papertrace.ts "$stage"
       - name: Pack standalone runtime
         run: |
           uv python install 3.12.13
           mkdir -p "$RUNNER_TEMP/runtime-build"
-          curl -fsSL https://raw.githubusercontent.com/nodejs/node/v24.14.0/LICENSE -o "$RUNNER_TEMP/runtime-build/NODE-LICENSE"
-          uv run --no-project --python 3.12.13 frontend/scripts/release-runtime.py "$RUNNER_TEMP/agent" "$RUNNER_TEMP/runtime-build"
+          uv run --no-project --python 3.12.13 frontend/scripts/release-runtime.py "$RUNNER_TEMP/runtime-build"
       - name: Build installer
         working-directory: frontend
         run: |

@@ -7,7 +7,7 @@ import tempfile
 import time
 from uuid import uuid4
 
-from dsh import MODEL
+from model_agent import MODEL
 from literature import entry_anchors
 from papertrace import Worker
 
@@ -113,8 +113,8 @@ def evaluate(folder, corpus_only):
                       "model_executed": False, "cases": []}
             if corpus_only:
                 return report
-            if not worker.dsh or not worker.dsh.key:
-                raise RuntimeError("Configure PAPERTRACE_DSH_CLI and DEEPSEEK_API_KEY to run the model comparison.")
+            if not worker.agent or not worker.agent.key:
+                raise RuntimeError("Configure DEEPSEEK_API_KEY to run the model comparison.")
             report["model_executed"] = True
             report["model"] = MODEL
             # Build the reviewed notes before asking the held-out evaluation questions.

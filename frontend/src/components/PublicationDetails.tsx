@@ -61,20 +61,20 @@ function CatalogImport({ rankings }: { rankings: Rank[] }) {
     } catch (err) { setStatus(err instanceof Error ? err.message : String(err)) }
   }}>
     <label>{tr('Classification scheme')}<select name="scheme">{rankings.map(r=><option key={r.scheme} value={r.scheme}>{r.label}</option>)}</select></label>
-    <label>{tr('Edition')}<input required name="edition" /></label>
-    <label>{tr('Catalog year')}<input required name="year" type="number" min="1900" max="9999" /></label>
-    <label>{tr('Catalog source')}<input required name="url" type="url" placeholder="https://" /></label>
+    <label>{tr('Edition')}<input className="text-field" required name="edition" /></label>
+    <label>{tr('Catalog year')}<input className="text-field" required name="year" type="number" min="1900" max="9999" /></label>
+    <label>{tr('Catalog source')}<input className="text-field" required name="url" type="url" placeholder="https://" /></label>
     <label>CSV<input required name="file" type="file" accept=".csv,text/csv" /></label>
     <small>{tr('Required columns: venue, venue_type (journal or conference), value. Optional: issns, aliases, category, source_url.')}</small>
-    <button className="ghost-btn" disabled={busy}>{tr('Import a catalog')}</button>
+    <button className="primary" disabled={busy}>{tr('Import a catalog')}</button>
     {status && <small role="status">{status}</small>}
   </form></Disclosure>
 }
 
-export function PublicationDetails({ topic, paper }: { topic: string; paper: string }) {
+export function PublicationDetails({ topic, paper, defaultOpen = false }: { topic: string; paper: string; defaultOpen?: boolean }) {
   const { tr } = useLanguage()
   const workspace = useWorkspace()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(defaultOpen)
   const [looking, setLooking] = useState(false)
   const [notice, setNotice] = useState('')
   const [draft, edit] = useState<(Omit<PaperMetadata, 'issns'> & { issns: string; revision: string })>()
@@ -91,7 +91,7 @@ export function PublicationDetails({ topic, paper }: { topic: string; paper: str
         </div>
       ))}
     </section>}
-    <Disclosure panel icon="book" title={tr('Publication details')} onOpenChange={setOpen}>
+    <Disclosure panel open={open} icon="book" title={tr('Publication details')} onOpenChange={setOpen}>
     {open && !entry && <p role="status">{tr('Loading…')}</p>}
     {entry && metadata && <>
       <dl className="bibliographic-fields">{fields.map(([key,label]) => {
@@ -101,7 +101,7 @@ export function PublicationDetails({ topic, paper }: { topic: string; paper: str
         return <Fragment key={key}><dt>{tr(label)}</dt><dd>{key === 'url' && /^https?:\/\//i.test(value)
           ? <a href={value} target="_blank" rel="noreferrer">{value}</a> : tr(value)}</dd></Fragment>
       })}</dl>
-      {metadata.metadata_url && <a href={metadata.metadata_url} target="_blank" rel="noreferrer">{tr('Bibliographic source')}</a>}
+      {metadata.metadata_url && <a className="link-btn" href={metadata.metadata_url} target="_blank" rel="noreferrer">{tr('Bibliographic source')}</a>}
       <button className="link-btn" disabled={looking} onClick={async () => {
         setLooking(true)
         setNotice('')

@@ -3,6 +3,7 @@
 import base64
 from contextlib import closing
 import json
+import os
 from pathlib import Path
 import shutil
 import sqlite3
@@ -12,9 +13,10 @@ import unittest
 from unittest.mock import patch
 from uuid import uuid4
 
-from dsh import Dsh, failure
+from model_agent import ModelAgent, failure
 from literature import body_passage_starts, poppler
 from papertrace import Worker
+from research_tools import ResearchTools, open_corpus
 
 
 def sample_pdf(body):
@@ -44,7 +46,7 @@ class ScriptedSynthesis:
         self.database = Path(workspace) / "workspace.sqlite3"
         self.leads = []
 
-    def synthesize(self, question, sources, wiki, cancelled, progress, mode, dimensions=None, endpoint_completion=None):
+    def synthesize(self, question, sources, wiki, cancelled, progress, mode, dimensions=None):
         self.leads = wiki
         seen = {}
         refs = []
@@ -91,13 +93,27 @@ class BodyEvidenceTest(unittest.TestCase):
 
 
 class LiteratureTest(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "Windows extended workspace path")
+    def test_desktop_extended_path_can_read_scoped_passages(self):
+        root = Path("\\\\?\\" + str(Path(self.workspace.name).resolve()))
+        version = self.versions[0]
+        tools = ResearchTools(root, [{"source_version_id": version, "available_scope": "full_text"}], [])
+        for question in ("benchmark", "zzznomatch"):
+            with self.subTest(question=question):
+                passages = tools.initial_readings(question)
+                self.assertTrue(passages)
+                rows = tools.read([passages[0]["passage_id"]])
+                self.assertTrue(all(row["source_version_id"] == version for row in rows))
+        with open_corpus(tools.database) as db, self.assertRaisesRegex(sqlite3.OperationalError, "readonly"):
+            db.execute("CREATE TABLE unexpected_write (id)")
+
     def setUp(self):
         self.workspace = tempfile.TemporaryDirectory()
         self.worker = Worker(Path(self.workspace.name), self.receive)
         self.replies = {}
         self.addCleanup(self.workspace.cleanup)
         self.addCleanup(self.worker.close)
-        self.worker.dsh = ScriptedSynthesis(self.workspace.name)
+        self.worker.agent = ScriptedSynthesis(self.workspace.name)
         self.topic = self.call("topic.create", title="Evidence")["topic_id"]
         self.other = self.call("topic.create", title="Other")["topic_id"]
         self.a = self.save_pdf("Alpha", "Alpha proposes the benchmark for evidence attribution.")
@@ -179,28 +195,6 @@ class LiteratureTest(unittest.TestCase):
         following = self.call("task.prepare", **args)
         self.assertIn("Relevant reviewed Wiki entries", following["transfers"][0]["data_categories"])
 
-    def test_outline_uses_confirmed_endpoint_when_sdk_cannot_start(self):
-        from io import BytesIO
-        self.worker.dsh = Dsh("node", "missing-sdk", "test", self.workspace.name)
-
-        def complete(request, timeout):
-            messages = json.loads(request.data)["messages"]
-            passages = json.loads(messages[1]["content"])["passages"]
-            self.assertEqual({p["source_version_id"] for p in passages}, set(self.versions))
-            p = passages[0]
-            result = {"points": [{"title": "Benchmark", "claims": [{"text": "Benchmark evidence",
-                      "assessment": "supported", "contributions": [{"version": p["source_version_id"],
-                      "role": "Definition", "assessment": "supported",
-                      "evidence": [{"id": p["passage_id"], "quote": p["text"]}]}]}]}]}
-            return BytesIO(json.dumps({"choices": [{"message": {"content": json.dumps(result)}}]}).encode())
-
-        with patch("papertrace.build_opener") as opener:
-            opener.return_value.open.side_effect = complete
-            self.run_task(self.versions)
-        outline = self.call("synthesis.list", topic_id=self.topic)["items"][0]
-        self.assertEqual(outline["points"][0]["title"], "Benchmark")
-        self.assertTrue(outline["points"][0]["claims"][0]["contributions"][0]["anchor_ids"])
-
     def test_preview_pdf_reuses_parsing_without_saving_a_paper(self):
         pdf = {"name": "New source.pdf",
                "content": base64.b64encode(sample_pdf("The PDF contains evidence text.")).decode()}
@@ -277,8 +271,8 @@ class LiteratureTest(unittest.TestCase):
         version = self.versions[0]
         passage = self.call("source.read", topic_id=self.topic, source_version_id=version)["passages"][0]
         seen = {passage["passage_id"]: {**passage, "source_version_id": version}}
-        runtime = Dsh("node", __file__, "fixture", self.workspace.name)
-        self.worker.dsh = runtime
+        runtime = ModelAgent(self.workspace.name, "fixture")
+        self.worker.agent = runtime
         args = {"kind": "reading_qa", "topic_id": self.topic, "session_id": session, "input": {
             "question": "How was the benchmark built?",
             "sources": [{"paper_id": self.a["paper_id"], "source_version_id": version,
@@ -301,7 +295,7 @@ class LiteratureTest(unittest.TestCase):
             ({"unexpected": True}, None, "MODEL_OUTPUT_INVALID"),
         ):
             with self.subTest(reason=reason), patch.object(
-                Dsh, "run_research", return_value=(raw, seen, [], {}, provider_issue),
+                ModelAgent, "run_research", return_value=(raw, seen, [], {}, provider_issue),
             ):
                 snapshot = run()
                 self.assertEqual(snapshot["status"], "failed")
@@ -312,7 +306,7 @@ class LiteratureTest(unittest.TestCase):
                     {"source_version_id": version, "read_scope": "full_text"},
                 ])
         for scope, method in (("full_text", "answer_full_text"), ("abstract", "answer")):
-            with self.subTest(scope=scope), patch.object(Dsh, method, side_effect=failure()):
+            with self.subTest(scope=scope), patch.object(ModelAgent, method, side_effect=failure()):
                 args["input"]["sources"][0]["requested_scope"] = scope
                 snapshot = run()
                 self.assertEqual(snapshot["status"], "failed")
@@ -325,19 +319,37 @@ class LiteratureTest(unittest.TestCase):
         answer = {"sentences": [{"text": "The source defines the benchmark.",
                                  "evidence": [{"id": passage["passage_id"], "quote": passage["text"]}]}]}
         budget = {"reason": "TASK_BUDGET_EXHAUSTED", "retryable": False, "next_action": "adjust_budget"}
-        with patch.object(Dsh, "run_research", return_value=(answer, seen, [], {}, budget)):
+        with patch.object(ModelAgent, "run_research", return_value=(answer, seen, [], {}, budget)):
             snapshot = run()
         self.assertEqual(snapshot["status"], "partial")
         self.assertEqual(snapshot["issue"]["reason"], budget["reason"])
         self.assertTrue(snapshot["result"]["sentences"][0]["anchor_ids"])
 
-    def test_reading_uses_configured_endpoint_when_harness_cannot_start(self):
-        self.worker.dsh = Dsh("node", Path(self.workspace.name) / "missing-cli.js", "fixture", self.workspace.name)
-        self.check_reading_uses_configured_endpoint()
-
     def test_live_reading_uses_configured_endpoint_without_harness_installed(self):
-        self.worker.dsh = None
+        self.worker.agent = None
         self.worker.discovery_fixture = False
+        with patch("papertrace.deepseek_api_key", return_value="fixture"):
+            self.check_reading_uses_configured_endpoint()
+
+    def test_reading_dispatch_error_leaves_queue_available(self):
+        session = self.call("session.create", topic_id=self.topic)["session_id"]
+        args = {"kind": "reading_qa", "topic_id": self.topic, "session_id": session,
+                "input": {"question": "Which benchmark?", "sources": [{
+                    "paper_id": self.a["paper_id"], "source_version_id": self.versions[0],
+                    "requested_scope": "full_text"}]}}
+        with patch.object(self.worker, "run_model_reading", side_effect=TypeError("dispatch failure")):
+            prepared = self.call("task.prepare", **args)
+            task = self.call("task.start", confirmation_id=prepared["confirmation_id"], **args)
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                snapshot = self.call("task.get", task_id=task["task_id"])
+                if snapshot["status"] == "failed":
+                    break
+                time.sleep(.03)
+            else:
+                self.fail("Dispatch failure left the task active")
+            self.assertTrue(snapshot["issue"]["retryable"])
+        self.worker.agent = None
         with patch("papertrace.deepseek_api_key", return_value="fixture"):
             self.check_reading_uses_configured_endpoint()
 
@@ -402,7 +414,7 @@ class LiteratureTest(unittest.TestCase):
         self.assertEqual(len(wiki["items"]), 1)
         self.call("synthesis.review", **params, error="STALE_REVISION")
         self.run_task(self.versions)
-        self.assertTrue(self.worker.dsh.leads[0]["passage_ids"])
+        self.assertTrue(self.worker.agent.leads[0]["passage_ids"])
         version = self.save_pdf("Alpha v2", "Alpha revises the benchmark and adds a separate test set.",
                                 paper_id=self.a["paper_id"])["source_version_id"]
         wiki = self.call("synthesis.wiki", topic_id=self.topic)
@@ -414,8 +426,8 @@ class LiteratureTest(unittest.TestCase):
         self.assertEqual(self.call("evidence.open", topic_id=self.topic, anchor_id=anchor)["quote"], located["quote"])
         self.call("synthesis.review", **{**params, "base_revision": wiki["revision"]}, error="STALE_REVISION")
         self.run_task([version, self.versions[1]])
-        self.assertTrue(self.worker.dsh.leads[0]["needs_review"])
-        self.assertEqual(self.worker.dsh.leads[0]["passage_ids"], [])
+        self.assertTrue(self.worker.agent.leads[0]["needs_review"])
+        self.assertEqual(self.worker.agent.leads[0]["passage_ids"], [])
         revised = self.call("synthesis.list", topic_id=self.topic)["items"][0]
         params.update(record_id=revised["record_id"], base_revision=wiki["revision"], item_ids=[revised["points"][0]["id"]])
         wiki = self.call("synthesis.review", **params)
@@ -431,7 +443,7 @@ class LiteratureTest(unittest.TestCase):
                     "reason": "TASK_BUDGET_EXHAUSTED", "retryable": False, "next_action": "adjust_budget",
                 }
 
-        self.worker.dsh = BudgetReached(self.workspace.name)
+        self.worker.agent = BudgetReached(self.workspace.name)
         terminal = self.run_task(self.versions)
         self.assertEqual(terminal["issue"]["reason"], "TASK_BUDGET_EXHAUSTED")
         record = self.call("synthesis.list", topic_id=self.topic)["items"][0]

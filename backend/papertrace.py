@@ -24,7 +24,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
 
 from credentials import deepseek_api_key, system_key, store
-from dsh import AGENT_POLICY, ANSWER_LAYOUT, TITLE_INSTRUCTION, Dsh, DshFailure, ENDPOINT, MODEL, read_json_answer
+from model_agent import AGENT_POLICY, ANSWER_LAYOUT, TITLE_INSTRUCTION, ModelAgent, ModelFailure, ENDPOINT, MODEL, read_json_answer
 from literature import LiteratureError, MAX_VERSIONS, body_passage_starts, digest, init_corpus
 from workbench import Workbench
 from citations import CitationWorkspace, init_citations
@@ -192,7 +192,7 @@ class Worker:
         self.send = send
         self.lock = threading.RLock()
         self.service_test_lock = threading.Lock()
-        self.dsh = Dsh.configured(directory.resolve())
+        self.agent = ModelAgent(directory.resolve())
         self.discovery_fixture = os.environ.get("PAPERTRACE_DISCOVERY_FIXTURE") == "1"
         self.openalex_key = os.environ.get("PAPERTRACE_OPENALEX_API_KEY", "").strip()
         self.inflight = {}
@@ -477,10 +477,10 @@ class Worker:
             config = self.services_config()
         return config
 
-    def dsh_for_task(self, task):
-        if isinstance(self.dsh, Dsh):
-            return self.dsh.for_model(task.get("dsh_model", MODEL), task.get("dsh_endpoint", ENDPOINT))
-        return self.dsh
+    def agent_for_task(self, task):
+        if isinstance(self.agent, ModelAgent):
+            return self.agent.for_model(task.get("dsh_model", MODEL), task.get("dsh_endpoint", ENDPOINT))
+        return self.agent
 
     def test_service(self, params):
         operation = required(params, "operation_id")
@@ -1480,7 +1480,7 @@ class Worker:
             task_data["translation_keys"] = [plan["key"] for plan in plans]
             pending_translation = [plan for plan in plans if plan["units"] and
                                    not self.reader.translation_available(plan["key"])]
-            if pending_translation and (not self.dsh or not self.dsh.key):
+            if pending_translation and (not self.agent or not self.agent.key):
                 raise RpcError(-32015, "MODEL_UNAVAILABLE", "configure_service", "Configure a text model to translate.")
             label = "Translate selected PDF text"
         elif kind == "visual_index":
@@ -1508,8 +1508,8 @@ class Worker:
                     raise invalid("Select exactly two papers and one to eight distinct comparison dimensions.")
             if input_.get("mode", "wiki") not in ("fixed", "agent", "wiki"):
                 raise invalid("Unknown synthesis mode.")
-            if not self.dsh or not self.dsh.key:
-                raise RpcError(-32015, "MODEL_UNAVAILABLE", "configure_service", "Configure DeepSeek Harness before synthesizing papers.")
+            if not self.agent or not self.agent.key:
+                raise RpcError(-32015, "MODEL_UNAVAILABLE", "configure_service", "Configure a text model before synthesizing papers.")
             target = topic
         else:
             raise RpcError(-32601, "METHOD_NOT_FOUND", "refresh_data", "This task is not available in the local integration worker.")
@@ -1519,9 +1519,9 @@ class Worker:
         reader_question = kind == "reader_question"
         translation = kind == "reader_translation"
         live = synthesis or (kind == "reading_qa" and not self.discovery_fixture and not task_data.get("figure_lookup_only")) or (
-            audit and bool(audit_pending) and self.dsh is not None and bool(self.dsh.key))
+            audit and bool(audit_pending) and self.agent is not None and bool(self.agent.key))
         live = live or (reader_question and input_["medium"] == "text") or (translation and bool(pending_translation))
-        live = live or (suggest and bool(task_data["suggestion_sources"]) and self.dsh is not None and bool(self.dsh.key))
+        live = live or (suggest and bool(task_data["suggestion_sources"]) and self.agent is not None and bool(self.agent.key))
         if audit and "question" in input_:
             live = True
         if audit:
@@ -1729,22 +1729,28 @@ class Worker:
                             "Reading selected papers." if live else "Running local contract sample.")
                     })
                 self.send_events([event])
-            if remote_search:
-                self.run_openalex(task, signal)
-                continue
-            if live:
-                if audit:
-                    self.citations.run(task, signal)
-                elif suggest:
-                    self.citations.run_suggestions(task, signal)
-                elif reader_task:
-                    run = {"reader_question": self.reader.run_question, "visual_index": self.reader.run_index,
-                           "reader_translation": self.reader.run_translation}[task["kind"]]
-                    run(task, signal)
-                elif synthesis:
-                    self.research.run(task, signal)
-                else:
-                    self.run_dsh(task, signal)
+            if remote_search or live:
+                try:
+                    if remote_search:
+                        self.run_openalex(task, signal)
+                    elif audit:
+                        self.citations.run(task, signal)
+                    elif suggest:
+                        self.citations.run_suggestions(task, signal)
+                    elif reader_task:
+                        run = {"reader_question": self.reader.run_question, "visual_index": self.reader.run_index,
+                               "reader_translation": self.reader.run_translation}[task["kind"]]
+                        run(task, signal)
+                    elif synthesis:
+                        self.research.run(task, signal)
+                    else:
+                        self.run_model_reading(task, signal)
+                except Exception as error:
+                    print(f"PaperTrace {task['kind']} dispatch: {type(error).__name__}", file=sys.stderr)
+                    self.fail_task(task_id, {"reason": "TEMPORARILY_UNAVAILABLE", "retryable": True, "next_action": "retry"})
+                finally:
+                    with self.lock:
+                        self.inflight.pop(task_id, None)
                 continue
             with self.lock:
                 task = self.get("task", task_id)
@@ -1774,7 +1780,7 @@ class Worker:
 
     def answer_with_model_endpoint(self, endpoint, model, key, question, sources, cancelled, preview=None, memory=None, name_session=False):
         if not key:
-            raise DshFailure("SERVICE_AUTH_FAILED", False, "configure_service")
+            raise ModelFailure("SERVICE_AUTH_FAILED", False, "configure_service")
         # Separate CJK text from adjacent terms such as HRI before querying SQLite FTS.
         words = re.findall(r"[\u3400-\u9fff]+|(?:(?![\u3400-\u9fff])[^\W_])+", question.casefold())
         terms = list(dict.fromkeys(words))[:24]
@@ -1830,7 +1836,7 @@ class Worker:
                 else:
                     seen[pid] = {**lead, "source_version_id": source["source_version_id"], "paper_id": source["paper_id"]}
         if cancelled.is_set():
-            raise DshFailure("TASK_CANCELLED", False, "refresh_task")
+            raise ModelFailure("TASK_CANCELLED", False, "refresh_task")
         if not seen:
             return [{"text": "未找到相关的可读文献段落。" if re.search(r"[\u4e00-\u9fff]", question)
                      else "No matching readable passages were found.", "references": []}], seen
@@ -1854,29 +1860,14 @@ class Worker:
             payload.update(thinking={"type": "disabled"}, response_format={"type": "json_object"})
         try:
             return self.request_reading_answer(endpoint, key, payload, seen, preview), seen
-        except DshFailure as error:
+        except ModelFailure as error:
             if error.issue["reason"] != "MODEL_OUTPUT_INVALID" or not error.issue["retryable"]:
                 raise
         if cancelled.is_set():
-            raise DshFailure("TASK_CANCELLED", False, "refresh_task")
+            raise ModelFailure("TASK_CANCELLED", False, "refresh_task")
         concise = {**messages[0], "content": messages[0]["content"] +
                    " Return only the JSON object with one to three concise entries with short supporting excerpts."}
         return self.request_reading_answer(endpoint, key, {**payload, "messages": [concise, messages[1]]}, seen), seen
-
-    def request_synthesis(self, endpoint, model, key, instructions, data, seen):
-        payload = {"model": model, "messages": [{"role": "system", "content": instructions},
-                                                {"role": "user", "content": encode(data)}],
-                   "max_tokens": 5400, "stream": False}
-        if endpoint == ENDPOINT:
-            payload.update(thinking={"type": "disabled"}, response_format={"type": "json_object"})
-
-        def parse(content):
-            result = json.loads(re.sub(r"\A```(?:json)?\s*|\s*```\Z", "", content.strip(), flags=re.I))
-            if not isinstance(result, dict) or not isinstance(result.get("points"), list):
-                raise ValueError
-            return result
-
-        return self.request_model_json(endpoint, key, payload, seen, parse, timeout=90)
 
     def request_reading_answer(self, endpoint, key, payload, seen, preview=None):
         return self.request_model_json(endpoint, key, payload, seen, lambda text: read_json_answer(text, seen), preview=preview)
@@ -1949,25 +1940,25 @@ class Worker:
             status = error.code
             error.close()
             if status in (401, 403):
-                raise DshFailure("SERVICE_AUTH_FAILED", False, "configure_service") from None
+                raise ModelFailure("SERVICE_AUTH_FAILED", False, "configure_service") from None
             if status == 402:
-                raise DshFailure("SERVICE_QUOTA_EXHAUSTED", False, "check_quota") from None
+                raise ModelFailure("SERVICE_QUOTA_EXHAUSTED", False, "check_quota") from None
             if status == 429:
-                raise DshFailure("SERVICE_RATE_LIMITED", True, "retry") from None
-            raise DshFailure("MODEL_UNAVAILABLE", status >= 500,
+                raise ModelFailure("SERVICE_RATE_LIMITED", True, "retry") from None
+            raise ModelFailure("MODEL_UNAVAILABLE", status >= 500,
                              "retry" if status >= 500 else "configure_service") from None
         except (OSError, HTTPException) as error:
             cause = error.reason if isinstance(error, URLError) else error
             if isinstance(cause, TimeoutError):
-                raise DshFailure("TASK_TIMEOUT", True, "retry") from None
-            raise DshFailure("MODEL_UNAVAILABLE", True, "retry") from None
-        except (AttributeError, KeyError, IndexError, TypeError, ValueError, DshFailure):
-            error = DshFailure("MODEL_OUTPUT_INVALID", stage != "content_filtered", "retry")
+                raise ModelFailure("TASK_TIMEOUT", True, "retry") from None
+            raise ModelFailure("MODEL_UNAVAILABLE", True, "retry") from None
+        except (AttributeError, KeyError, IndexError, TypeError, ValueError, ModelFailure):
+            error = ModelFailure("MODEL_OUTPUT_INVALID", stage != "content_filtered", "retry")
             error.issue["details"] = {"model_output_stage": stage}
             error.seen = seen
             raise error from None
 
-    def run_dsh(self, task, signal):
+    def run_model_reading(self, task, signal):
         task_id = task["task_id"]
         try:
             with self.lock:
@@ -2007,7 +1998,7 @@ class Worker:
                              "if none match, say so. Candidates: " + json.dumps(descriptions, ensure_ascii=False))
             has_pdf = any(source["available_scope"] == "full_text" for source in sources)
             endpoint = task.get("dsh_endpoint", ENDPOINT)
-            runtime = self.dsh_for_task(task) if endpoint == ENDPOINT else None
+            runtime = self.agent_for_task(task) if endpoint == ENDPOINT else None
             memory = task.get("topic_memory")
             issue = None
             used_endpoint = runtime is None
@@ -2026,16 +2017,6 @@ class Worker:
                         event = self.emit(current, "task.progress", {"stage": "tool." + name, "message": observation, "activity": activity})
                     self.send_events([event])
 
-            if runtime is not None:
-                try:
-                    if has_pdf:
-                        claims, seen, issue = runtime.answer_full_text(question, sources, signal, memory=memory, progress=record_tool, name_session=name_session)
-                    else:
-                        claims, seen = runtime.answer(question, sources, signal, memory=memory, progress=record_tool, name_session=name_session)
-                except DshFailure as error:
-                    if not error.startup:
-                        raise
-                    used_endpoint = True
             streamed = False
 
             def preview(text):
@@ -2045,21 +2026,27 @@ class Worker:
                     if current["status"] != "running":
                         return
                     with self.db:
-                        event = self.emit(current, "answer.delta", {"text": ("\n\n" if streamed else "") + text})
+                        event = self.emit(current, "answer.delta", {"text": text})
                     streamed = True
                     self.send_events([event])
 
+            if runtime is not None:
+                if has_pdf:
+                    claims, seen, issue = runtime.answer_full_text(question, sources, signal, memory=memory, progress=record_tool, name_session=name_session, preview=preview)
+                else:
+                    claims, seen = runtime.answer(question, sources, signal, memory=memory, progress=record_tool, name_session=name_session, preview=preview)
             if used_endpoint:
                 claims, seen = self.answer_with_model_endpoint(
                     endpoint, task.get("dsh_model", MODEL),
-                    runtime.key if runtime is not None else deepseek_api_key(), question, sources, signal, preview, memory, name_session,
+                    deepseek_api_key(), question, sources, signal,
+                    lambda sentence: preview(("\n\n" if streamed else "") + sentence), memory, name_session,
                 )
             with self.lock:
                 task = self.get("task", task_id)
                 if task["status"] != "running":
                     return
                 if issue and not claims:
-                    self.fail_dsh(task_id, issue, seen)
+                    self.fail_task(task_id, issue, seen)
                     return
                 reads = self.read_coverage(task["input"]["sources"], seen)
                 with self.db:
@@ -2078,12 +2065,13 @@ class Worker:
                                 anchors.append(self.store_anchor(task, message_id, passage, ref["quote"]))
                                 cited.add(key)
                         sentences.append({"text": claim["text"], "anchor_ids": anchors,
+                                          **({"paragraph_start": claim["paragraph_start"]} if "paragraph_start" in claim else {}),
                                           "assessment": "supported" if anchors else "evidence_not_established"})
                     if not has_pdf and not abstract_requested:
                         note = ("目前只有摘要可供查阅。请补充论文全文，以便核对正文依据。"
                                 if re.search(r"[\u3400-\u9fff]", question) else
                                 "Only abstracts were available. Add the full papers to verify these claims against the body.")
-                        sentences.append({"text": note, "anchor_ids": [], "assessment": "evidence_not_established"})
+                        sentences.append({"text": note, "paragraph_start": True, "anchor_ids": [], "assessment": "evidence_not_established"})
                     review = {"model": task.get("dsh_model", MODEL),
                               "findings": {str(i): c["wiki_reason"] for i, c in enumerate(claims)
                                            if c.get("wiki_reason") and sentences[i]["anchor_ids"]},
@@ -2091,16 +2079,16 @@ class Worker:
                     events = self.persist_reading(task, message_id, sentences, reads, issue=issue, streamed=streamed, review=review,
                                                   title=claims[0].get("session_title") if claims else None)
                 self.send_events(events)
-        except DshFailure as error:
-            self.fail_dsh(task_id, error.issue, error.seen)
-        except Exception as error:
-            print(f"PaperTrace DSH task: {type(error).__name__}", file=sys.stderr)
-            self.fail_dsh(task_id, {"reason": "TEMPORARILY_UNAVAILABLE", "retryable": True, "next_action": "retry"})
+        except ModelFailure as error:
+            self.fail_task(task_id, error.issue, error.seen)
+        except Exception:
+            self.record_error("reading_qa " + task_id)
+            self.fail_task(task_id, {"reason": "TEMPORARILY_UNAVAILABLE", "retryable": True, "next_action": "retry"})
         finally:
             with self.lock:
                 self.inflight.pop(task_id, None)
 
-    def fail_dsh(self, task_id, issue, seen=None):
+    def fail_task(self, task_id, issue, seen=None):
         with self.lock:
             task = self.get("task", task_id)
             if task["status"] != "running":
@@ -2177,11 +2165,11 @@ class Worker:
             with self.lock:
                 self.send_events(events)
         except PublicServiceError as error:
-            self.fail_dsh(task_id, {"reason": error.reason, "retryable": error.retryable, "next_action": error.action,
+            self.fail_task(task_id, {"reason": error.reason, "retryable": error.retryable, "next_action": error.action,
                                     "details": {"message": str(error)}})
         except Exception as error:
             print(f"PaperTrace search: {type(error).__name__}", file=sys.stderr)
-            self.fail_dsh(task_id, {"reason": "SERVICE_INVALID_RESPONSE", "retryable": True, "next_action": "retry"})
+            self.fail_task(task_id, {"reason": "SERVICE_INVALID_RESPONSE", "retryable": True, "next_action": "retry"})
         finally:
             with self.lock:
                 self.inflight.pop(task_id, None)

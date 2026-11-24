@@ -25,7 +25,7 @@ with tempfile.TemporaryDirectory() as directory:
     workspace = Path(directory)
     root = workspace / "desktop-runtime" / digest
     env = {**os.environ, "PAPERTRACE_WORKSPACE": directory}
-    for key in ("PAPERTRACE_AGENT_CLI", "PAPERTRACE_AGENT_NODE", "PAPERTRACE_PYTHON", "PYTHONPATH"):
+    for key in ("PAPERTRACE_PYTHON", "PYTHONPATH"):
         env.pop(key, None)
     app_process = subprocess.Popen([str(app)], env=env)
     try:
@@ -35,12 +35,9 @@ with tempfile.TemporaryDirectory() as directory:
                 raise RuntimeError("Installed application did not initialize the bundled runtime")
             time.sleep(1)
         python = root / ("python/python.exe" if windows else "python/bin/python3.12")
-        node = root / ("node.exe" if windows else "node")
-        cli = root / "engine/node_modules/@deepseek-ai/dsh/lib/bin.js"
-        env.update(PYTHONNOUSERSITE="1", PYTHONPATH=str(root / "site"), PAPERTRACE_TEST_DSH_CLI=str(cli),
-                   PAPERTRACE_DSH_NODE=str(node), PATH=str(node.parent))
+        env.update(PYTHONNOUSERSITE="1", PYTHONPATH=str(root / "site"))
         subprocess.run([str(python), "-B", "-m", "unittest",
-                        "test_dsh_research.DshResearchTest.test_real_harness_search_read_and_reviewed_wiki"],
+                        "test_model_research.ModelResearchTest.test_search_read_and_reviewed_wiki"],
                        cwd=repo / "backend", env=env, check=True, timeout=240)
     finally:
         app_process.terminate()

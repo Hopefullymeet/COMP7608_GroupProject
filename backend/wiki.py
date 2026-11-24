@@ -13,7 +13,7 @@ import sys
 import threading
 
 from credentials import deepseek_api_key
-from dsh import DshFailure, ENDPOINT
+from model_agent import ModelFailure, ENDPOINT
 from literature import LiteratureError, body_passage_starts, digest
 
 KINDS = ("focus", "paper", "finding", "preference", "open_question")
@@ -605,7 +605,7 @@ class TopicWiki:
             else:  # nothing rewrites entries offline, so earlier summary entries stay
                 draft = local_summary(material, [e for e in entries if e not in kept], has_focus=any(
                     e["kind"] == "focus" for e in entries))
-        except DshFailure as failure:
+        except ModelFailure as failure:
             self.fail(topic, "refresh", failure.issue)
             return
         known = {a for e in entries for a in e["anchor_ids"]}
@@ -665,7 +665,7 @@ class TopicWiki:
         message = wiki["thread"][-1]["text"]
         try:
             answer = self.model_reply(model, material, wiki, message) if model else local_reply(wiki, message)
-        except DshFailure as failure:
+        except ModelFailure as failure:
             self.fail(topic, "chat", failure.issue)
             return
         with host.lock:

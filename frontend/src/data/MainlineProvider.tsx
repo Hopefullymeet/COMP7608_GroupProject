@@ -65,7 +65,8 @@ function answerMessages(session: string, { task_id, question, answer }: Turn): [
       role: 'agent',
       done: true,
       segments: [
-        ...answer.sentences.map((sentence) => ({
+        ...answer.sentences.map((sentence, index) => ({
+          paragraphStart: sentence.paragraph_start ?? (index % 3 === 0),
           text: sentence.text,
           evidenceIds: answer.figures && !answer.read_sources.length ? undefined : sentence.anchor_ids.map((anchor) => evidenceId(answer.message_id, anchor)),
         })),

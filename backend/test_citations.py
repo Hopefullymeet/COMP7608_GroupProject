@@ -127,7 +127,7 @@ class TestCitationWorkflow(unittest.TestCase):
                         {"id": sources[0]["passage_id"], "quote": "An invented quote has no passage match."}]},
                 ]}]}, seen, [], {"model_steps": 1}, None
 
-        self.worker.dsh = Model()
+        self.worker.agent = Model()
         args = {"topic_id": self.topic, "kind": "citation_suggest", "input": {
             "draft_id": draft["draft_id"], "version_id": snapshot["version_id"], "sentence_ids": [sid],
             "source_versions": [v1, v2],
@@ -207,7 +207,7 @@ class TestCitationWorkflow(unittest.TestCase):
                                     "evidence": [{"id": p["passage_id"], "quote": excerpts[vid]}]}]}, {
                     p["passage_id"]: {"source_version_id": vid}}, [], {}, None
 
-        worker.dsh = Model()
+        worker.agent = Model()
         worker.topic_wiki.model = lambda: {"model": "fixture"}
         def reply(model, system, data, parse):
             if "records" in data:
@@ -314,7 +314,7 @@ class TestCitationWorkflow(unittest.TestCase):
                 return {"checks": checks}, seen, [], {"model_steps": 1}, None
 
         model = Model()
-        self.worker.dsh = model
+        self.worker.agent = model
         manuscript = self.import_draft()
         self.assertEqual(self.import_draft()["draft_id"], manuscript["draft_id"])
         self.assertTrue(call(self.worker, "draft.page", topic_id=self.topic, draft_id=manuscript["draft_id"],
@@ -344,7 +344,7 @@ class TestCitationWorkflow(unittest.TestCase):
         self.assertIn("PDF p. 1", exported["files"][0]["text"])
 
         # Only the unchecked, unusable citation remains selected on a cached run.
-        self.worker.dsh = None
+        self.worker.agent = None
         current["versions"][0]["sentences"] = version["sentences"][:2]
         cached_prepare, cached = self.start(current)
         self.assertEqual(cached_prepare["transfers"], [])
@@ -388,7 +388,7 @@ class TestCitationWorkflow(unittest.TestCase):
                                                   "quote": "This paper measures runtime and retrieval throughput."}]}]}, {
                     new_context["passage_id"]: {"source_version_id": new_version}}, [], {}, None
 
-        self.worker.dsh = RecheckModel()
+        self.worker.agent = RecheckModel()
         _, rechecked = self.start(one_sentence)
         self.assertEqual(rechecked["status"], "completed")
         reports = call(self.worker, "draft.list", topic_id=self.topic)["items"][0]["versions"][0]

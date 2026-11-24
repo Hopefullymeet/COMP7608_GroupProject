@@ -10,7 +10,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 from urllib.parse import quote
 from uuid import uuid4
-from dsh import DshFailure, MODEL, audit_language
+from model_agent import ModelFailure, MODEL, audit_language
 from literature import LiteratureError, digest, extract_pdf, pdf_content, poppler, render_pdf_page
 from venue_ranks import pdf_venue
 
@@ -691,7 +691,7 @@ class CitationWorkspace:
                 doc, draft, jobs = self.jobs(topic, task["input"])
             pending = [j for j in jobs if j["usable"] and j["cached"] is None
                        and task.get("audit_sources", {}).get(j["job_id"]) == j["source"]["source_version_id"]]
-            runtime = host.dsh_for_task(task)
+            runtime = host.agent_for_task(task)
             if pending and runtime:
                 versions = {j["source"]["source_version_id"]: j["source"] for j in pending}
                 inputs = [{"id": j["job_id"], "claim": j["sentence"]["text"],
@@ -712,7 +712,7 @@ class CitationWorkspace:
                         judgments = {r["id"]: r for r in rows if isinstance(r, dict) and isinstance(r.get("id"), str)}
                     elif not issue:
                         issue = {"reason": "MODEL_OUTPUT_INVALID", "retryable": True, "next_action": "retry"}
-                except DshFailure as error:
+                except ModelFailure as error:
                     issue = error.issue
             elif any(j["usable"] and j["cached"] is None for j in jobs):
                 issue = {"reason": "MODEL_UNAVAILABLE", "retryable": True, "next_action": "configure_service"}
@@ -737,12 +737,12 @@ class CitationWorkspace:
                     current, "partial", result=result, issue=issue or {
                         "reason": "CITATIONS_UNRESOLVED", "retryable": False, "next_action": "review_gaps"})
             host.send_events([event])
-        except DshFailure as error:
-            host.fail_dsh(task["task_id"], error.issue)
+        except ModelFailure as error:
+            host.fail_task(task["task_id"], error.issue)
         except Exception as error:
             import sys
             print(f"PaperTrace citation audit: {type(error).__name__}", file=sys.stderr)
-            host.fail_dsh(task["task_id"], {"reason": "AUDIT_UNAVAILABLE", "retryable": True, "next_action": "retry"})
+            host.fail_task(task["task_id"], {"reason": "AUDIT_UNAVAILABLE", "retryable": True, "next_action": "retry"})
         finally:
             with host.lock:
                 host.inflight.pop(task["task_id"], None)
@@ -788,7 +788,7 @@ class CitationWorkspace:
                        "previous_questions": previous, "question": params["question"]}
             configured = host.topic_wiki.model()
             if not configured:
-                raise DshFailure("MODEL_UNAVAILABLE", False, "configure_service")
+                raise ModelFailure("MODEL_UNAVAILABLE", False, "configure_service")
             model = {**configured, "endpoint": task["dsh_endpoint"], "model": task["dsh_model"]}
         def parse(reply):
             if not isinstance(reply.get("text"), str) or not reply["text"].strip():
@@ -832,7 +832,7 @@ class CitationWorkspace:
                       "report_id": report_id, "model": task.get("dsh_model", ""), "findings": []}
             version["reports"].insert(0, report)
             host.put("pdf_draft", doc["draft_id"], doc)
-        runtime = host.dsh_for_task(task) if task.get("dsh_model") else None
+        runtime = host.agent_for_task(task) if task.get("dsh_model") else None
         partial = False
         group = []
         reused_group = True
@@ -900,7 +900,7 @@ class CitationWorkspace:
                 'Return JSON {"summary":"concise assessment"}.',
                 {"claim": sentence, "sources": records},
                 lambda r: r["summary"][:1600] if isinstance(r.get("summary"), str) else None)
-        except (DshFailure, ValueError, OSError):
+        except (ModelFailure, ValueError, OSError):
             return None
 
     def trace_finding(self, task, job, allowed, identities, runtime, cancelled):
@@ -939,7 +939,7 @@ class CitationWorkspace:
                         [{"id": "0", "claim": sentence["text"], "source_version_id": vid}],
                         [paper], cancelled, **self.language_args(task))
                     answer = next((r for r in rows.get("checks", []) if isinstance(r, dict) and r.get("id") == "0"), None)
-                except DshFailure as error:
+                except ModelFailure as error:
                     problem = error.issue
             with host.lock, host.db:
                 local_job = {**job, "source": paper, "usable": vid in allowed and answer is not None, "cached": None}
@@ -1059,7 +1059,7 @@ class CitationWorkspace:
                 _, _, sentences, versions = self.suggestions(topic, task["input"])
             sources = {s["source_version_id"]: s for s in versions
                        if s["source_version_id"] in task["suggestion_sources"] and s["available_scope"] == "full_text"}
-            runtime = host.dsh_for_task(task) if "dsh_model" in task else None
+            runtime = host.agent_for_task(task) if "dsh_model" in task else None
             if not sources:
                 issue = {"reason": "FULL_TEXT_UNAVAILABLE", "retryable": False, "next_action": "restore_source"}
             elif not runtime:
@@ -1082,7 +1082,7 @@ class CitationWorkspace:
                                    if isinstance(r, dict) and isinstance(r.get("id"), str)}
                     if any(not isinstance(answers.get(s["id"]), list) for s in sentences) and not issue:
                         issue = {"reason": "MODEL_OUTPUT_INVALID", "retryable": True, "next_action": "retry"}
-                except DshFailure as error:
+                except ModelFailure as error:
                     issue = error.issue
             with host.lock, host.db:
                 current = host.get("task", task["task_id"])
@@ -1104,7 +1104,7 @@ class CitationWorkspace:
         except Exception as error:
             import sys
             print(f"PaperTrace citation suggestion: {type(error).__name__}", file=sys.stderr)
-            host.fail_dsh(task["task_id"], {"reason": "CITATIONS_UNAVAILABLE", "retryable": True, "next_action": "retry"})
+            host.fail_task(task["task_id"], {"reason": "CITATIONS_UNAVAILABLE", "retryable": True, "next_action": "retry"})
         finally:
             with host.lock:
                 host.inflight.pop(task["task_id"], None)

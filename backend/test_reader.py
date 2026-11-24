@@ -6,7 +6,7 @@ import tempfile
 import time
 import unittest
 
-from dsh import failure
+from model_agent import failure
 from evaluate_synthesis import call
 from literature import LiteratureError
 from papertrace import RpcError, Worker
@@ -65,7 +65,7 @@ class ReaderTest(unittest.TestCase):
                     raise failure()
                 return {unit["id"]: "译文 " + unit["source"] for unit in units}
 
-        self.worker.dsh = Model()
+        self.worker.agent = Model()
         common = {"topic_id": self.topic, "kind": "reader_translation"}
         target = {"source_version_id": version, "target_language": "zh-CN", "glossary": {"Evidence": "证据"}}
         selection = {**common, "input": {**target, "page": 1, "rects": [[.10, .07, .40, .11]]}}
@@ -232,7 +232,7 @@ class ReaderTest(unittest.TestCase):
                 model_inputs.extend(sources[0]["passages"])
                 return [{"text": "The label refers to evidence retrieval."}], {}
 
-        self.worker.dsh = ScopedModel()
+        self.worker.agent = ScopedModel()
         with self.engine.open(stream=base64.b64decode(original), filetype="pdf") as document:
             width, height = document[0].rect.width, document[0].rect.height
         selected = [102 / width, 136 / height, 180 / width, 155 / height]

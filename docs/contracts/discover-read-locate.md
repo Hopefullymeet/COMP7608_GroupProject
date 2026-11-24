@@ -112,7 +112,7 @@ type ReadingResult = {
   scope_id: Id
   message_id: Id
   read_sources: ReadSource[]
-  sentences: NonEmpty<{ text: NonEmptyText } & (
+  sentences: NonEmpty<{ text: NonEmptyText; paragraph_start?: boolean } & (
     | { assessment: 'supported'; anchor_ids: NonEmpty<Id> }
     | { assessment: 'evidence_not_established'; anchor_ids: [] }
   )>
