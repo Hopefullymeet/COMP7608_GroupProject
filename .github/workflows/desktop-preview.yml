@@ -6,6 +6,9 @@ on:
     paths:
       - '.github/workflows/desktop-preview.yml'
       - 'backend/model_agent.py'
+      - 'backend/agent_host.py'
+      - 'backend/engine/**'
+      - 'frontend/src-tauri/src/worker.rs'
       - 'backend/research_tools.py'
       - 'backend/test_model_research.py'
       - 'frontend/scripts/release-runtime.py'
@@ -42,6 +45,7 @@ jobs:
         run: |
           uv python install 3.12.13
           mkdir -p "$RUNNER_TEMP/runtime-build"
+          curl -fsSL https://raw.githubusercontent.com/nodejs/node/v24.14.0/LICENSE -o "$RUNNER_TEMP/runtime-build/NODE-LICENSE"
           uv run --no-project --python 3.12.13 frontend/scripts/release-runtime.py "$RUNNER_TEMP/runtime-build"
       - name: Build installer
         working-directory: frontend

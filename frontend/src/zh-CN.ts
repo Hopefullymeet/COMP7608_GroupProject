@@ -392,6 +392,7 @@ export const zhCN: Readonly<Record<string, string>> = {
   'paper-conference': '会议论文',
   'proceedings-article': '会议论文',
   'preprint': '预印本',
+  'Research plan': '研究计划',
   'paper_read': '阅读论文原文',
   'paper_search': '检索论文段落',
   'wiki_search': '检索 Wiki',

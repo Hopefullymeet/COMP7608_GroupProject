@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "desktop": "tauri dev",
-    "desktop:build": "tauri build --config src-tauri/tauri.portable.conf.json && node scripts/publish-exe.mjs",
+    "desktop:build": "uv python install 3.12.13 && uv run --no-project --python 3.12.13 scripts/release-runtime.py src-tauri/target/portable-runtime && tauri build --features bundled-runtime --config src-tauri/tauri.portable.conf.json && node scripts/publish-exe.mjs",
     "build": "tsc --noEmit && vite build",
     "test": "node --test tests/workspace.test.mjs",
     "typecheck": "tsc --noEmit",

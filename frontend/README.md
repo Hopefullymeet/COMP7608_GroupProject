@@ -8,7 +8,7 @@ Windows 应用与浏览器共用 `frontend/src/` 中的 React 界面，数据走
 
 ### 1. 准备环境并安装依赖
 
-安装 Node.js 24、pnpm 12、Rust stable（MSVC 工具链）、Microsoft C++ Build Tools（选择「使用 C++ 的桌面开发」）和 Microsoft Edge WebView2 Runtime。[Tauri Windows 环境说明](https://v2.tauri.app/start/prerequisites/#windows)
+安装 uv、Node.js 24、pnpm 12、Rust stable（MSVC 工具链）、Microsoft C++ Build Tools（选择「使用 C++ 的桌面开发」）和 Microsoft Edge WebView2 Runtime。[Tauri Windows 环境说明](https://v2.tauri.app/start/prerequisites/#windows)
 
 在 Windows PowerShell 中切换到仓库根目录，安装 `frontend/` 的依赖。
 
@@ -24,7 +24,7 @@ pnpm --dir frontend install --frozen-lockfile
 pnpm --dir frontend desktop:build
 ```
 
-此命令会先构建前端，再编译 Tauri 桌面程序。仓库当前配置生成可直接运行的 EXE，安装程序打包已关闭。
+此命令会准备 Windows 版 Python 和 Node 运行时，再构建前端及便携程序。分发时请一起复制 `release/` 中的 `papertrace.exe`、`runtime.tar.gz` 和 `runtime.sha256`。用户可以直接在该目录运行程序。
 
 ### 3. 找到并启动 EXE
 

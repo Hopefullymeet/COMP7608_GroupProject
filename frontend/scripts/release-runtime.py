@@ -1,4 +1,4 @@
-"""Pack native managed CPython and the PaperTrace Python libraries."""
+"""Pack native managed CPython and Node for the embedded research loop."""
 import hashlib
 import os
 from pathlib import Path
@@ -28,9 +28,14 @@ def include(info):
         return None
     return info
 
+node = Path(subprocess.check_output(["node", "-p", "process.execPath"], text=True).strip())
+node_license = next(path for path in (node.parent / "LICENSE", node.parent.parent / "LICENSE",
+                                      scratch / "NODE-LICENSE") if path.is_file())
 archive = out / "runtime.tar.gz"
 with tarfile.open(archive, "w:gz", dereference=True, compresslevel=5) as tar:
     tar.add(python_root, "python", filter=include)
+    tar.add(node, "node.exe" if os.name == "nt" else "node")
+    tar.add(node_license, "NODE-LICENSE")
     tar.add(site, "site", filter=include)
 with archive.open("rb") as handle:
     digest = hashlib.file_digest(handle, "sha256").hexdigest()

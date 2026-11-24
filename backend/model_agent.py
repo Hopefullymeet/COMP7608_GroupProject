@@ -11,6 +11,7 @@ import time
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from agent_host import research_host
 from credentials import deepseek_api_key
 from research_tools import ResearchTools
 
@@ -728,104 +729,130 @@ class ModelAgent:
                     final_messages.append({"role": "user", "content":
                         "Return strictly valid JSON with a nonempty sentences array. Keep the answer to three short points."})
 
-        try:
-            for step in range(max_steps):
-                check_active()
-                if reading and (limited or step == max_steps - 1):
+        reminders = []
+
+        def model_step(step, schemas):
+            nonlocal raw
+            if reading and (limited or step == max_steps - 1):
+                raw = final_answer()
+                return {"content": json.dumps(raw)}
+            schemas = [] if limited else schemas
+            try:
+                message, counts, finish = request_step(messages, schemas, 800 if max_steps == 4 else 5400,
+                                                        send_preview if preview else None)
+            except ModelFailure as error:
+                if reading and schemas and error.issue["reason"] == "TOOLS_UNSUPPORTED" and seen and not preview_started:
                     raw = final_answer()
-                    break
-                schemas = tools.schemas if tools and not limited else []
-                try:
-                    message, counts, finish = request_step(messages, schemas, 800 if max_steps == 4 else 5400,
-                                                            send_preview if preview else None)
-                except ModelFailure as error:
-                    if reading and schemas and error.issue["reason"] == "TOOLS_UNSUPPORTED" and seen and not preview_started:
-                        raw = final_answer()
-                        break
-                    raise
-                check_active()
-                usage["input_tokens"] += counts.get("prompt_tokens", 0)
-                usage["output_tokens"] += counts.get("completion_tokens", 0)
-                if not isinstance(message, dict):
-                    raise failure("MODEL_OUTPUT_INVALID")
-                calls = message.get("tool_calls") or []
-                if finish == "content_filter":
-                    raise failure("MODEL_OUTPUT_INVALID", False)
-                if finish == "length" and calls:
-                    if reading and seen:
-                        raw = final_answer()
-                        break
-                    raise failure("MODEL_OUTPUT_INVALID")
-                if not calls:
-                    content = message.get("content")
-                    if reading and finish != "content_filter":
-                        try:
-                            if finish == "length" or not isinstance(content, str):
-                                raise ValueError
-                            read_json_answer(content, seen)
-                        except (ValueError, ModelFailure):
-                            raw = final_answer()
-                            break
-                    if finish in ("length", "content_filter") or not isinstance(content, str):
-                        raise failure("MODEL_OUTPUT_INVALID")
-                    raw = json.loads(re.sub(r"\A```(?:json)?\s*|\s*```\Z", "", content.strip(), flags=re.I))
-                    if not isinstance(raw, dict):
-                        raise failure("MODEL_OUTPUT_INVALID")
-                    break
-                if not schemas or not isinstance(calls, list):
-                    raise failure("MODEL_OUTPUT_INVALID")
-                messages.append({**message, "role": "assistant"})
-                reminders = []
-                for call in calls:
-                    check_active()
-                    function = call["function"]
-                    name = function["name"]
-                    usage["tool_calls"] += 1
-                    activity = {}
+                    return {"content": json.dumps(raw)}
+                raise
+            check_active()
+            usage["input_tokens"] += counts.get("prompt_tokens", 0)
+            usage["output_tokens"] += counts.get("completion_tokens", 0)
+            if not isinstance(message, dict):
+                raise failure("MODEL_OUTPUT_INVALID")
+            calls = message.get("tool_calls") or []
+            if finish == "content_filter":
+                raise failure("MODEL_OUTPUT_INVALID", False)
+            if finish == "length" and calls:
+                if reading and seen:
+                    raw = final_answer()
+                    return {"content": json.dumps(raw)}
+                raise failure("MODEL_OUTPUT_INVALID")
+            if not calls:
+                content = message.get("content")
+                if reading and finish != "content_filter":
                     try:
-                        args = json.loads(function["arguments"])
-                        reminder = repeat.observe(name, args)
-                        if reminder:
-                            reminders.append(reminder)
-                        if not isinstance(args, dict):
+                        if finish == "length" or not isinstance(content, str):
                             raise ValueError
-                        activity = {k: args[k] for k in ("query", "version") if isinstance(args.get(k), str)}
-                        result = (tools.execute(name, args) if not limited and usage["tool_calls"] <= tool_limit
-                                  else {"limit_reached": True})
-                        if isinstance(result, dict) and result.get("limit_reached"):
-                            limited = True
-                            rows = result.get("passages", [])
-                            detail = (f"{len(rows)} result(s). Evidence budget reached."
-                                      if rows else "Evidence budget reached.")
-                        else:
-                            rows = result if isinstance(result, list) else [result]
-                            detail = f"{len(rows)} result(s)."
-                            if name == "paper_search":
-                                if self.reviewer:
-                                    result = self.reviewer.rank(args["query"], rows)
-                                detail += " " + args["query"][:180]
-                        if name == "paper_read" and rows:
-                            seen.update((row["passage_id"], row) for row in rows)
-                            activity["passages"] = [reading_fragment(row) for row in rows]
-                    except (KeyError, ValueError, TypeError, AttributeError):
-                        detail = "Invalid arguments or passage outside the confirmed scope."
-                        result = {"error": detail}
-                    messages.append({"role": "tool", "tool_call_id": call["id"],
-                                     "content": json.dumps(result, ensure_ascii=False)})
-                    trace.append({"kind": "tool", "title": name, "detail": detail})
-                    if progress:
-                        progress(name, detail)
-                    if reading_progress:
-                        reading_progress(name, detail, activity)
-                # Complete the provider's tool-result batch before adding next-step context.
-                if reminders:
-                    messages.append({"role": "user", "content": "\n".join(reminders)})
-            else:
-                raise failure("TASK_BUDGET_EXHAUSTED", False, "adjust_budget")
+                        read_json_answer(content, seen)
+                    except (ValueError, ModelFailure):
+                        raw = final_answer()
+                        return {"content": json.dumps(raw)}
+                if finish in ("length", "content_filter") or not isinstance(content, str):
+                    raise failure("MODEL_OUTPUT_INVALID")
+                raw = json.loads(re.sub(r"\A```(?:json)?\s*|\s*```\Z", "", content.strip(), flags=re.I))
+                if not isinstance(raw, dict):
+                    raise failure("MODEL_OUTPUT_INVALID")
+                return {"content": json.dumps(raw)}
+            if not schemas or not isinstance(calls, list):
+                raise failure("MODEL_OUTPUT_INVALID")
+            return message
+
+        def execute_tool(name, args):
+            nonlocal limited
+            usage["tool_calls"] += 1
+            activity = {}
+            try:
+                reminder = repeat.observe(name, args)
+                if reminder:
+                    reminders.append(reminder)
+                if not isinstance(args, dict):
+                    raise ValueError
+                activity = {k: args[k] for k in ("query", "version") if isinstance(args.get(k), str)}
+                result = (tools.execute(name, args) if not limited and usage["tool_calls"] <= tool_limit
+                          else {"limit_reached": True})
+                if isinstance(result, dict) and result.get("limit_reached"):
+                    limited = True
+                    rows = result.get("passages", [])
+                    detail = (f"{len(rows)} result(s). Evidence budget reached."
+                              if rows else "Evidence budget reached.")
+                else:
+                    rows = result if isinstance(result, list) else [result]
+                    detail = f"{len(rows)} result(s)."
+                    if name == "paper_search":
+                        if self.reviewer:
+                            result = self.reviewer.rank(args["query"], rows)
+                        detail += " " + args["query"][:180]
+                if name == "paper_read" and rows:
+                    seen.update((row["passage_id"], row) for row in rows)
+                    activity["passages"] = [reading_fragment(row) for row in rows]
+            except (KeyError, ValueError, TypeError, AttributeError):
+                detail = "Invalid arguments or passage outside the confirmed scope."
+                result = {"error": detail}
+            trace.append({"kind": "tool", "title": name, "detail": detail})
+            if progress:
+                progress(name, detail)
+            if reading_progress:
+                reading_progress(name, detail, activity)
+            return result
+
+        try:
+            with research_host(prompt, self.model, tools.schemas if tools else [],
+                               bool(tools and max_steps > 4), check_active) as (events, send):
+                step = 0
+                for event in events:
+                    kind = event["kind"]
+                    if kind == "end":
+                        if event["reason"] != "completed":
+                            raise failure("MODEL_OUTPUT_INVALID")
+                        break
+                    if kind == "tool":
+                        send(execute_tool(event["name"], event["args"]))
+                    elif kind == "plan":
+                        marks = {"pending": "○", "in_progress": "◐", "completed": "✓"}
+                        detail = "\n".join(f'{marks[item["status"]]} {item["content"]}'
+                                           for item in event["data"]["todos"])
+                        usage["tool_calls"] += 1
+                        limited = limited or usage["tool_calls"] >= tool_limit
+                        trace.append({"kind": "tool", "title": "Research plan", "detail": detail})
+                        if progress:
+                            progress("Research plan", detail)
+                        if reading_progress:
+                            reading_progress("Research plan", detail, {})
+                    elif kind == "model":
+                        if step >= max_steps:
+                            raise failure("TASK_BUDGET_EXHAUSTED", False, "adjust_budget")
+                        messages = [messages[0], *[m for m in event["messages"] if m["role"] != "system"]]
+                        if reminders:
+                            messages.append({"role": "user", "content": "\n".join(reminders)})
+                            reminders.clear()
+                        schemas = [{"type": "function", "function": f} for f in event["schemas"]]
+                        send(model_step(step, schemas))
+                        step += 1
             if limited:
                 issue = failure("TASK_BUDGET_EXHAUSTED", False, "adjust_budget").issue
-        except (ValueError, KeyError, IndexError, TypeError, ModelFailure) as error:
-            problem = error if isinstance(error, ModelFailure) else failure("MODEL_OUTPUT_INVALID")
+        except (OSError, ValueError, KeyError, IndexError, TypeError, ModelFailure) as error:
+            problem = error if isinstance(error, ModelFailure) else failure("MODEL_UNAVAILABLE" if isinstance(error, OSError) else "MODEL_OUTPUT_INVALID")
             problem.seen = seen
             if not seen or problem.issue["reason"] == "TASK_CANCELLED" or max_steps == 4:
                 raise problem

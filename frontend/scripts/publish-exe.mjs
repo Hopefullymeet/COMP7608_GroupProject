@@ -14,4 +14,8 @@ if (executable !== destination) {
   mkdirSync(releaseDirectory, { recursive: true })
   copyFileSync(executable, destination)
 }
+const resources = fileURLToPath(new URL('../src-tauri/release-resources/', import.meta.url))
+for (const file of ['runtime.tar.gz', 'runtime.sha256']) {
+  copyFileSync(join(resources, file), join(releaseDirectory, file))
+}
 console.log(`Windows portable EXE: ${destination}`)

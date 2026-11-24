@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from model_agent import ModelAgent, ModelFailure
+from research_tools import ResearchTools
 import test_literature
 
 
@@ -173,7 +174,7 @@ class ScriptedProvider(BaseHTTPRequestHandler):
 class ModelResearchTest(unittest.TestCase):
     def test_repeated_calls_hint_after_batch_and_retry_only_the_model(self):
         agent = ModelAgent(Path("."), "fixture")
-        tools = Mock(schemas=[{"type": "function"}])
+        tools = Mock(schemas=ResearchTools(Path("."), [], []).schemas)
         tools.execute.return_value = []
         call = {"name": "paper_search", "arguments": '{"query":"ghosting","version":"v"}'}
         batch = {"tool_calls": [{"id": str(i), "function": call} for i in range(3)]}
@@ -192,9 +193,31 @@ class ModelResearchTest(unittest.TestCase):
         self.assertEqual(tools.execute.call_count, 3)
         self.assertEqual(usage["model_steps"], 3)
 
+    def test_engine_plan_is_observed_without_becoming_evidence(self):
+        agent = ModelAgent(Path("."), "fixture")
+        tools = ResearchTools(Path("."), [], [])
+        todos = [{"content": "Check the methods section", "status": "in_progress"}]
+        plan = {"tool_calls": [{"id": "plan", "type": "function", "function": {
+            "name": "todo_write", "arguments": json.dumps({"todos": todos})}}]}
+        def complete(messages, schemas, *args, **kwargs):
+            self.assertIn("todo_write", [s["function"]["name"] for s in schemas])
+            if len(messages) == 2:
+                return plan, {}, "tool_calls"
+            self.assertEqual(messages[-1]["tool_call_id"], "plan")
+            self.assertIn("1 in progress", messages[-1]["content"])
+            return {"content": '{"ok":true}'}, {}, "stop"
+        with patch.object(agent, "completion", side_effect=complete):
+            raw, seen, trace, usage, issue = agent.run("Compare methods", threading.Event(), tools)
+        self.assertIsNone(issue)
+        self.assertTrue(raw["ok"])
+        self.assertEqual(seen, {})
+        self.assertEqual(usage["tool_calls"], 1)
+        self.assertEqual([(s["title"], s["detail"]) for s in trace],
+                         [("Research plan", "◐ Check the methods section")])
+
     def test_truncated_tool_call_is_not_executed(self):
         agent = ModelAgent(Path("."), "fixture")
-        tools = Mock(schemas=[{"type": "function"}])
+        tools = Mock(schemas=ResearchTools(Path("."), [], []).schemas)
         final = {"content": '{"sentences":[{"text":"Insufficient evidence","evidence":[]}]}'}
         with patch.object(agent, "completion", side_effect=[
                 ({"tool_calls": [{"id": "cut"}]}, {}, "length"), (final, {}, "stop")]):
@@ -261,7 +284,7 @@ class ModelResearchTest(unittest.TestCase):
                     followup = fixture.call("synthesis.list", topic_id=fixture.topic)["items"][0]
                     self.assertEqual(followup["trace"][0]["title"], "wiki_search")
                     self.assertEqual(followup["points"][0]["prior_id"], point["id"])
-                    expected_tools = {"paper_search", "paper_read", "wiki_search", "paper_refs"}
+                    expected_tools = {"paper_search", "paper_read", "wiki_search", "paper_refs", "todo_write"}
                     self.assertTrue(all(tools == expected_tools for tools in provider.observed_tools), provider.observed_tools)
                     # Exercise real session dispatch with a custom endpoint and the reviewer disabled.
                     worker.discovery_fixture = False

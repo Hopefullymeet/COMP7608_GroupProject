@@ -21,6 +21,9 @@ const WIKI: &[u8] = include_bytes!("../../../backend/wiki.py");
 const RESEARCH_TOOLS: &[u8] = include_bytes!("../../../backend/research_tools.py");
 const CITATIONS: &[u8] = include_bytes!("../../../backend/citations.py");
 const READER: &[u8] = include_bytes!("../../../backend/reader.py");
+const CORE: &[u8] = include_bytes!("../../../backend/engine/core.mjs");
+const CORE_NOTICES: &[u8] = include_bytes!("../../../backend/engine/NOTICES.txt");
+const HOST: &[u8] = include_bytes!("../../../backend/agent_host.py");
 const MODEL_AGENT: &[u8] = include_bytes!("../../../backend/model_agent.py");
 const DECISION: &[u8] = include_bytes!("../../../backend/decision.py");
 const CREDENTIALS: &[u8] = include_bytes!("../../../backend/credentials.py");
@@ -54,6 +57,9 @@ impl Worker {
         fs::create_dir_all(directory).map_err(|error| error.to_string())?;
         let mut hash = DefaultHasher::new();
         WORKER.hash(&mut hash);
+        CORE.hash(&mut hash);
+        CORE_NOTICES.hash(&mut hash);
+        HOST.hash(&mut hash);
         MODEL_AGENT.hash(&mut hash);
         DECISION.hash(&mut hash);
         CREDENTIALS.hash(&mut hash);
@@ -71,9 +77,12 @@ impl Worker {
         CCF_CATALOG.hash(&mut hash);
         VENUE_RANKS.hash(&mut hash);
         let runtime = directory.join("runtime").join(format!("{:016x}", hash.finish()));
-        fs::create_dir_all(&runtime).map_err(|error| error.to_string())?;
+        fs::create_dir_all(runtime.join("engine")).map_err(|error| error.to_string())?;
         let script = runtime.join("papertrace.py");
         for (path, contents) in [
+            (&runtime.join("engine/core.mjs"), CORE),
+            (&runtime.join("engine/NOTICES.txt"), CORE_NOTICES),
+            (&runtime.join("agent_host.py"), HOST),
             (&runtime.join("Agent-LICENSE.txt"), AGENT_LICENSE),
             (&runtime.join("agent.md"), AGENT_POLICY), (&script, WORKER), (&runtime.join("model_agent.py"), MODEL_AGENT),
             (&runtime.join("decision.py"), DECISION),
@@ -106,6 +115,7 @@ impl Worker {
             let python = if cfg!(windows) { "python/python.exe" } else { "python/bin/python3.12" };
             let mut command = Command::new(root.join(python));
             command.env_remove("PYTHONHOME")
+                .env("PAPERTRACE_NODE", root.join(if cfg!(windows) { "node.exe" } else { "node" }))
                 .env("PYTHONNOUSERSITE", "1")
                 .env("PYTHONPATH", root.join("site"))
                 .env("SSL_CERT_FILE", root.join("site/certifi/cacert.pem"));

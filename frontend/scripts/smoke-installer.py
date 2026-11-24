@@ -25,7 +25,7 @@ with (resources / "runtime.tar.gz").open("rb") as handle:
 
 with tarfile.open(resources / "runtime.tar.gz") as archive:
     roots = {member.name.split("/", 1)[0] for member in archive}
-    if roots != {"python", "site"}:
+    if roots != {"python", "site", "NODE-LICENSE", "node.exe" if windows else "node"}:
         raise RuntimeError(f"Unexpected runtime layout: {sorted(roots)}")
 
 with tempfile.TemporaryDirectory() as directory:
@@ -47,7 +47,7 @@ with tempfile.TemporaryDirectory() as directory:
         tests.mkdir()
         for name in ("test_model_research.py", "test_literature.py"):
             shutil.copyfile(repo / "backend" / name, tests / name)
-        env.update(PYTHONNOUSERSITE="1", PYTHONPATH=os.pathsep.join(map(str, (worker.parent, root / "site"))))
+        env.update(PAPERTRACE_NODE=str(root / ("node.exe" if windows else "node")), PYTHONNOUSERSITE="1", PYTHONPATH=os.pathsep.join(map(str, (worker.parent, root / "site"))))
         subprocess.run([str(python), "-B", "-m", "unittest",
                         "test_model_research.ModelResearchTest.test_search_read_and_reviewed_wiki"],
                        cwd=tests, env=env, check=True, timeout=240)
