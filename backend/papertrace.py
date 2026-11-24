@@ -215,8 +215,21 @@ class Worker:
         self.runner = threading.Thread(target=self.run_jobs, daemon=True)
         self.runner.start()
 
+    @staticmethod
+    def decode_record(kind, data):
+        record = json.loads(data)
+        if kind == "task":
+            # Older workspaces and restored backups store provider fields under these keys.
+            for old, new in (("dsh_model", "model_id"), ("dsh_endpoint", "model_endpoint")):
+                if old in record:
+                    record.setdefault(new, record.pop(old))
+            if record.get("kind") == "reading_qa" and "steps" in record:
+                record["steps"] = [step for step in record["steps"]
+                                   if step.get("title") not in ("Read with DeepSeek Harness", "Read locally retrieved passages")]
+        return record
+
     def rows(self, kind):
-        return [json.loads(row[0]) for row in self.db.execute(
+        return [self.decode_record(kind, row[0]) for row in self.db.execute(
             "SELECT data FROM records WHERE kind = ? ORDER BY rowid DESC", (kind,)
         )]
 
@@ -224,7 +237,7 @@ class Worker:
         row = self.db.execute("SELECT data FROM records WHERE kind = ? AND id = ?", (kind, identifier_)).fetchone()
         if row is None:
             raise missing(f"{kind.replace('_', ' ').capitalize()} was not found.")
-        return json.loads(row[0])
+        return self.decode_record(kind, row[0])
 
     def put(self, kind, identifier_, data):
         self.db.execute("""
@@ -522,7 +535,7 @@ class Worker:
 
     def agent_for_task(self, task):
         if isinstance(self.agent, ModelAgent):
-            agent = self.agent.for_model(task.get("dsh_model", MODEL), task.get("dsh_endpoint", ENDPOINT))
+            agent = self.agent.for_model(task.get("model_id", MODEL), task.get("model_endpoint", ENDPOINT))
             agent.reviewer = self.reviewer_for(task)
             return agent
         return self.agent
@@ -1717,8 +1730,8 @@ class Worker:
         task = {**task_data, "target": target, "task_id": tid, "run_id": identifier(), "status": "queued",
                 "label": label, "steps": [], "last_event_seq": 0, "started_at": now()}
         if live or translation:
-            task["dsh_model"] = model
-            task["dsh_endpoint"] = endpoint
+            task["model_id"] = model
+            task["model_endpoint"] = endpoint
         if kind == "reading_qa":
             task["scope_id"] = identifier()
         confirmation["used"] = True
@@ -2137,7 +2150,7 @@ class Worker:
                              "Check captions against body passages. Similarity alone does not verify a claim; "
                              "if none match, say so. Candidates: " + json.dumps(descriptions, ensure_ascii=False))
             has_pdf = any(source["available_scope"] == "full_text" for source in sources)
-            endpoint = task.get("dsh_endpoint", ENDPOINT)
+            endpoint = task.get("model_endpoint", ENDPOINT)
             runtime = self.agent_for_task(task) if endpoint == ENDPOINT or task.get("reviewer") else None
             memory = task.get("topic_memory")
             issue = None
@@ -2177,7 +2190,7 @@ class Worker:
                     claims, seen = runtime.answer(question, sources, signal, memory=memory, progress=record_tool, name_session=name_session, preview=preview)
             if used_endpoint:
                 claims, seen = self.answer_with_model_endpoint(
-                    endpoint, task.get("dsh_model", MODEL),
+                    endpoint, task.get("model_id", MODEL),
                     deepseek_api_key(), question, sources, signal,
                     lambda sentence: preview(("\n\n" if streamed else "") + sentence), memory, name_session,
                 )
@@ -2212,7 +2225,7 @@ class Worker:
                                 if re.search(r"[\u3400-\u9fff]", question) else
                                 "Only abstracts were available. Add the full papers to verify these claims against the body.")
                         sentences.append({"text": note, "paragraph_start": True, "anchor_ids": [], "assessment": "evidence_not_established"})
-                    review = {"model": task.get("dsh_model", MODEL),
+                    review = {"model": task.get("model_id", MODEL),
                               "findings": {str(i): c["wiki_reason"] for i, c in enumerate(claims)
                                            if c.get("wiki_reason") and sentences[i]["anchor_ids"]},
                               "questions": claims[0].get("follow_up", []) if claims else []}

@@ -822,9 +822,7 @@ export function MainlineProvider({
     label: h.label,
     usage: h.usage,
     status: h.status === 'queued' ? 'running' : h.status === 'completed' ? 'done' : h.status,
-    steps: h.steps.filter(step => h.kind !== 'reading_qa' ||
-      !['Read with DeepSeek Harness', 'Read locally retrieved passages'].includes(step.title))
-      .map((s, i) => ({ ...s, id: String(i) })),
+    steps: h.steps.map((s, i) => ({ ...s, id: String(i) })),
   }))
   const runs = [
     questionRun,

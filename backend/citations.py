@@ -727,7 +727,7 @@ class CitationWorkspace:
                     findings.append(self.finding(task, report_id, j, judgments.get(j["job_id"]), seen))
                 complete = not issue and all(c["status"] != "blocked" for f in findings for c in f["claims"])
                 report = {"report_id": report_id, "language": task["input"].get("language"), "started_at": task["started_at"], "kind": "citation_audit", "complete": complete,
-                          "model": task.get("dsh_model", MODEL) if pending and runtime else "",
+                          "model": task.get("model_id", MODEL) if pending and runtime else "",
                           "findings": findings, "usage": usage}
                 draft["reports"].insert(0, report)
                 host.put("pdf_draft", doc["draft_id"], doc)
@@ -789,7 +789,7 @@ class CitationWorkspace:
             configured = host.topic_wiki.model()
             if not configured:
                 raise ModelFailure("MODEL_UNAVAILABLE", False, "configure_service")
-            model = {**configured, "endpoint": task["dsh_endpoint"], "model": task["dsh_model"]}
+            model = {**configured, "endpoint": task["model_endpoint"], "model": task["model_id"]}
         def parse(reply):
             if not isinstance(reply.get("text"), str) or not reply["text"].strip():
                 raise ValueError
@@ -829,10 +829,10 @@ class CitationWorkspace:
                     for f in old["findings"]:
                         previous.setdefault((f["sentence_id"], f["ref_key"]), f)
             report = {"kind": "citation_audit", "language": task["input"].get("language"), "started_at": task["started_at"], "whole_document": True, "complete": False,
-                      "report_id": report_id, "model": task.get("dsh_model", ""), "findings": []}
+                      "report_id": report_id, "model": task.get("model_id", ""), "findings": []}
             version["reports"].insert(0, report)
             host.put("pdf_draft", doc["draft_id"], doc)
-        runtime = host.agent_for_task(task) if task.get("dsh_model") else None
+        runtime = host.agent_for_task(task) if task.get("model_id") else None
         partial = False
         group = []
         reused_group = True
@@ -890,7 +890,7 @@ class CitationWorkspace:
                 for n in f["chain"]:
                     quotes = [self.host.get("anchor", aid)["value"]["quote"] for aid in n["anchor_ids"]]
                     records.append({**n, "quotes": quotes})
-        model = {"model": task["dsh_model"], "endpoint": task["dsh_endpoint"], "key": runtime.key}
+        model = {"model": task["model_id"], "endpoint": task["model_endpoint"], "key": runtime.key}
         try:
             return self.host.topic_wiki.request(model,
                 f"{audit_language(task['input'].get('language'))}Summarize evidence for one claim. Only use supplied quotes. Distinguish "
@@ -1059,7 +1059,7 @@ class CitationWorkspace:
                 _, _, sentences, versions = self.suggestions(topic, task["input"])
             sources = {s["source_version_id"]: s for s in versions
                        if s["source_version_id"] in task["suggestion_sources"] and s["available_scope"] == "full_text"}
-            runtime = host.agent_for_task(task) if "dsh_model" in task else None
+            runtime = host.agent_for_task(task) if "model_id" in task else None
             if not sources:
                 issue = {"reason": "FULL_TEXT_UNAVAILABLE", "retryable": False, "next_action": "restore_source"}
             elif not runtime:
@@ -1093,7 +1093,7 @@ class CitationWorkspace:
                 findings = [self.suggestion_finding(task, report_id, s, answers.get(s["id"]), seen, sources, issue)
                             for s in sentences]
                 report = {"report_id": report_id, "kind": "citation_suggest", "complete": not issue,
-                          "model": task.get("dsh_model", ""), "findings": findings, "usage": usage}
+                          "model": task.get("model_id", ""), "findings": findings, "usage": usage}
                 draft["reports"].insert(0, report)
                 host.put("pdf_draft", doc["draft_id"], doc)
                 current["steps"] = trace + [s for s in current["steps"] if s.get("title") == "Evidence review"]

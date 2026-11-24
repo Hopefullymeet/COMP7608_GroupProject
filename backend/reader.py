@@ -658,10 +658,10 @@ class Reader:
     def run_translation(self, task, cancelled):
         from model_agent import ModelFailure
         topic, params, key = task["topic_id"], task["input"], task["task_id"]
-        version, model = params["source_version_id"], task["dsh_model"]
+        version, model = params["source_version_id"], task["model_id"]
         try:
             with self.host.lock:
-                plans = self.translation_plan(topic, params, model, task.get("dsh_endpoint", ENDPOINT))
+                plans = self.translation_plan(topic, params, model, task.get("model_endpoint", ENDPOINT))
                 if [plan["key"] for plan in plans] != task["translation_keys"]:
                     raise LiteratureError("CONFIRMATION_REQUIRED", "The source changed. Confirm the task again.", "confirm_task")
             runtime = self.host.agent_for_task(task)

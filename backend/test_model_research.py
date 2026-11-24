@@ -19,7 +19,7 @@ class ScriptedProvider(BaseHTTPRequestHandler):
 
     def do_POST(self):
         request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        if "dsh_session_log" in request:
+        if any(key.endswith("session_log") for key in request):
             self.send_error(400, "Session log field is forbidden")
             return
         if self.path.endswith("/chat/completions") and request["messages"] == [{"role": "user", "content": "Reply with OK."}]:

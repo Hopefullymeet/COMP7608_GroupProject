@@ -26,6 +26,15 @@ from test_literature import sample_pdf
 
 
 class EvidenceTest(unittest.TestCase):
+    def test_legacy_task_provider_and_steps(self):
+        legacy = {"kind": "reading_qa", "dsh_model": "original", "dsh_endpoint": "https://example.org/v1",
+                  "steps": [{"title": "Read with DeepSeek Harness"}, {"title": "paper_read"}]}
+        task = Worker.decode_record("task", json.dumps(legacy))
+        self.assertEqual((task["model_id"], task["model_endpoint"]), ("original", "https://example.org/v1"))
+        self.assertEqual(task["steps"], [{"title": "paper_read"}])
+        self.assertNotIn("dsh_model", task)
+        self.assertEqual(Worker.decode_record("task", json.dumps(task)), task)
+
     def test_only_observed_exact_quotes_can_be_linked(self):
         seen = {"p1": {"text": "The conclusion is excluded."}}
         text = json.dumps({"sentences": [
