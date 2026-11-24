@@ -312,6 +312,7 @@ export const zhCN: Readonly<Record<string, string>> = {
   '{0}m {1}s elapsed': '用时 {0} 分 {1} 秒',
   'Passage {0}': '片段 {0}',
   'Working…': '进行中…',
+  'Research activity': '研究过程',
   'Partially completed': '部分完成',
   'Tool returned an error.': '工具返回错误。',
   'Evidence budget reached.': '已达到查阅上限。',
