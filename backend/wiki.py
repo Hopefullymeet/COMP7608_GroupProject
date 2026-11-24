@@ -730,8 +730,8 @@ class TopicWiki:
 
     # ---------- model calls ----------
 
-    def request(self, model, system, data, parse):
-        payload = {"model": model["model"], "max_tokens": 3000, "stream": False, "messages": [
+    def request(self, model, system, data, parse, *, max_tokens=3000):
+        payload = {"model": model["model"], "max_tokens": max_tokens, "stream": False, "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": json.dumps(data, ensure_ascii=False)},
         ]}
@@ -774,11 +774,22 @@ class TopicWiki:
             return {"headline": result["headline"], "summary": [p for p in result["summary"] if isinstance(p, str)],
                     "entries": [e for e in entries if isinstance(e, dict)] if isinstance(entries, list) else []}
 
-        return self.request(model, system, {
+        data = {
             "material": material,
             "observations": [{k: e[k] for k in ("kind", "text", "anchor_ids", "origin")} for e in captured],
             "user_entries": [{"kind": e["kind"], "text": e["text"]} for e in kept],
-        }, parse)
+        }
+        # The built-in model can fit a full cited topic summary. Custom endpoints
+        # retain the existing token limit since their output capacity is unknown.
+        budget = 8192 if model["endpoint"] == ENDPOINT else 3000
+        try:
+            return self.request(model, system, data, parse, max_tokens=budget)
+        except ModelFailure as failure:
+            if failure.issue.get("details", {}).get("model_output_stage") != "truncated":
+                raise
+        concise = (" Keep the summary to two short paragraphs and select at most eight entries total. "
+                   "Use only the most relevant evidence IDs for each finding and keep each reason to one sentence.")
+        return self.request(model, system + concise, data, parse, max_tokens=budget)
 
     def model_reply(self, model, material, wiki, message):
         system = (
