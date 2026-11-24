@@ -5,6 +5,7 @@ on:
     branches: [papertrace/settings-backend-4247508]
     paths:
       - '.github/workflows/desktop-preview.yml'
+      - 'backend/engine/packages/session/session-log-deepseek/src/types.ts'
       - 'frontend/scripts/release-runtime.py'
       - 'frontend/src-tauri/tauri.release.conf.json'
 permissions:
