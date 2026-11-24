@@ -1,5 +1,8 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
+#[cfg(feature = "bundled-runtime")]
+mod bundled;
+
 #[cfg(windows)]
 mod browser;
 #[cfg(target_os = "macos")]
@@ -90,7 +93,11 @@ fn main() {
                 Some(path) => std::path::PathBuf::from(path),
                 None => app.path().app_local_data_dir()?.join("local-contract"),
             };
-            app.manage(Host::new(directory));
+            #[cfg(feature = "bundled-runtime")]
+            let resources = Some(app.path().resource_dir()?);
+            #[cfg(not(feature = "bundled-runtime"))]
+            let resources = None;
+            app.manage(Host::new(directory, resources));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![papertrace_rpc, papertrace_subscribe, open_paper_url, set_menu_language])

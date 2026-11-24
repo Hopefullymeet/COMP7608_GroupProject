@@ -48,7 +48,7 @@ struct Worker {
 }
 
 impl Worker {
-    fn start(directory: &Path) -> Result<Self, String> {
+    fn start(directory: &Path, resources: Option<&Path>) -> Result<Self, String> {
         fs::create_dir_all(directory).map_err(|error| error.to_string())?;
         let mut hash = DefaultHasher::new();
         WORKER.hash(&mut hash);
@@ -93,10 +93,28 @@ impl Worker {
                 Err(error) => return Err(error.to_string()),
             }
         }
-        let python = std::env::var_os("PAPERTRACE_PYTHON").unwrap_or_else(|| {
-            if cfg!(windows) { "python" } else { "python3" }.into()
-        });
-        let mut command = Command::new(python);
+        #[cfg(feature = "bundled-runtime")]
+        let mut command = {
+            let root = crate::bundled::prepare(resources.ok_or("Missing desktop resources")?, directory)
+                .map_err(|err| err.to_string())?;
+            let python = if cfg!(windows) { "python/python.exe" } else { "python/bin/python3.12" };
+            let node = if cfg!(windows) { "node.exe" } else { "node" };
+            let mut command = Command::new(root.join(python));
+            command.env_remove("PYTHONHOME")
+                .env("PYTHONNOUSERSITE", "1")
+                .env("PYTHONPATH", root.join("site"))
+                .env("SSL_CERT_FILE", root.join("site/certifi/cacert.pem"))
+                .env("PAPERTRACE_AGENT_NODE", root.join(node))
+                .env("PAPERTRACE_AGENT_CLI", root.join("engine/node_modules/@deepseek-ai/dsh/lib/bin.js"));
+            command
+        };
+        #[cfg(not(feature = "bundled-runtime"))]
+        let mut command = {
+            let _ = resources;
+            Command::new(std::env::var_os("PAPERTRACE_PYTHON").unwrap_or_else(|| {
+                if cfg!(windows) { "python" } else { "python3" }.into()
+            }))
+        };
         command
             .arg("-B")
             .arg("-u")
@@ -201,13 +219,14 @@ impl Routes {
 
 #[derive(Clone)]
 pub struct Host {
+    resources: Option<PathBuf>,
     directory: PathBuf,
     worker: Arc<Mutex<Option<Worker>>>,
 }
 
 impl Host {
-    pub fn new(directory: PathBuf) -> Self {
-        Self { directory, worker: Arc::new(Mutex::new(None)) }
+    pub fn new(directory: PathBuf, resources: Option<PathBuf>) -> Self {
+        Self { directory, resources, worker: Arc::new(Mutex::new(None)) }
     }
 
     pub fn request(&self, request: Value, channel: Option<Channel<Value>>) -> Reply {
@@ -232,7 +251,7 @@ impl Host {
                 worker.take();
             }
             if worker.is_none() {
-                *worker = Some(Worker::start(&self.directory)?);
+                *worker = Some(Worker::start(&self.directory, self.resources.as_deref())?);
             }
             let worker = worker.as_mut().unwrap();
             worker.send(&request, id, Pending { response, subscription })?;
