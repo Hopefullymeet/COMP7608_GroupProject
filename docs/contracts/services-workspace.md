@@ -63,3 +63,9 @@ type Activity={id:Id,topic_id:Id,title:string,detail:string,target:'library'|'re
 个人资料的可选字段 `session_access` 接受 `read` 或 `edit`，默认 `edit`。新阅读会话记录创建时的权限。选择 `read` 时保留对话历史，该会话的回答不进入 Wiki 素材，也不从提问写入长期记忆。修改默认值只影响以后创建的会话。
 
 角色偏好中，`enabled` 控制论文问答，`wiki_enabled` 控制 Wiki 对话。旧记录缺少后者时继承原开关，后续独立保存。Wiki 条目写入权限继续使用 `wiki_access`。
+
+### 可选证据复核
+
+桌面端 services.get 和 services.save 支持 reviewer 对象，字段为 enabled、endpoint 和 model。默认关闭。endpoint 为完整 System One 判断接口地址。services.test 使用 reviewer 标识发送固定样例。services.credentials 使用同一标识和已保存的 endpoint，在系统凭据库中按地址存取独立密钥。
+
+任务准备时列出审查端点及涉及的数据类别。候选段落和图片按相关性排序，事实陈述与已定位的原文一起进行选项判断。审查接口不可用时沿用原检索结果。历史任务在智能体轨迹中保留复核记录。缓存按主题、服务配置、问题、原文和图片内容隔离。

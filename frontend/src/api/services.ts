@@ -22,6 +22,8 @@ export type Service = {
 export type Budget = Record<'calls' | 'tokens' | 'minutes' | 'cost', number | null>
 export const unlimitedBudget: Budget = { calls: null, tokens: null, minutes: null, cost: null }
 export type Config = {
+  reviewer?: { enabled: boolean; endpoint: string; model: string }
+  reviewer_key_stored?: boolean
   revision: string
   model_id: string
   models: Model[]
@@ -62,7 +64,7 @@ export type ServiceMethods = {
   'services.save': [Write & Omit<Config, 'revision'> & { base_revision: string }, Config]
   'services.test': [Write & { id: string }, { ok: boolean; message: string }]
   'services.credentials': [
-    { id: string } & ({ action: 'save'; api_key: string } | { action: 'delete' }),
+    { id: string; endpoint?: string } & ({ action: 'save'; api_key: string } | { action: 'delete' }),
     { configured: boolean; stored: boolean },
   ]
   'access.list': [Record<string, never>, { offers: Offer[]; grants: Grant[] }]

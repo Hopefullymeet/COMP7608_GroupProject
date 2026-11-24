@@ -21,9 +21,10 @@ function CredentialDialog({ model, onClose, onSaved }: { model: Model; onClose: 
     setPending(true)
     setFailed(false)
     try {
+      const target = model.id === 'reviewer' ? { id: model.id, endpoint: model.endpoint } : { id: model.id }
       const result = await api.call('services.credentials', action === 'save'
-        ? { id: model.id, action, api_key: key.trim() }
-        : { id: model.id, action })
+        ? { ...target, action, api_key: key.trim() }
+        : { ...target, action })
       if (result.stored !== (action === 'save')) {
         setFailed(true)
         return
@@ -43,14 +44,14 @@ function CredentialDialog({ model, onClose, onSaved }: { model: Model; onClose: 
         event.preventDefault()
         if (!pending && (confirmRemoval || validKey)) void update(confirmRemoval ? 'delete' : 'save')
       }}>
-        {confirmRemoval ? <p>{tr('Remove the DeepSeek API key from this device’s credential store?')}</p> : (
+        {confirmRemoval ? <p>{tr('Remove the API key from this device’s credential store?')}</p> : (
           <>
             <p>{tr('Your API key is protected by this device’s operating system.')}</p>
             {model.credential_stored && <p>{tr('Saved API key {0}', model.credential_preview ?? '••••')}</p>}
             {model.credential_configured && !model.credential_stored &&
               <p>{tr('The API key currently comes from the launch environment.')}</p>}
             <label className="set-field">
-              {tr(model.credential_stored ? 'Replacement API key' : 'DeepSeek API key')}
+              {tr(model.credential_stored ? 'Replacement API key' : 'API key')}
               <input className="text-field" type="password" autoComplete="off" spellCheck={false}
                 disabled={pending} value={key} onChange={(event) => setKey(event.target.value)} />
             </label>
@@ -83,6 +84,8 @@ function SettingsForm({ config, modelPage = false }: { config: Config; modelPage
     [managingCredentials, setManagingCredentials] = useState(false)
   const saved = saveResult?.base === config.revision ? saveResult.config : config
   const draft = edits ?? saved
+  const [reviewKeyOpen, setReviewKeyOpen] = useState(false)
+  const reviewer = draft.reviewer ?? { enabled: false, model: '', endpoint: '' }
   const selected = draft.models.find((m) => m.id === draft.model_id) ?? draft.models[0]
   const credentials = config.models.find((m) => m.id === selected?.id)
   function closeCredentials() {
@@ -107,6 +110,7 @@ function SettingsForm({ config, modelPage = false }: { config: Config; modelPage
     }
   }
   const valid =
+    (!reviewer.enabled || (validEndpoint(reviewer.endpoint) && reviewer.model.trim().length > 0)) &&
     draft.models.every((m) => (demo ? m.model.trim() : /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(m.model.trim())) &&
       validEndpoint(m.endpoint)) &&
     budgetFields.every(([k]) => {
@@ -249,6 +253,35 @@ function SettingsForm({ config, modelPage = false }: { config: Config; modelPage
           )}
         </div>
       </section>
+      {!demo && <section className="set-section">
+        <div className="set-intro">
+          <h2>{tr('Evidence reviewer')}</h2>
+          <p>{tr('Send selected excerpts and candidate figures to this model for review. Results appear in the agent trace.')}</p>
+        </div>
+        <div className="set-body">
+          <label><input type="checkbox" checked={reviewer.enabled} disabled={saving}
+            onChange={e => set({ ...draft, reviewer: { ...reviewer, enabled: e.target.checked } })} /> {tr('Enable evidence review')}</label>
+          {(reviewer.enabled || reviewer.endpoint) && <>
+            <div className="form-grid">
+              {(['endpoint', 'model'] as const).map(field => <label className="set-field" key={field}>
+                {tr(field === 'endpoint' ? 'System One decision endpoint' : 'Model ID')}
+                <input className="text-field" value={reviewer[field]} autoComplete="off" spellCheck={false} disabled={saving}
+                  onChange={e => set({ ...draft, reviewer: { ...reviewer, [field]: e.target.value } })} />
+              </label>)}
+            </div>
+            <div className="set-controls">
+              <button className="ghost-btn" disabled={dirty || busy || !reviewer.model || !reviewer.endpoint}
+                onClick={() => tryService('reviewer')}>{tr('Test connection')}</button>
+              {credentials?.credential_store && <button className="ghost-btn" disabled={dirty || busy || !reviewer.endpoint}
+                onClick={() => setReviewKeyOpen(true)}>{tr('Manage system credentials')}</button>}
+            </div>
+            {testStatus('reviewer')}
+          </>}
+          {reviewKeyOpen && <CredentialDialog model={{ ...reviewer, id: 'reviewer', label: 'Evidence reviewer', local: false,
+            credential_configured: !!config.reviewer_key_stored, credential_stored: !!config.reviewer_key_stored }}
+            onClose={() => setReviewKeyOpen(false)} onSaved={() => { setReviewKeyOpen(false); refresh() }} />}
+        </div>
+      </section>}
       <section className="set-section">
         <div className="set-intro">
           <h2>{tr('Task budget')}</h2>

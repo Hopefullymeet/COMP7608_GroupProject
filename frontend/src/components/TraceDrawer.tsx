@@ -47,7 +47,11 @@ function RunCard({ run, open, onToggle }: { run: AgentRun; open: boolean; onTogg
                   <small>{tr(KIND[s.kind].label)}</small>
                   <strong>{tr(s.title)}</strong>
                   {prefs.steps === 'detailed' && s.call && <code>{s.call}</code>}
-                  {prefs.steps === 'detailed' && s.detail && <p>{tr(s.detail)}</p>}
+                  {s.title === 'Evidence review' && <details><summary>{tr(s.detail ?? 'Evidence review')}</summary>
+                    <p>{s.activity?.query}</p>
+                    {s.activity?.passages?.map((p, i) => <blockquote key={i}>{p.excerpt}</blockquote>)}
+                  </details>}
+                  {s.title !== 'Evidence review' && prefs.steps === 'detailed' && s.detail && <p>{tr(s.detail)}</p>}
                 </div>
               </li>
             ))}

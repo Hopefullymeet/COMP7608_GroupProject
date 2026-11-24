@@ -21,6 +21,7 @@ const RESEARCH_TOOLS: &[u8] = include_bytes!("../../../backend/research_tools.py
 const CITATIONS: &[u8] = include_bytes!("../../../backend/citations.py");
 const READER: &[u8] = include_bytes!("../../../backend/reader.py");
 const MODEL_AGENT: &[u8] = include_bytes!("../../../backend/model_agent.py");
+const DECISION: &[u8] = include_bytes!("../../../backend/decision.py");
 const CREDENTIALS: &[u8] = include_bytes!("../../../backend/credentials.py");
 const BIBLIOGRAPHY: &[u8] = include_bytes!("../../../backend/bibliography.py");
 const PDF_ENGINE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/pdf-engine.whl"));
@@ -53,6 +54,7 @@ impl Worker {
         let mut hash = DefaultHasher::new();
         WORKER.hash(&mut hash);
         MODEL_AGENT.hash(&mut hash);
+        DECISION.hash(&mut hash);
         CREDENTIALS.hash(&mut hash);
         CITATIONS.hash(&mut hash);
         READER.hash(&mut hash);
@@ -71,6 +73,7 @@ impl Worker {
         let script = runtime.join("papertrace.py");
         for (path, contents) in [
             (&runtime.join("agent.md"), AGENT_POLICY), (&script, WORKER), (&runtime.join("model_agent.py"), MODEL_AGENT),
+            (&runtime.join("decision.py"), DECISION),
             (&runtime.join("credentials.py"), CREDENTIALS),
             (&runtime.join("literature.py"), LITERATURE), (&runtime.join("workbench.py"), WORKBENCH),
             (&runtime.join("wiki.py"), WIKI),

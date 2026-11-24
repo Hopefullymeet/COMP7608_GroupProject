@@ -352,7 +352,7 @@ class Workbench:
                         result["gaps"] = [cell["text"] for cell in result["cells"] if cell["status"] == "missing"]
                     else:
                         host.put("synthesis", record_id, record)
-                    current["steps"] = trace
+                    current["steps"] = trace + [s for s in current["steps"] if s.get("title") == "Evidence review"]
                     partial = issue or ({"reason": "EVIDENCE_INCOMPLETE", "retryable": False, "next_action": "review_gaps"}
                                         if result["gaps"] else None)
                     summary = {"record_id": record_id}

@@ -735,7 +735,7 @@ export function MainlineProvider({
         const previous = view.messages.filter(m => m.sessionId === session && m.role === 'user').at(-1)
         const refersBack = /这个|这种|上述|刚才|前面|上面|对应的图|that|this|above/i.test(text)
         const query = refersBack && previous ? text + ' ' + previous.segments[0].text : text
-        const result = await retrieveFigures(api, topic, versions, query)
+        const result = await retrieveFigures(api, topic, versions, query, 6)
         incompleteFigureSearch = result.skipped > 0
         figureRefs = result.items.map(f => ({ version: f.source_version_id, id: f.object_id }))
       }

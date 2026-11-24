@@ -12,6 +12,7 @@ import re
 import sys
 import threading
 
+from decision import Reviewer
 from credentials import deepseek_api_key
 from model_agent import ModelFailure, ENDPOINT
 from literature import LiteratureError, body_passage_starts, digest
@@ -617,6 +618,9 @@ class TopicWiki:
         questions = {a["question"].casefold() for a in material["answers"]}
         fresh = []
         run_id = self.identifier()
+        with host.lock:
+            config = host.reviewer_config()
+        reviewer = Reviewer(host, config, topic) if model and config["enabled"] else None
         for row in draft["entries"]:
             text = clip(row.get("text"))
             if text.casefold() in questions and row.get("kind") != "open_question" and "entry" not in row:
@@ -625,6 +629,23 @@ class TopicWiki:
                 continue
             if text and row.get("kind") in KINDS and not any(e["text"] == text for e in kept + fresh):
                 anchors = [a for a in row.get("anchor_ids", []) if isinstance(a, str) and a in known]
+                if reviewer and row["kind"] == "finding" and "entry" not in row:
+                    refs = []
+                    with host.lock:
+                        for aid in anchors:
+                            source = evidence.get(aid, {})
+                            if not source.get("title") or not source.get("quote"):
+                                continue
+                            anchor = host.get("anchor", aid)["value"]
+                            pid = anchor.get("location", {}).get("passage_id")
+                            version = anchor.get("source_version_id")
+                            hit = host.db.execute("SELECT text FROM paper_passages WHERE passage_id=? AND version_id=?",
+                                                  (pid, version)).fetchone()
+                            if hit and anchor["quote"] in hit[0]:
+                                refs.append({"quote": anchor["quote"], "passage": {"text": hit[0], "passage_id": pid,
+                                             "page": source.get("page"), "source_version_id": version}})
+                    if refs and reviewer.claim(text, refs) in ("partial", "conflict", "insufficient"):
+                        continue
                 fresh.append(row["entry"] if "entry" in row else self.entry(row["kind"], text, list(dict.fromkeys(anchors)), "summary"))
                 if model and row.get("homepage") is True and row["kind"] == "finding" and anchors and len(anchors) == len(row.get("anchor_ids", [])):
                     fresh[-1]["home_receipt"] = {"model": model["model"], "run_id": run_id, "created": self.now(),

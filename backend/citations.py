@@ -731,7 +731,7 @@ class CitationWorkspace:
                           "findings": findings, "usage": usage}
                 draft["reports"].insert(0, report)
                 host.put("pdf_draft", doc["draft_id"], doc)
-                current["steps"] = trace
+                current["steps"] = trace + [s for s in current["steps"] if s.get("title") == "Evidence review"]
                 result = {"record_id": report_id, "kind": "citation_audit"}
                 event = host.finish(current, "completed", result=result) if complete else host.finish(
                     current, "partial", result=result, issue=issue or {
@@ -1096,7 +1096,7 @@ class CitationWorkspace:
                           "model": task.get("dsh_model", ""), "findings": findings, "usage": usage}
                 draft["reports"].insert(0, report)
                 host.put("pdf_draft", doc["draft_id"], doc)
-                current["steps"] = trace
+                current["steps"] = trace + [s for s in current["steps"] if s.get("title") == "Evidence review"]
                 result = {"record_id": report_id, "kind": "citation_suggest"}
                 event = (host.finish(current, "partial", result=result, issue=issue) if issue
                          else host.finish(current, "completed", result=result))

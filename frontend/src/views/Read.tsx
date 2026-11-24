@@ -80,12 +80,14 @@ function WorkSteps({ run, done }: { run: AgentRun; done: boolean }) {
   const duration = seconds == null ? '' : seconds < 60 ? tr('{0}s elapsed', seconds)
     : tr('{0}m {1}s elapsed', Math.floor(seconds / 60), seconds % 60)
   const status = { running: 'Working…', done: 'Done', partial: 'Partially completed', failed: 'Failed', cancelled: 'Cancelled' }[run.status]
-  const actions = [...new Set(run.steps.map(step => tr(step.title)))].join(' · ')
+  const visible = run.steps.filter(step => step.title !== 'Evidence review')
+  if (!visible.length) return null
+  const actions = [...new Set(visible.map(step => tr(step.title)))].join(' · ')
   return <details key={String(done) + prefs.collapse} open={!done || prefs.collapse === 'never'} className="chat-work-steps">
     <summary>{tr(status)}{duration && ' · ' + duration}</summary>
     <details className="work-step-group" open={prefs.steps === 'detailed' || !done}>
       <summary>{actions}</summary>
-      <ul>{run.steps.map(step => <WorkStep key={step.id} step={step} />)}</ul>
+      <ul>{visible.map(step => <WorkStep key={step.id} step={step} />)}</ul>
     </details>
   </details>
 }

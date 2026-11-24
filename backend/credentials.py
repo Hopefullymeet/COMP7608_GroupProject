@@ -64,7 +64,8 @@ class WindowsProtectedFile:
 
 
 class WindowsStore:
-    def __init__(self, fallback_path=None):
+    def __init__(self, fallback_path=None, account=ACCOUNT):
+        self.target, self.account = "PaperTrace/" + account, account
         from ctypes import wintypes as w
 
         class Credential(c.Structure):
@@ -79,7 +80,7 @@ class WindowsStore:
 
         self.credential = Credential
         self.fallback_path = fallback_path or Path(os.getenv("LOCALAPPDATA") or
-                                                   Path.home() / "AppData" / "Local") / "PaperTrace" / "deepseek.dpapi"
+                                                   Path.home() / "AppData" / "Local") / "PaperTrace" / (account.lower() + ".dpapi")
         pointer = c.POINTER(Credential)
         self.api = c.WinDLL("advapi32", use_last_error=True)
         self.api.CredReadW.argtypes = [w.LPCWSTR, w.DWORD, w.DWORD, c.POINTER(pointer)]
@@ -99,7 +100,7 @@ class WindowsStore:
 
     def read_vault(self):
         entry = c.POINTER(self.credential)()
-        if not self.api.CredReadW(TARGET, 1, 0, c.byref(entry)):  # CRED_TYPE_GENERIC
+        if not self.api.CredReadW(self.target, 1, 0, c.byref(entry)):  # CRED_TYPE_GENERIC
             if c.get_last_error() in (5, 1168, 1312):  # Access denied, not found, no logon session
                 return None
             raise c.WinError(c.get_last_error())
@@ -116,8 +117,8 @@ class WindowsStore:
             return
         data = key.encode("utf-16-le")
         buffer = c.create_string_buffer(data)
-        entry = self.credential(type=1, target=TARGET, blob_size=len(data), blob=c.addressof(buffer),
-                                persist=2, username=ACCOUNT)  # CRED_PERSIST_LOCAL_MACHINE
+        entry = self.credential(type=1, target=self.target, blob_size=len(data), blob=c.addressof(buffer),
+                                persist=2, username=self.account)  # CRED_PERSIST_LOCAL_MACHINE
         try:
             if not self.api.CredWriteW(c.byref(entry), 0):
                 error = c.get_last_error()
@@ -130,7 +131,7 @@ class WindowsStore:
             c.memset(buffer, 0, len(data))
 
     def delete(self):
-        if not self.api.CredDeleteW(TARGET, 1, 0):
+        if not self.api.CredDeleteW(self.target, 1, 0):
             error = c.get_last_error()
             if error in (5, 1312) and self.fallback_path.exists():
                 WindowsProtectedFile(self.fallback_path).save(None)
@@ -144,7 +145,7 @@ class MacStore:
     NOT_FOUND = -25300  # errSecItemNotFound
     DUPLICATE = -25299  # errSecDuplicateItem
 
-    def __init__(self):
+    def __init__(self, account=ACCOUNT):
         self.security = c.CDLL("/System/Library/Frameworks/Security.framework/Security")
         self.cf = c.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
         ref = c.c_void_p
@@ -165,8 +166,8 @@ class MacStore:
             function = getattr(api, name)
             function.argtypes = args
             function.restype = result
-        self.service = self.cf.CFStringCreateWithCString(None, TARGET.encode(), 0x08000100)
-        self.account = self.cf.CFStringCreateWithCString(None, ACCOUNT.encode(), 0x08000100)
+        self.service = self.cf.CFStringCreateWithCString(None, ("PaperTrace/" + account).encode(), 0x08000100)
+        self.account = self.cf.CFStringCreateWithCString(None, account.encode(), 0x08000100)
         self.query = {"kSecClass": self.constant("kSecClassGenericPassword"),
                       "kSecAttrService": self.service, "kSecAttrAccount": self.account}
 
@@ -230,12 +231,12 @@ class MacStore:
             self.cf.CFRelease(query)
 
 
-@lru_cache(maxsize=1)
-def store(platform):
+@lru_cache(maxsize=8)
+def store(platform, account=ACCOUNT):
     if platform == "win32":
-        return WindowsStore()
+        return WindowsStore(account=account)
     if platform == "darwin":
-        return MacStore()
+        return MacStore(account=account)
     return None
 
 

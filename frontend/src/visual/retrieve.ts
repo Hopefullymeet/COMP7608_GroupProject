@@ -65,7 +65,7 @@ export function requestsFigure(text: string) {
   return /(?:图片|插图|图表|示意图|架构图|流程图|图\s*\d+)|(?:有没?有|有无|哪|找|看|展示|给|显示|相关|说明|示意|流程|对比|架构|画|讲|这个|这种|对应|类似).{0,60}图(?!像|论|书|神经网络)|(?:图|插画)(?:里|中|在哪|讲了|显示|示了)|(?:看看|看一下|有没有|找).{0,45}(?:长什么样|可视化|效果对比|连线的例子|示例画面)|\b(?:fig(?:ure)?\.?\s*\d+|figures?|diagram|illustration|plots?|flowchart)\b/i.test(text)
 }
 
-export async function retrieveFigures(api: Client, topic: string, versions: string[], query: string) {
+export async function retrieveFigures(api: Client, topic: string, versions: string[], query: string, limit = 3) {
   const text = await encode({ text: query })
   const ranked: { item: PdfObject; score: number }[] = []
   let skipped = 0
@@ -83,5 +83,5 @@ export async function retrieveFigures(api: Client, topic: string, versions: stri
   }
   if (versions.length && skipped === new Set(versions).size) throw new Error('Figure index unavailable')
   ranked.sort((a, b) => b.score - a.score)
-  return { items: ranked.slice(0, 3).map(x => x.item), skipped }
+  return { items: ranked.slice(0, limit).map(x => x.item), skipped }
 }

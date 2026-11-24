@@ -23,6 +23,7 @@ from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
 
+import decision
 from credentials import deepseek_api_key, system_key, store
 from model_agent import AGENT_POLICY, ANSWER_LAYOUT, TITLE_INSTRUCTION, ModelAgent, ModelFailure, ENDPOINT, MODEL, read_json_answer
 from literature import LiteratureError, MAX_VERSIONS, body_passage_starts, digest, init_corpus
@@ -397,7 +398,11 @@ class Worker:
         return {"configured": bool(key or os.getenv("DEEPSEEK_API_KEY")), "stored": bool(key), "preview": preview}
 
     def update_credential(self, params):
-        if required(params, "id") != MODEL:
+        service_id = required(params, "id")
+        reviewing = service_id == "reviewer"
+        if reviewing and params.get("endpoint") != self.reviewer_config()["endpoint"]:
+            raise invalid("Save the reviewer endpoint before changing its key.")
+        if not reviewing and service_id != MODEL:
             raise missing("This service was not found.")
         action = params.get("action")
         if action not in ("save", "delete"):
@@ -407,7 +412,7 @@ class Worker:
             if not re.fullmatch(r"[!-~]{1,512}", key):
                 raise invalid("Enter an API key without spaces.")
         try:
-            vault = store(sys.platform)
+            vault = store(sys.platform, decision.slot(params["endpoint"])) if reviewing else store(sys.platform)
             if vault is None:
                 raise RpcError(-32015, "CREDENTIALS_HOST_REQUIRED", "configure_service",
                                "Configure the DeepSeek API key in the desktop launch environment.")
@@ -421,17 +426,41 @@ class Worker:
         except (OSError, UnicodeError):
             raise RpcError(-32015, "CREDENTIAL_STORE_FAILED", "configure_service",
                            "The system credential store could not complete the request.") from None
-        return {"configured": bool(stored_key or os.getenv("DEEPSEEK_API_KEY")),
+        return {"configured": bool(stored_key or (not reviewing and os.getenv("DEEPSEEK_API_KEY"))),
                 "stored": bool(stored_key)}
 
     def service_settings(self):
         stored = self.rows("service_config")
         return {"revision": "local-contract", "model": MODEL, "endpoint": ENDPOINT, **(stored[0] if stored else {})}
 
+    def reviewer_config(self):
+        return self.service_settings().get("reviewer", decision.DEFAULT.copy())
+
+    def reviewer_for(self, task):
+        cfg = task.get("reviewer")
+        if not cfg:
+            return None
+
+        def log(verdict, activity):
+            with self.lock, self.db:
+                current = self.get("task", task["task_id"])
+                if current["status"] != "running":
+                    return
+                current["steps"].append({"kind": "tool", "title": "Evidence review", "detail": verdict, "activity": activity})
+                self.put("task", current["task_id"], current)
+
+        return decision.Reviewer(self, cfg, task["topic_id"], log)
+
     def services_config(self):
         settings = self.service_settings()
         credential = self.credential_status()
-        return {"revision": settings["revision"], "model_id": MODEL, "models": [{
+        endpoint = self.reviewer_config()["endpoint"]
+        vault = store(sys.platform, decision.slot(endpoint)) if endpoint else None
+        try:
+            reviewer_key_stored = bool(vault and vault.read())
+        except OSError:
+            reviewer_key_stored = False
+        return {"reviewer_key_stored": reviewer_key_stored, "revision": settings["revision"], "reviewer": self.reviewer_config(), "model_id": MODEL, "models": [{
             "id": MODEL, "label": "DeepSeek", "model": settings["model"], "endpoint": settings["endpoint"],
             "local": False, "credential_configured": credential["configured"],
             "credential_stored": credential["stored"], "credential_preview": credential["preview"],
@@ -447,6 +476,20 @@ class Worker:
         config = self.services_config()
         if required(params, "base_revision") != config["revision"]:
             raise RpcError(-32011, "STALE_REVISION", "refresh_data", "Settings changed. Reload and try again.")
+        reviewer = params.get("reviewer", config["reviewer"])
+        if not isinstance(reviewer, dict) or type(reviewer.get("enabled")) is not bool:
+            raise invalid("Invalid reviewer settings.")
+        endpoint_value, reviewer_model = reviewer.get("endpoint"), reviewer.get("model")
+        if not isinstance(endpoint_value, str) or not isinstance(reviewer_model, str):
+            raise invalid("Invalid reviewer settings.")
+        endpoint_value = model_endpoint(endpoint_value) if endpoint_value.strip() else ""
+        if endpoint_value and urlsplit(endpoint_value).scheme == "http" and urlsplit(endpoint_value).hostname not in ("localhost", "::1", "127.0.0.1"):
+            raise invalid("Use HTTPS for a remote reviewer.")
+        reviewer_model = reviewer_model.strip()
+        if ((reviewer["enabled"] and not (endpoint_value and reviewer_model)) or len(reviewer_model) > 160
+                or any(ord(c) < 33 for c in reviewer_model)):
+            raise invalid("Enter a reviewer endpoint and model ID.")
+        reviewer = {"enabled": reviewer["enabled"], "endpoint": endpoint_value, "model": reviewer_model}
         models = params.get("models")
         if (params.get("model_id") != MODEL or not isinstance(models, list) or len(models) != 1
                 or not isinstance(models[0], dict) or models[0].get("id") != MODEL):
@@ -469,17 +512,19 @@ class Worker:
         ask = params.get("ask_before_overage")
         if type(ask) is not bool:
             raise invalid("ask_before_overage must be a boolean.")
-        if (model != config["models"][0]["model"] or endpoint != config["models"][0]["endpoint"]
+        if (reviewer != config["reviewer"] or model != config["models"][0]["model"] or endpoint != config["models"][0]["endpoint"]
                 or budget != config["budget"]
                 or ask != config["ask_before_overage"]):
             self.put("service_config", "active", {"revision": identifier(), "model": model, "endpoint": endpoint,
-                                                  "budget": budget, "ask_before_overage": ask})
+                                                  "budget": budget, "ask_before_overage": ask, "reviewer": reviewer})
             config = self.services_config()
         return config
 
     def agent_for_task(self, task):
         if isinstance(self.agent, ModelAgent):
-            return self.agent.for_model(task.get("dsh_model", MODEL), task.get("dsh_endpoint", ENDPOINT))
+            agent = self.agent.for_model(task.get("dsh_model", MODEL), task.get("dsh_endpoint", ENDPOINT))
+            agent.reviewer = self.reviewer_for(task)
+            return agent
         return self.agent
 
     def test_service(self, params):
@@ -491,11 +536,21 @@ class Worker:
                 saved = self.saved_operation("services.test", operation, fingerprint)
                 if saved is not None:
                     return saved
-                if service_id != MODEL:
+                if service_id not in (MODEL, "reviewer"):
                     raise missing("This service was not found.")
                 provider = self.service_settings()
-                key = deepseek_api_key()
-            result = probe_model(provider["endpoint"], provider["model"], key)
+                key = deepseek_api_key() if service_id == MODEL else None
+                reviewer = self.reviewer_config()
+            if service_id == "reviewer":
+                try:
+                    sample = decision.request(reviewer, "A square has four sides.", {"check": {"type": "choice",
+                        "instructions": "Does the text explicitly mention four sides?", "criteria": {"yes": "Yes", "no": "No"}}})
+                    passed = sample["check"]["choice"] == "yes"
+                except decision.ERRORS:
+                    passed = False
+                result = {"ok": passed, "message": "Decision protocol verified" if passed else "Review unavailable"}
+            else:
+                result = probe_model(provider["endpoint"], provider["model"], key)
             with self.lock, self.db:
                 self.save_operation("services.test", operation, fingerprint, result)
             return result
@@ -1465,7 +1520,7 @@ class Worker:
                 self.source(version, topic, required(item, "paper_id"))
             if "figure_refs" in input_:
                 refs = input_["figure_refs"]
-                if not isinstance(refs, list) or len(refs) > 3:
+                if not isinstance(refs, list) or len(refs) > 6:
                     raise invalid("Invalid figure references.")
                 figures = []
                 allowed = {item["source_version_id"] for item in sources if item["requested_scope"] == "full_text"}
@@ -1477,7 +1532,7 @@ class Worker:
                     if not match:
                         raise invalid("Unknown figure.")
                     figures.append({key: match[key] for key in ("object_id", "source_version_id", "kind", "label", "page", "rect", "caption")})
-                task_data["figures"] = figures
+                task_data["figures"] = figures if self.reviewer_config()["enabled"] else figures[:3]
                 if input_.get("figure_lookup_only") is True:
                     task_data["figure_lookup_only"] = True
         elif kind == "citation_audit":
@@ -1581,6 +1636,15 @@ class Worker:
                     else confirmation.get("research_mode", "wiki"))
             input_ = {**input_, "mode": mode}
             task_data["input"] = input_
+        review_cfg = self.reviewer_config()
+        review_transfer = []
+        if review_cfg["enabled"] and ((live and kind in ("reading_qa", "citation_audit", "citation_suggest",
+                "paper_comparison", "literature_synthesis", "reader_question")) or task_data.get("figures")):
+            task_data["reviewer"] = review_cfg
+            categories = ["Question, claims and selected paper excerpts"]
+            if task_data.get("figures"):
+                categories.append("Candidate figure images and captions")
+            review_transfer = [{"endpoint": review_cfg["endpoint"], "purpose": "Evidence review", "data_categories": categories}]
         fingerprint = encode([task_data, endpoint, model])
         if method == "task.prepare":
             cid = identifier()
@@ -1611,11 +1675,11 @@ class Worker:
                 if "question" in input_:
                     transfers[0]["data_categories"] = ["Question and selected manuscript audit records with evidence excerpts"]
                 if input_.get("whole_document"):
-                    return {"confirmation_id": cid, "transfers": transfers, "source_versions": input_["source_versions"]}
+                    return {"confirmation_id": cid, "transfers": transfers + review_transfer, "source_versions": input_["source_versions"]}
             if suggest:
                 transfers = [{"endpoint": endpoint, "purpose": "Find citations for selected manuscript sentences",
                               "data_categories": ["Selected manuscript sentences", "Selected paper titles and excerpts"]}] if live else []
-                return {"confirmation_id": cid, "transfers": transfers, "source_versions": task_data["suggestion_sources"]}
+                return {"confirmation_id": cid, "transfers": transfers + review_transfer, "source_versions": task_data["suggestion_sources"]}
             if reader_question:
                 transfers = [{"endpoint": endpoint, "purpose": "Answer from the selected PDF text",
                               "data_categories": ["Only the selected text and the question"]}] if live else []
@@ -1625,7 +1689,7 @@ class Worker:
                                   str(plan["page"]) for plan in pending_translation),
                                   "Target language and any glossary terms supplied"]}] if live else []
                 pending_keys = {plan["key"] for plan in pending_translation}
-                return {"confirmation_id": cid, "transfers": transfers, "source_versions": [target],
+                return {"confirmation_id": cid, "transfers": transfers + review_transfer, "source_versions": [target],
                         "translation_scope": {
                             "target_language": input_["target_language"],
                             "glossary": input_.get("glossary", {}),
@@ -1642,8 +1706,8 @@ class Worker:
                                                   *(["Relevant reviewed Wiki entries"]
                                                     if kind == "literature_synthesis" and input_.get("mode", "wiki") == "wiki"
                                                     else [])]}]
-                return {"confirmation_id": cid, "transfers": transfers, "source_versions": input_["source_versions"]}
-            return {"confirmation_id": cid, "transfers": transfers}
+                return {"confirmation_id": cid, "transfers": transfers + review_transfer, "source_versions": input_["source_versions"]}
+            return {"confirmation_id": cid, "transfers": transfers + review_transfer}
         if confirmation.get("used") or confirmation.get("fingerprint") != fingerprint:
             raise RpcError(-32012, "CONFIRMATION_REQUIRED", "confirm_task", "Confirm the current task inputs before starting.")
         existing = self.active(kind, target)
@@ -1748,7 +1812,7 @@ class Worker:
                 synthesis = task["kind"] in ("literature_synthesis", "paper_comparison")
                 live = audit or suggest or reader_task or synthesis or (
                     task["kind"] == "reading_qa" and not self.discovery_fixture and not task.get("figure_lookup_only"))
-                if live or remote_search:
+                if live or remote_search or task.get("reviewer"):
                     signal = threading.Event()
                     self.inflight[task_id] = signal
                 with self.db:
@@ -1761,8 +1825,16 @@ class Worker:
                             "Reading selected papers." if live else "Running local contract sample.")
                     })
                 self.send_events([event])
-            if remote_search or live:
+            if remote_search or live or task.get("reviewer"):
                 try:
+                    if task.get("figures") and task.get("reviewer"):
+                        self.review_figures(task, signal)
+                    if task.get("figure_lookup_only"):
+                        with self.lock, self.db:
+                            current = self.get("task", task_id)
+                            if current["status"] == "running":
+                                self.send_events(self.run_reading(current))
+                        continue
                     if remote_search:
                         self.run_openalex(task, signal)
                     elif audit:
@@ -1990,6 +2062,42 @@ class Worker:
             error.seen = seen
             raise error from None
 
+    def review_figures(self, task, signal):
+        reviewer = self.reviewer_for(task)
+        scores = []
+        use_pixels = True
+        for figure in task["figures"]:
+            if signal.is_set():
+                return
+            state = {"question": task["input"]["question"], "caption": figure["caption"]}
+            question = {"match": {"type": "noul", "instructions": "Is this figure relevant to the question?"}}
+            answer = None
+            if use_pixels:
+                try:
+                    with self.lock:
+                        _, content = self.reader.content(task["topic_id"], figure["source_version_id"])
+                    _, image = self.reader.crop(content, figure["page"], figure["rect"])
+                    answer = reviewer.decide(state, question, image)
+                except (LiteratureError, ValueError, RuntimeError):
+                    pass
+                if not answer:
+                    use_pixels = False
+            if not answer:
+                answer = reviewer.decide(state, question)
+            if not answer:
+                scores = []
+                break
+            scores.append(answer["match"]["noul"])
+        ordered = ([f for _, f in sorted(zip(scores, task["figures"]), key=lambda pair: -pair[0])] if scores else task["figures"])[:3]
+        with self.lock, self.db:
+            current = self.get("task", task["task_id"])
+            current["figures"] = task["figures"] = ordered
+            self.put("task", task["task_id"], current)
+        if not scores:
+            return
+        reviewer.log("Ranked figure candidates", {"query": task["input"]["question"],
+                     "paper": ", ".join(f["label"] for f in ordered)})
+
     def run_model_reading(self, task, signal):
         task_id = task["task_id"]
         try:
@@ -2030,7 +2138,7 @@ class Worker:
                              "if none match, say so. Candidates: " + json.dumps(descriptions, ensure_ascii=False))
             has_pdf = any(source["available_scope"] == "full_text" for source in sources)
             endpoint = task.get("dsh_endpoint", ENDPOINT)
-            runtime = self.agent_for_task(task) if endpoint == ENDPOINT else None
+            runtime = self.agent_for_task(task) if endpoint == ENDPOINT or task.get("reviewer") else None
             memory = task.get("topic_memory")
             issue = None
             used_endpoint = runtime is None
