@@ -40,8 +40,7 @@ jobs:
           test "$(node -p process.arch)" = "${{ matrix.arch }}"
           pnpm install --frozen-lockfile
           pnpm run build:native-system
-          node --import tsx/esm scripts/generate-typert.ts
-          pnpm exec tsdown --config-loader native --env.DSH_BUILD_FACE host
+          node --import tsx/esm scripts/compile-referenced-projects.ts host-libraries
           stage="$(node -p "require('node:path').join(process.env.RUNNER_TEMP,'agent')")"
           hook="$(node -p "require('node:path').resolve('scripts/python-runtime-deploy.pnpmfile.mjs')")"
           pnpm --filter dsh-python-runtime-closure deploy --prod --config.allow-unused-patches=true --config.node-linker=hoisted "--config.pnpmfile=$hook" --config.link-workspace-packages=true --config.hoist-workspace-packages=false "$stage"
