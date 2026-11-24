@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Wiki, WikiEdit } from '../api/wiki'
 import { Dialog } from '../components/PageHead'
 import { Icon } from '../components/Icon'
+import { Disclosure } from '../components/Disclosure'
 import { useLanguage } from '../i18n'
 import type { WikiSource } from './WikiPage'
 import './wiki-directory.css'
@@ -72,7 +73,10 @@ export function WikiDirectory({wiki, title, edit, Source, refresh, busy}: {wiki:
     </>}
     {!folder && !page && <section className="wiki-home-points">
       <header><h3>{t('研究要点','Research findings')}</h3>
-        <button className="link-btn" disabled={busy} onClick={refresh}>{busy?t('整理中…','Updating…'):t('重新整理','Refresh findings')}</button></header>
+        <button className="ghost-btn sm" disabled={busy} onClick={refresh}>
+          <Icon name="refresh" size={14} /> {busy?t('整理中…','Updating…'):t('重新整理','Refresh findings')}
+        </button>
+      </header>
       {(wiki.home_points ?? []).map(id=>{
         const entry=wiki.entries.find(e=>e.entry_id===id)
         if (!entry) return null
@@ -82,11 +86,11 @@ export function WikiDirectory({wiki, title, edit, Source, refresh, busy}: {wiki:
             const source=wiki.map_sources![a]
             return <Source key={a} id={a} anchor={'wiki-home-'+a} label={source.title+' · p. '+source.page}/>
           })}
-          <details><summary>{t('依据与生成记录','Evidence and provenance')}</summary>
+          <Disclosure panel icon="trace" title={t('依据与生成记录','Evidence and provenance')}>
           <p>{receipt ? receipt.model+' · '+new Date(receipt.created).toLocaleString() :
             t('本地规则从已有研究记录中选取。','Selected locally from existing findings.')}</p>
           {receipt && <><p>{receipt.reason}</p><small>{t('整理批次','Run')} · {receipt.run_id}</small></>}
-          {entry.anchor_ids.map(evidence)}</details></article>
+          {entry.anchor_ids.map(evidence)}</Disclosure></article>
       })}
       {!wiki.home_points?.length && <p className="fine">{t('有正文依据的研究要点会出现在这里。','Findings with full-text evidence appear here.')}</p>}
     </section>}
@@ -95,7 +99,10 @@ export function WikiDirectory({wiki, title, edit, Source, refresh, busy}: {wiki:
       {questions.map(q=><p key={q.entry_id}>{q.text}</p>)}
     </section>}
     {page ? page.entries.filter(id=>nodes[id]).map(id=><article className="wiki-finding" key={id}>
-      <p>{nodes[id].title}</p><div className="wiki-finding-tools"><details><summary>{t('原文依据','Evidence')} · {nodes[id].anchors.length}</summary>{nodes[id].anchors.map(evidence)}</details>
+      <p>{nodes[id].title}</p><div className="wiki-finding-tools">
+      <Disclosure panel icon="quote" title={t('原文依据','Evidence') + ' · ' + nodes[id].anchors.length}>
+        {nodes[id].anchors.map(evidence)}
+      </Disclosure>
       <div>{controls(id)}</div></div>
       {children(id).length>0 && <button className="link-btn" onClick={()=>navigate({folder:id,page:''})}>{t('打开下级条目','Open child entries')}</button>}
     </article>) : <>

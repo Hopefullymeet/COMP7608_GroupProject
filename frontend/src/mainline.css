@@ -147,9 +147,20 @@
 .synthesis-open { color: var(--accent); }
 .synthesis-papers { border: 1px dashed transparent; padding: 8px; }
 .synthesis-papers.drag-over { border-color: var(--accent); background: var(--accent-faint); }
-.synthesis-paper-heading, .synthesis-paper { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
-.synthesis-paper { flex-wrap: wrap; padding: 9px 0; border-bottom: 1px solid var(--line); }
-.synthesis-paper label { display: flex; align-items: baseline; gap: 7px; overflow-wrap: anywhere; }
+.synthesis-paper-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: space-between; }
+.synthesis-paper-heading h3 { margin: 0; }
+.synthesis-paper { --paper-title-indent: 24px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.synthesis-paper-title { display: flex; align-items: flex-start; gap: 8px; font-weight: 500; overflow-wrap: anywhere; }
+.synthesis-paper-title input { margin-top: 3px; }
+.synthesis-paper-actions {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin-block-start: 8px; margin-inline-start: var(--paper-title-indent);
+}
+.synthesis-paper-actions :is(button, select) { min-height: 31px; }
+.synthesis-paper-actions select { padding-block: 4px; }
+.synthesis-paper-status {
+  display: block; margin-block-start: 5px; margin-inline-start: var(--paper-title-indent); color: var(--ink-3);
+}
 .synthesis-paper input, .synthesis-review-item input { accent-color: var(--accent); }
 .synthesis-evidence { margin-top: 24px; }
 .synthesis-evidence img { display: block; width: 100%; height: auto; margin-block: 12px; background: white; }

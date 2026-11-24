@@ -47,7 +47,7 @@ function CatalogImport({ rankings }: { rankings: Rank[] }) {
   const { tr } = useLanguage()
   const { write, busy } = useWorkspace()
   const [status, setStatus] = useState('')
-  return <details><summary>{tr('Import a catalog')}</summary><form className="catalog-import" onSubmit={async e => {
+  return <Disclosure panel icon="library" title={tr('Import a catalog')}><form className="catalog-import" onSubmit={async e => {
     e.preventDefault()
     const form = e.currentTarget
     const data = new FormData(form)
@@ -68,7 +68,7 @@ function CatalogImport({ rankings }: { rankings: Rank[] }) {
     <small>{tr('Required columns: venue, venue_type (journal or conference), value. Optional: issns, aliases, category, source_url.')}</small>
     <button className="ghost-btn" disabled={busy}>{tr('Import a catalog')}</button>
     {status && <small role="status">{status}</small>}
-  </form></details>
+  </form></Disclosure>
 }
 
 export function PublicationDetails({ topic, paper }: { topic: string; paper: string }) {
@@ -82,8 +82,16 @@ export function PublicationDetails({ topic, paper }: { topic: string; paper: str
   const metadata = entry?.metadata
   const rankings = entry?.rankings.items ?? []
   const hits = rankings.filter(item => item.status === 'matched')
-  return <><Disclosure className="publication-details" icon="book" title={tr('Publication details')} onOpenChange={setOpen}>
-    <div className="publication-body">
+  return <>
+    {hits.length > 0 && <section className="publication-rankings" aria-label={tr('Rankings and indexes')}>
+      {hits.map(rank => rank.entries.map(hit =>
+        <div key={JSON.stringify([rank.scheme, hit])}>
+          <a className="tag" href={hit.source_url} target="_blank" rel="noreferrer">{rank.label} {hit.value}</a>
+          <span>{[rank.year, hit.category, rank.applicability === 'verify_track' && tr('Verify paper track')].filter(Boolean).join(' · ')}</span>
+        </div>
+      ))}
+    </section>}
+    <Disclosure panel icon="book" title={tr('Publication details')} onOpenChange={setOpen}>
     {open && !entry && <p role="status">{tr('Loading…')}</p>}
     {entry && metadata && <>
       <dl className="bibliographic-fields">{fields.map(([key,label]) => {
@@ -151,13 +159,6 @@ export function PublicationDetails({ topic, paper }: { topic: string; paper: str
       </form>}
       <CatalogImport rankings={rankings} />
     </>}
-    </div>
   </Disclosure>
-  {hits.length > 0 && <section aria-label={tr('Rankings and indexes')}>
-    <div className="publication-body">{hits.map(rank => rank.entries.map(hit =>
-      <div key={JSON.stringify([rank.scheme, hit])}><strong>{rank.label}</strong> · <a href={hit.source_url}
-        target="_blank" rel="noreferrer">{hit.value}</a> {hit.category} <small>{rank.year}
-        {rank.applicability === 'verify_track' && ' · ' + tr('Verify paper track')}</small></div>
-    ))}</div>
-  </section>}</>
+  </>
 }

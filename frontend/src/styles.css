@@ -301,14 +301,17 @@ code { font: 12px/1.45 var(--mono); }
 .answer { font-size: 14.5px; line-height: 1.75; overflow-wrap: anywhere; }
 .answer > p { margin: 0; white-space: pre-line; }
 .answer > p + p { margin-top: .7em; }
-.answer + .link-btn { margin-top: .55em; }
 .claim { border-radius: 3px; transition: background 0.15s; }
 .claim:hover, .claim.on { background: var(--accent-faint); box-shadow: 0 0 0 2px var(--accent-faint); }
 .cite { display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; margin: 0 1px 0 3px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); font-size: 10.5px; font-weight: 600; vertical-align: 2px; }
 .cite:hover { background: var(--accent); color: #fff; }
 .scope-note { display: flex; gap: 6px; margin-top: 10px; padding: 8px 10px; background: var(--sunk); border-radius: 8px; color: var(--ink-2); font-size: 13px; line-height: 1.5; }
 .scope-note svg { flex: none; margin-top: 3px; }
-.msg-foot { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 12px; color: var(--ink-3); }
+.msg-foot, .msg-foot-status, .msg-foot-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.msg-foot {
+  justify-content: space-between; margin-top: 14px; padding-top: 10px;
+  border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-3);
+}
 .run-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); white-space: nowrap; }
 .run-chip.running { background: var(--accent-faint); color: var(--accent); }
 .chat-bottom {

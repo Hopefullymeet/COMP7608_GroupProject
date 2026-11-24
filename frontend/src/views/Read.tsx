@@ -151,12 +151,20 @@ function AgentMessage({ m, onSource }: { m: ChatMessage; onSource?: (source: Pic
           })}
         </div>
       )}
-      {m.done && state.mainline?.saveAnswer && <button className="link-btn" onClick={()=>state.mainline?.saveAnswer?.(m)}>{tr('Save answer as note')}</button>}
-      {m.done && run && (
+      {m.done && (run || state.mainline?.saveAnswer) && (
         <div className="msg-foot">
-          <span className="run-chip done">{tr('Done')}</span>
-          {run.steps.length > 0 && <span>{count(tr, run.steps.length, 'step')} · {count(tr, tools, 'tool call')}</span>}
-          <button className="link-btn" onClick={() => act.showTrace(true, run.id)}>{tr('View trace')}</button>
+          {run && <div className="msg-foot-status">
+            <span className="run-chip done">{tr('Done')}</span>
+            {run.steps.length > 0 && <span>{count(tr, run.steps.length, 'step')} · {count(tr, tools, 'tool call')}</span>}
+          </div>}
+          <div className="msg-foot-actions">
+            {state.mainline?.saveAnswer && <button className="ghost-btn sm" onClick={() => state.mainline?.saveAnswer?.(m)}>
+              <Icon name="note" size={14} /> {tr('Save answer as note')}
+            </button>}
+            {run && <button className="ghost-btn sm" onClick={() => act.showTrace(true, run.id)}>
+              <Icon name="trace" size={14} /> {tr('View trace')}
+            </button>}
+          </div>
         </div>
       )}
     </div>

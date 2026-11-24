@@ -7,6 +7,7 @@ import { useWorkspace } from '../data/WorkspaceProvider'
 import { errorText } from '../api/contract'
 import type { Wiki, WikiEdit, WikiEntry, WikiKind, WikiMessage, WikiMethods, WikiOrigin } from '../api/wiki'
 import { Icon } from '../components/Icon'
+import { Disclosure } from '../components/Disclosure'
 import { TopicChooser } from '../components/TopicChooser'
 import { HeaderContext, PageHead } from '../components/PageHead'
 import { WikiDirectory } from './WikiDirectory'
@@ -92,7 +93,12 @@ function EntryRow({ entry, onEdit, disabled, Source }: {
       <form onSubmit={(e) => void save(e)}>
         <textarea aria-label={tr('Edit Wiki entry')} value={draft} maxLength={400} autoFocus rows={2}
           onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Escape') setDraft(undefined) }} />
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              setDraft(undefined)
+            }
+          }} />
         <div className="wiki-entry-actions shown">
           <button type="button" className="ghost-btn sm" onClick={() => setDraft(undefined)}>{tr('Cancel')}</button>
           <button className="primary sm" disabled={disabled || !draft.trim()}>{tr('Save')}</button>
@@ -220,14 +226,16 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
         {wiki.map_nodes && <WikiDirectory wiki={wiki} title={title} edit={edit} Source={Source} refresh={()=>void refresh()} busy={busy || working}/>}
         {directory && issue && <p className="wiki-issue" role="alert">{issue}</p>}
         {wiki.map_nodes && !!Object.keys(wiki.pending_removals ?? {}).length && <p>{tr('Pending deletion')} · {Object.values(wiki.pending_removals!).join(' / ')}</p>}
-        {!!wiki.integrity_issues?.length && <details><summary>{tr('Links to review')}</summary><ul>{wiki.integrity_issues.map((label,i)=><li key={i}>{label}</li>)}</ul></details>}
-        {!!wiki.history?.length && <details><summary>{tr('Update history')}</summary>{wiki.history.map((event,i)=><section key={i}>
+        {!!wiki.integrity_issues?.length && <Disclosure panel icon="alert" title={tr('Links to review')}>
+          <ul>{wiki.integrity_issues.map((label,i)=><li key={i}>{label}</li>)}</ul>
+        </Disclosure>}
+        {!!wiki.history?.length && <Disclosure panel icon="clock" title={tr('Update history')}>{wiki.history.map((event,i)=><section key={i}>
           <time>{new Date(event.created).toLocaleString()}</time><div className="wiki-history-columns">{[false,true].map(removed=><div key={String(removed)}>
             <h4>{tr(removed?'Removed':'Added or updated')}</h4>
             <ul>{event.changes.filter(c=>(c.op==='remove')===removed).map(c=><li key={c.id}>{c.title}</li>)}</ul>
           </div>)}</div>
-        </section>)}</details>}
-        <details open={wiki.map_nodes ? undefined : true}><summary>{tr(directory ? 'Notes and open questions' : 'Topic overview')}</summary>
+        </section>)}</Disclosure>}
+        <Disclosure panel open={!wiki.map_nodes} icon="note" title={tr(directory ? 'Notes and open questions' : 'Topic overview')}>
         {!directory && (generating ? <FlippingBook label={tr('Generating')} />
           : !summarized ? <section className="wiki-empty">
             <span className="wiki-empty-icon" aria-hidden="true"><Icon name="book" size={30} /></span>
@@ -273,14 +281,19 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
         }}>
           <textarea aria-label={tr('New Wiki entry')} value={adding} maxLength={400} rows={2} autoFocus
             placeholder={tr('For example: I only need results on biomedical datasets.')}
-            onChange={(e) => setAdding(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') setAdding(undefined) }} />
+            onChange={(e) => setAdding(e.target.value)} onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.preventDefault()
+                setAdding(undefined)
+              }
+            }} />
           <div className="wiki-entry-actions shown">
             <button type="button" className="ghost-btn sm" onClick={() => setAdding(undefined)}>{tr('Cancel')}</button>
             <button className="primary sm" disabled={working || !adding.trim()}>{tr('Remember')}</button>
           </div>
         </form>)}
 
-        </details>
+        </Disclosure>
         {(wiki.thread.length > 0 || wiki.pending_reply) && <section className="wiki-thread" aria-label={tr('Conversation with the Wiki')}>
           {!wiki.pending_reply && <button className="link-btn quiet" onClick={() => void run(() => call('wiki.clear_chat', scope))}>{tr('Clear conversation')}</button>}
           {wiki.thread.map((m) => <Message key={m.message_id} message={m} />)}

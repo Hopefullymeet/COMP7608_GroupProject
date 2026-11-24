@@ -14,6 +14,7 @@ const PATHS: Record<string, JSX.Element> = {
   arrowUp: <path d="M12 19V5M6 11l6-6 6 6" />,
   arrowLeft: <path d="M19 12H5M11 6l-6 6 6 6" />,
   arrowRight: <path d="M5 12h14M13 6l6 6-6 6" />,
+  refresh: <path d="M20 4v5h-5M4 20v-5h5m11-6a8 8 0 0 0-13.5-3M4 15a8 8 0 0 0 13.5 3" />,
   compass: <><circle cx="12" cy="12" r="9" /><path d="m15.5 8.5-2 5-5 2 2-5z" /></>,
   globe: <><circle cx="12" cy="12" r="9" /><ellipse cx="12" cy="12" rx="4" ry="9" /><path d="M3 12h18" /></>,
   book: <path d="M2 5h6a4 4 0 0 1 4 4v11a3 3 0 0 0-3-3H2zM22 5h-6a4 4 0 0 0-4 4v11a3 3 0 0 1 3-3h7z" />,

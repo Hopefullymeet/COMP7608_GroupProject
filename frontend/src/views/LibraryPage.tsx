@@ -1,6 +1,7 @@
 import { count, useLanguage } from '../i18n'
 import { lazy, Suspense, useState } from 'react'
 import { PageHead, Dialog } from '../components/PageHead'
+import { Disclosure } from '../components/Disclosure'
 import { Icon } from '../components/Icon'
 import { useStore } from '../data/store'
 import type { Impact, Picked, Review } from '../api/library'
@@ -45,7 +46,7 @@ export function LibraryPage() {
     [query, search] = useState(''),
     [limit, more] = useState(30)
   const [filters, showFilters] = useState(false)
-  const [membership, filterMembership] = useState('all'),
+  const [topicFilter, filterTopic] = useState(''),
     [availability, filterScope] = useState('')
   const [chosen, choose] = useState<string[]>([]),
     [focus, setFocus] = useState(state.route.view === 'library' ? (state.route.paperId ?? '') : '')
@@ -61,10 +62,12 @@ export function LibraryPage() {
   const [feedback, setFeedback] = useState('')
   const [reader, setReader] = useState<LibraryReader>()
   const topics = state.topics
+  const archivedTopics = archived?.items.filter((item) => item.kind === 'topic') ?? []
+  const filterTopics = [...topics, ...archivedTopics.filter((item) => !topics.some((t) => t.id === item.id))]
   const rows = (tab === 'Trash' ? catalog?.trash : catalog?.papers) ?? []
   const shown = rows.filter(
     (p) =>
-      (membership === 'all' || (membership === 'linked') === p.topic_ids.length > 0) &&
+      (!topicFilter || p.topic_ids.includes(topicFilter)) &&
       (!availability || p.source_versions.some((v) => v.available_scope === availability)) &&
       [p.title, p.identity, ...p.authors, ...p.tags].join(' ').toLowerCase().includes(query.toLowerCase()),
   )
@@ -91,8 +94,8 @@ export function LibraryPage() {
   }
   const activeTopic = paper?.topic_ids.includes(topic) && topics.some((t) => t.id === topic) ? topic :
     paper?.topic_ids.find((id) => topics.some((t) => t.id === id))
-  const archivedTopics = archived?.items.filter((item) => item.kind === 'topic') ?? []
   const readerTopic = activeTopic ?? paper?.topic_ids.find((id) => archivedTopics.some((t) => t.id === id))
+  const identity = paper && publicIdentity(paper.identity)
   if (reader) return <ArchivedReader reader={reader} close={() => setReader(undefined)} />
   return (
     <div className="page library-page">
@@ -188,7 +191,7 @@ export function LibraryPage() {
                 />
               </label>
               <button className="ghost-btn" aria-expanded={filters} onClick={() => showFilters(!filters)}>
-                {tr('Filters')}{membership !== 'all' || availability ? ' •' : ''}
+                {tr('Filters')}{topicFilter || availability ? ' •' : ''}
               </button>
               {tab === 'Papers' && <button className="primary" disabled={busy} onClick={() => void pick().catch(report)}>
           <Icon name="plus" size={14} />{' '}{tr('Import papers')}
@@ -198,12 +201,15 @@ export function LibraryPage() {
               {filters && <>
               <select
                 aria-label={tr('Topic membership')}
-                value={membership}
-                onChange={(e) => filterMembership(e.target.value)}
+                value={topicFilter}
+                onChange={(e) => {
+                  filterTopic(e.target.value)
+                  choose([])
+                  more(30)
+                }}
               >
-                <option value="all">{tr('Any membership')}</option>
-                <option value="linked">{tr('In a topic')}</option>
-                <option value="unfiled">{tr('Unfiled')}</option>
+                <option value="">{tr('Any membership')}</option>
+                {filterTopics.map(({ id, title }) => <option key={id} value={id}>{title}</option>)}
               </select>
               <select
                 aria-label={tr('Reading scope')}
@@ -280,10 +286,13 @@ export function LibraryPage() {
               </div>
               {paper && (
                 <aside key={paper.paper_id} className="card lib-detail">
-                  <h2>{paper.title}</h2>
+                  <header className="lib-detail-heading">
+                    <h2>{paper.title}</h2>
+                    <div className="lib-detail-meta">
+                      {identity && <p className="record-meta">{identity}</p>}
                       {tab === 'Papers' && readerTopic && (
                         <button
-                          className="link-btn"
+                          className="ghost-btn sm accent"
                           onClick={() => activeTopic ?
                             act.navigate({
                               view: 'topic',
@@ -293,29 +302,28 @@ export function LibraryPage() {
                             }) : setReader({ topic: readerTopic, version: paper.source_versions[0].source_version_id, title: paper.title })
                           }
                         >
-                          {tr('Open in reader')}
+                          <Icon name="book" size={14} /> {tr('Open in reader')}
                         </button>
                       )}
-                  {publicIdentity(paper.identity) && <p className="record-meta">{publicIdentity(paper.identity)}</p>}
+                    </div>
+                  </header>
                   {!demo && tab === 'Papers' &&
                     <PublicationDetails paper={paper.paper_id}
                       topic={paper.topic_ids.includes(topic) ? topic : paper.topic_ids[0]} />}
-                  <details open><summary>{tr('Files and versions')}</summary>
-                  {paper.files.map((f) => (
-                    <p key={f.source_version_id}>
-                      {f.name} · {tr(f.role.replaceAll('_', ' '))}{' '}
-
-                    </p>
-                  ))}
-                  {paper.changes.map((c) => (
-                    <p className="muted-text" key={c}>
-                      {c}
-                    </p>
-                  ))}
-                  {tab === 'Papers' && <button className="link-btn" onClick={() => void pick(paper.paper_id).catch(report)}>{tr('Add material version')}</button>}</details>
+                  <Disclosure panel open icon="file" title={tr('Files and versions')}>
+                    {paper.files.map((f) => (
+                      <p key={f.source_version_id}>{f.name} · {tr(f.role.replaceAll('_', ' '))}</p>
+                    ))}
+                    {paper.changes.map((c) => (
+                      <p className="muted-text" key={c}>{c}</p>
+                    ))}
+                    {tab === 'Papers' && <button className="ghost-btn sm" onClick={() => void pick(paper.paper_id).catch(report)}>
+                      <Icon name="plus" size={14} /> {tr('Add material version')}
+                    </button>}
+                  </Disclosure>
                   {tab === 'Papers' && (
                     <>
-                      <details><summary>{tr('Topics')}</summary>
+                      <Disclosure panel icon="wiki" title={tr('Topics')}>
                       {paper.topic_ids.map((id) => {
                         const active = topics.find((item) => item.id === id)
                         if (active) return <button key={id} className="link-btn" onClick={() => act.openTopic(id, 'read')}>{active.title}</button>
@@ -351,7 +359,8 @@ export function LibraryPage() {
                           {tr('Remove from topic')}
                         </button>
                       </div>
-                      </details><details><summary>{tr('Tags')}</summary>
+                      </Disclosure>
+                      <Disclosure panel icon="flag" title={tr('Tags')}>
                       <p>{paper.tags.join(' · ')}</p>
                       <input
                         className="text-field"
@@ -372,7 +381,7 @@ export function LibraryPage() {
                           </button>
                         ))}
                       </div>
-                      </details>
+                      </Disclosure>
                     </>
                   )}
                 </aside>

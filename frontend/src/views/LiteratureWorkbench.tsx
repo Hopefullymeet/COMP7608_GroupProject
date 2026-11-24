@@ -299,36 +299,45 @@ export function LiteratureWorkbench({ topicId, initialView = 'outline' }: {
           onDragLeave={() => setDragging(false)} onDrop={drop}>
           <div className="synthesis-paper-heading">
             <h3>{tr('Papers')}</h3>
-            <button className="ghost-btn" disabled={Boolean(imports)} onClick={() => chooseFiles()}>
+            <button className="ghost-btn sm" disabled={Boolean(imports)} onClick={() => chooseFiles()}>
               <Icon name="plus" size={14} /> {tr('Add PDFs')}
             </button>
-
           </div>
           {!papers.length && <p className="fine">{tr('Drop two or more papers from the same topic here.')}</p>}
           {papers.map((paper) => {
             const checkedVersion = versions.find((version) => paper.source_versions.some((v) => v.source_version_id === version))
+            const latest = paper.source_versions[0]
+            const version = checkedVersion ?? latest.source_version_id
             return <div key={paper.paper_id} className="synthesis-paper">
-              <label><input type="checkbox" checked={!!checkedVersion}
-                onChange={(event) => {
-                  const selected = event.currentTarget.checked
-                  setChoices((old) => ({ ...old, [paper.paper_id]: selected ? paper.source_versions[0].source_version_id : undefined }))
-                }} /> <span>{paper.title}</span></label>
-              {checkedVersion && paper.source_versions.length > 1 && <select aria-label={tr('Version of {0}', paper.title)} value={checkedVersion}
-                onChange={(event) => {
-                  const value = event.currentTarget.value
-                  setChoices((old) => ({ ...old, [paper.paper_id]: value }))
-                }}>
-                {paper.source_versions.map((v, index) => <option key={v.source_version_id} value={v.source_version_id}>
-                  {index === 0 ? tr('Latest version') : tr('Version {0}', paper.source_versions.length - index)}
-                </option>)}
-              </select>}
-              <button className="link-btn" disabled={Boolean(imports)} onClick={() => chooseFiles(paper.paper_id)}>{tr('Add version')}</button>
-              <button className="link-btn" onClick={() => referencesFor(checkedVersion ?? paper.source_versions[0].source_version_id)}>
-                {tr('Paper references')}
-              </button>
-              {!workspace.demo && pdfVersions.has(checkedVersion ?? paper.source_versions[0].source_version_id) && <button className="link-btn"
-                onClick={() => openPage(checkedVersion ?? paper.source_versions[0].source_version_id, 1)}>{tr('Open PDF')}</button>}
-              {paper.source_versions[0].available_scope === 'metadata' && <small>{tr('Text unavailable')}</small>}
+              <label className="synthesis-paper-title">
+                <input type="checkbox" checked={!!checkedVersion}
+                  onChange={(event) => {
+                    const selected = event.currentTarget.checked
+                    setChoices((old) => ({ ...old, [paper.paper_id]: selected ? latest.source_version_id : undefined }))
+                  }} />
+                <span>{paper.title}</span>
+              </label>
+              <div className="synthesis-paper-actions">
+                <button className="ghost-btn sm" disabled={Boolean(imports)} onClick={() => chooseFiles(paper.paper_id)}>
+                  <Icon name="plus" size={14} /> {tr('Add version')}
+                </button>
+                <button className="ghost-btn sm" onClick={() => referencesFor(version)}>
+                  <Icon name="quote" size={14} /> {tr('Paper references')}
+                </button>
+                {!workspace.demo && pdfVersions.has(version) && <button className="ghost-btn sm accent" onClick={() => openPage(version, 1)}>
+                  <Icon name="file" size={14} /> {tr('Open PDF')}
+                </button>}
+                {checkedVersion && paper.source_versions.length > 1 && <select aria-label={tr('Version of {0}', paper.title)} value={checkedVersion}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value
+                    setChoices((old) => ({ ...old, [paper.paper_id]: value }))
+                  }}>
+                  {paper.source_versions.map((v, index) => <option key={v.source_version_id} value={v.source_version_id}>
+                    {index === 0 ? tr('Latest version') : tr('Version {0}', paper.source_versions.length - index)}
+                  </option>)}
+                </select>}
+              </div>
+              {latest.available_scope === 'metadata' && <small className="synthesis-paper-status">{tr('Text unavailable')}</small>}
             </div>
           })}
         </div>
