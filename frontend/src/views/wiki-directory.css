@@ -51,7 +51,7 @@
 .assistant-chat .suggest-row {align-items:flex-start}
 .assistant-chat .chip-btn {max-width:100%}
 .wiki-assistant footer {padding:10px 14px 8px;text-align:center}
-.assistant-chat .composer {display:flex;align-items:flex-end;gap:8px;padding:9px 10px 9px 12px}
+.assistant-chat .composer {display:flex;align-items:center;gap:8px;padding:9px 10px 9px 12px}
 .assistant-chat .composer textarea {field-sizing:content;max-height:8em;min-width:0;flex:1}
 .assistant-chat .composer-bar {margin:0}
 .dialog.wiki-source-reader {width:min(1100px,92vw);height:88vh;display:flex;flex-direction:column}

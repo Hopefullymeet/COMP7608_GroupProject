@@ -10,7 +10,7 @@ const PdfReader = lazy(() => import('./PdfReader'))
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CitationMark, Report, Snapshot } from '../api/citation'
 import { useLanguage } from '../i18n'
-import { useRead } from '../data/WorkspaceProvider'
+import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { EvidenceLink } from './Notes'
 
 const states = { supported: 'Supported', partial: 'Partially supported', conflict: 'Conflicting evidence',
@@ -44,6 +44,7 @@ export function ManuscriptReader({ topic, draft, version, report, name, onAsk, o
   const { tr, language } = useLanguage()
   const t = (zh: string, en: string) => language === 'zh-CN' ? zh : en
   const prefs = usePreferences()
+  const { setAuditChatSlot } = useWorkspace()
   const composer = useRef<HTMLTextAreaElement>(null)
   const latest = useRef<HTMLDivElement>(null)
   const actions = useContext(HeaderActions)
@@ -56,7 +57,7 @@ export function ManuscriptReader({ topic, draft, version, report, name, onAsk, o
   const answered = report?.discussion?.length ?? 0
   useEffect(() => {
     if (panel && view === 'ask') latest.current?.scrollIntoView({ block: 'nearest' })
-  }, [answered, panel, view])
+  }, [answered, panel, view, busy])
   const previousCount = useRef(answered)
   useEffect(() => {
     if (answered > previousCount.current) setQuestion(q => report?.discussion?.at(-1)?.question === q.trim() ? '' : q)
@@ -116,7 +117,7 @@ export function ManuscriptReader({ topic, draft, version, report, name, onAsk, o
           <div className="audit-inspector-body audit-chat-thread" aria-live="polite">
             {answered ? report?.discussion?.map((turn,i) => <Fragment key={i}>
               <div className="msg user"><p>{turn.question}</p></div>
-              <div className="msg agent" ref={i === answered - 1 ? latest : undefined}>
+              <div className="msg agent">
                 <AuditText text={turn.text}/>{turn.anchor_ids.map(id => <EvidenceLink key={id} id={id}/>)}
               </div>
             </Fragment>) : <div className="audit-chat-start">
@@ -129,6 +130,8 @@ export function ManuscriptReader({ topic, draft, version, report, name, onAsk, o
                 setQuestion(prompt); composer.current?.focus()
               }}>{prompt}</button>)}</div> : <small>{tr('A report is needed to answer audit questions.')}</small>}
             </div>}
+            <div className="audit-pending-turn" ref={setAuditChatSlot} data-report={report?.report_id}/>
+            <div ref={latest}/>
           </div>
           <footer className="audit-chat-footer">
             <div className="audit-chat-scope"><Icon name="quote" size={13}/>

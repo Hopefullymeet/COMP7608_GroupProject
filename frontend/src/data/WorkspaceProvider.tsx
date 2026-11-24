@@ -2,7 +2,7 @@ import { useLanguage } from '../i18n'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Dialog } from '../components/PageHead'
 import { createPortal } from 'react-dom'
-import { Icon } from '../components/Icon'
+import { Icon, Spinner } from '../components/Icon'
 import { ScopeDetails } from '../components/ScopeDetails'
 import { errorText, type Client, type Method, type Methods, type WorkspaceTask } from '../api/contract'
 import { operation, retryWrite, useTask } from './useTask'
@@ -14,6 +14,7 @@ type Workspace = {
   tick: number
   demo: boolean
   busy: boolean
+  setAuditChatSlot: (element: HTMLDivElement | null) => void
   setComparisonSlot: (element: HTMLDivElement | null) => void
   refresh: () => void
   report: (error: unknown) => void
@@ -66,6 +67,8 @@ export function WorkspaceProvider({
   const taskKey = 'papertrace-workspace-task/' + (demo ? 'demo' : 'rpc')
   const comparisonKey = taskKey + '/comparison'
   const [comparisonSlot, setComparisonSlot] = useState<HTMLDivElement | null>(null)
+  const [auditChatSlot, setAuditChatSlot] = useState<HTMLDivElement | null>(null)
+  const [auditQuestion, setAuditQuestion] = useState<{ id: string; report: string; question: string }>()
   const [comparison, setComparison] = useState<{ id: string; topic: string }>()
   const task = useTask(api, () => {
     localStorage.removeItem(taskKey)
@@ -129,6 +132,8 @@ export function WorkspaceProvider({
   const inline = comparison && comparisonSlot?.dataset.topic === comparison.topic &&
     (!task.task || task.task === comparison.id) ? comparisonSlot : null
   const taskNotice = task.error || task.connectionError || task.status
+  const auditInline = auditQuestion && auditQuestion.id === task.task &&
+    auditChatSlot?.dataset.report === auditQuestion.report ? auditChatSlot : null
   const readCount = task.preview.progress.match(/^paper_read: (\d+) result\(s\)\./)?.[1]
   const stageLabels: Record<string, string> = {
     read: 'Reading the selected papers', reading: 'Reading the selected papers',
@@ -136,10 +141,12 @@ export function WorkspaceProvider({
     align: 'Aligning comparison dimensions', compare: 'Building the comparison table',
   }
   return (
-    <Context.Provider value={{ api, tick, report, refresh, write, setComparisonSlot, prepare: async (input, onPrepared, startImmediately) => {
+    <Context.Provider value={{ api, tick, report, refresh, write, setComparisonSlot, setAuditChatSlot, prepare: async (input, onPrepared, startImmediately) => {
       if (busy) return
       setComparison(undefined)
       const started = await task.prepare(input, { onPrepared, startImmediately })
+      if (started && input.kind === 'citation_audit' && input.input.question && input.input.report_id)
+        setAuditQuestion({ id: started.task_id, report: input.input.report_id, question: input.input.question })
       rememberComparison(input, started?.task_id)
     }, demo, busy }}>
       {children}
@@ -185,7 +192,16 @@ export function WorkspaceProvider({
             </div>
           </div>
         </section>, inline)}
-      {task.task && !inline && (
+      {auditInline && auditQuestion && createPortal(<>
+        <div className="msg user"><p>{auditQuestion.question}</p></div>
+        <div className="msg-who" role="status">
+          {task.connectionError ? <button className="link-btn" onClick={task.reconnect}>{tr('Reconnect')}</button>
+            : <span className="working"><Spinner/>{tr('Thinking…')}</span>}
+          <button className="link-btn" disabled={task.busy} onClick={task.cancel}>{tr('Cancel task')}</button>
+        </div>
+        {taskNotice && <p className="wiki-issue" role="alert">{tr(taskNotice)}</p>}
+      </>, auditInline)}
+      {task.task && !inline && !auditInline && (
         <div className="mainline-task-actions" role="status">
           {tr(task.preview.progress || 'Task running')}
           <button className="ghost-btn sm" onClick={task.cancel}>
@@ -196,7 +212,7 @@ export function WorkspaceProvider({
           </button>
         </div>
       )}
-      {(notice || (!inline && taskNotice)) && (
+      {(notice || (!inline && !auditInline && taskNotice)) && (
         <section className="mainline-task-actions workspace-notice" aria-label={tr('Workspace notice')}>
           <p role="alert">{tr(notice || task.error || task.connectionError || task.status)}</p>
           <button

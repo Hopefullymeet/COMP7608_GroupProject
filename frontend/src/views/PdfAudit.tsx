@@ -71,7 +71,7 @@ export function PdfAudit({ topic, initialReport }: { topic: string; initialRepor
       sentence_ids: mark ? [mark.sentence_id] : version.sentences.map(s => s.id),
       ...(mark && { reference_keys: mark.keys }),
       source_versions: papers.flatMap(p => p.source_versions.slice(0, 1).map(v => v.source_version_id)),
-    } })
+    } }, undefined, true)
   }
   return <ManuscriptReader key={version.version_id} topic={topic} draft={doc.draft_id}
     name={doc.name} version={version} report={report} busy={workspace.busy}

@@ -464,6 +464,8 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .audit-panel-hint { margin: auto 0; padding: 1rem; text-align: center; color: var(--ink-2); }
 .audit-inspector.audit-chat { background:color-mix(in srgb,var(--bg) 65%,var(--surface)); border-color:var(--line); border-radius:16px; }
 .audit-chat-thread { flex:1; display:flex; flex-direction:column; gap:18px; }
+.audit-pending-turn { display:contents; }
+.audit-chat-thread:has(.audit-pending-turn:not(:empty)) .audit-chat-start { display:none; }
 .audit-chat-start { margin:auto 0; padding:12px 0; display:grid; justify-items:start; gap:10px; }
 .audit-chat-start > svg { color:var(--accent); }
 .audit-chat-footer { padding-top:12px; }
