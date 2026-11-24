@@ -375,7 +375,7 @@ export function WikiPage() {
         {topic && <HeaderContext text={topic.title} />}
       </PageHead>
       {topic ? <TopicWiki key={topic.id} topicId={topic.id} title={topic.title} unread={topic.wikiUnread} />
-        : <div className="page-body scroll"><section className="audit-chooser"><TopicChooser wiki onSelect={select} /></section></div>}
+        : <div className="page-body topic-chooser-body"><section className="audit-chooser"><TopicChooser wiki onSelect={select} /></section></div>}
     </div>
   )
 }
