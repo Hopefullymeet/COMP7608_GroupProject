@@ -5,6 +5,7 @@ from http.client import HTTPException
 import json
 from pathlib import Path
 import re
+import random
 import sqlite3
 import time
 from urllib.error import HTTPError, URLError
@@ -220,6 +221,23 @@ def streamed_completion(response, preview, check_active):
     if calls:
         message["tool_calls"] = [calls[i] for i in sorted(calls)]
     return message, usage, finish
+
+
+class RepeatToolReminder:
+    """Per-turn port of the upstream repeat-tool-reminder. See docs/third-party."""
+
+    def __init__(self):
+        self.previous = None
+        self.count = 0
+
+    def observe(self, name, args):
+        key = (name, json.dumps(args, sort_keys=True, ensure_ascii=False))
+        self.count = self.count + 1 if key == self.previous else 1
+        self.previous = key
+        if self.count in (3, 5, 8):
+            return (f"You called {name} with identical arguments {self.count} consecutive times. "
+                    "Inspect the result. Try a synonym in the paper's language, read another "
+                    "passage, or finish with an explicit evidence gap.")
 
 
 class ModelAgent:
@@ -605,7 +623,13 @@ class ModelAgent:
             return choice["message"], envelope.get("usage") or {}, choice.get("finish_reason")
         except HTTPError as error:
             status = error.code
-            error.close()
+            try:
+                detail = error.read(4096).decode("utf-8", errors="replace").lower() if tools and status in (400, 422) else ""
+            finally:
+                error.close()
+            if re.search(r"(tool(s| calling)?|function calling).{0,100}(not supported|unsupported|not available)|"
+                         r"(does not support|unsupported|unknown parameter).{0,60}(tools|tool calling|function calling)", detail):
+                raise failure("TOOLS_UNSUPPORTED", False, "configure_service") from None
             if status in (401, 403):
                 raise failure("SERVICE_AUTH_FAILED", False, "configure_service") from None
             if status == 402:
@@ -643,6 +667,27 @@ class ModelAgent:
             preview_started = True
             preview(text)
 
+        repeat = RepeatToolReminder()
+
+        def request_step(history, schemas, tokens, stream, *, json_output=False):
+            # Retry the model step only. Completed research tools and visible text are never replayed.
+            for attempt in range(3):
+                check_active()
+                usage["model_steps"] += 1
+                try:
+                    return self.completion(history, schemas, max(.01, deadline - time.monotonic()),
+                                           tokens, stream, check_active, json_output=json_output)
+                except ModelFailure as error:
+                    retryable = error.issue["retryable"] and error.issue["reason"] in (
+                        "MODEL_UNAVAILABLE", "SERVICE_RATE_LIMITED", "TASK_TIMEOUT")
+                    if not retryable or attempt == 2 or preview_started:
+                        raise
+                    delay = .5 * 2 ** attempt * random.uniform(.9, 1.1)
+                    if time.monotonic() + delay >= deadline:
+                        raise
+                    trace.append({"kind": "observe", "title": "Model request retry", "detail": error.issue["reason"]})
+                    cancelled.wait(delay)
+
         def final_answer():
             # Start a tool-free turn, with the same question, constraints and observed evidence.
             # Old tool messages can otherwise prompt further calls after retrieval is closed.
@@ -658,10 +703,8 @@ class ModelAgent:
                 check_active()
                 try:
                     stream = send_preview if preview and not preview_started else None
-                    message, counts, finish = self.completion(final_messages, None, max(1, deadline-time.monotonic()),
-                                                               5400, stream, check_active, json_output=True)
+                    message, counts, finish = request_step(final_messages, None, 5400, stream, json_output=True)
                     check_active()
-                    usage["model_steps"] += 1
                     usage["input_tokens"] += counts.get("prompt_tokens", 0)
                     usage["output_tokens"] += counts.get("completion_tokens", 0)
                     if finish == "content_filter":
@@ -692,15 +735,27 @@ class ModelAgent:
                     raw = final_answer()
                     break
                 schemas = tools.schemas if tools and not limited else []
-                message, counts, finish = self.completion(messages, schemas, max(1, deadline-time.monotonic()),
-                                                          800 if max_steps == 4 else 5400, send_preview if preview else None, check_active)
+                try:
+                    message, counts, finish = request_step(messages, schemas, 800 if max_steps == 4 else 5400,
+                                                            send_preview if preview else None)
+                except ModelFailure as error:
+                    if reading and schemas and error.issue["reason"] == "TOOLS_UNSUPPORTED" and seen and not preview_started:
+                        raw = final_answer()
+                        break
+                    raise
                 check_active()
-                usage["model_steps"] += 1
                 usage["input_tokens"] += counts.get("prompt_tokens", 0)
                 usage["output_tokens"] += counts.get("completion_tokens", 0)
                 if not isinstance(message, dict):
                     raise failure("MODEL_OUTPUT_INVALID")
                 calls = message.get("tool_calls") or []
+                if finish == "content_filter":
+                    raise failure("MODEL_OUTPUT_INVALID", False)
+                if finish == "length" and calls:
+                    if reading and seen:
+                        raw = final_answer()
+                        break
+                    raise failure("MODEL_OUTPUT_INVALID")
                 if not calls:
                     content = message.get("content")
                     if reading and finish != "content_filter":
@@ -720,6 +775,7 @@ class ModelAgent:
                 if not schemas or not isinstance(calls, list):
                     raise failure("MODEL_OUTPUT_INVALID")
                 messages.append({**message, "role": "assistant"})
+                reminders = []
                 for call in calls:
                     check_active()
                     function = call["function"]
@@ -728,6 +784,9 @@ class ModelAgent:
                     activity = {}
                     try:
                         args = json.loads(function["arguments"])
+                        reminder = repeat.observe(name, args)
+                        if reminder:
+                            reminders.append(reminder)
                         if not isinstance(args, dict):
                             raise ValueError
                         activity = {k: args[k] for k in ("query", "version") if isinstance(args.get(k), str)}
@@ -758,6 +817,9 @@ class ModelAgent:
                         progress(name, detail)
                     if reading_progress:
                         reading_progress(name, detail, activity)
+                # Complete the provider's tool-result batch before adding next-step context.
+                if reminders:
+                    messages.append({"role": "user", "content": "\n".join(reminders)})
             else:
                 raise failure("TASK_BUDGET_EXHAUSTED", False, "adjust_budget")
             if limited:

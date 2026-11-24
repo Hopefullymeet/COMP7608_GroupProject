@@ -2151,10 +2151,9 @@ class Worker:
                              "if none match, say so. Candidates: " + json.dumps(descriptions, ensure_ascii=False))
             has_pdf = any(source["available_scope"] == "full_text" for source in sources)
             endpoint = task.get("model_endpoint", ENDPOINT)
-            runtime = self.agent_for_task(task) if endpoint == ENDPOINT or task.get("reviewer") else None
+            runtime = self.agent_for_task(task)
             memory = task.get("topic_memory")
             issue = None
-            used_endpoint = runtime is None
             titles = {s["source_version_id"]: s["title"] for s in sources}
             def record_tool(name, observation, activity):
                 if activity.get("version") in titles:
@@ -2188,7 +2187,7 @@ class Worker:
                     claims, seen, issue = runtime.answer_full_text(question, sources, signal, memory=memory, progress=record_tool, name_session=name_session, preview=preview)
                 else:
                     claims, seen = runtime.answer(question, sources, signal, memory=memory, progress=record_tool, name_session=name_session, preview=preview)
-            if used_endpoint:
+            else:
                 claims, seen = self.answer_with_model_endpoint(
                     endpoint, task.get("model_id", MODEL),
                     deepseek_api_key(), question, sources, signal,

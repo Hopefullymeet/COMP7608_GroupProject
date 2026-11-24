@@ -12,6 +12,7 @@ use std::{
 };
 use tauri::ipc::Channel;
 
+const AGENT_LICENSE: &[u8] = include_bytes!("../../../docs/third-party/deepseek-harness-LICENSE");
 const AGENT_POLICY: &[u8] = include_bytes!("../../../backend/agent.md");
 const WORKER: &[u8] = include_bytes!("../../../backend/papertrace.py");
 const LITERATURE: &[u8] = include_bytes!("../../../backend/literature.py");
@@ -60,6 +61,7 @@ impl Worker {
         READER.hash(&mut hash);
         LITERATURE.hash(&mut hash);
         WORKBENCH.hash(&mut hash);
+        AGENT_LICENSE.hash(&mut hash);
         AGENT_POLICY.hash(&mut hash);
         WIKI.hash(&mut hash);
         RESEARCH_TOOLS.hash(&mut hash);
@@ -72,6 +74,7 @@ impl Worker {
         fs::create_dir_all(&runtime).map_err(|error| error.to_string())?;
         let script = runtime.join("papertrace.py");
         for (path, contents) in [
+            (&runtime.join("Agent-LICENSE.txt"), AGENT_LICENSE),
             (&runtime.join("agent.md"), AGENT_POLICY), (&script, WORKER), (&runtime.join("model_agent.py"), MODEL_AGENT),
             (&runtime.join("decision.py"), DECISION),
             (&runtime.join("credentials.py"), CREDENTIALS),

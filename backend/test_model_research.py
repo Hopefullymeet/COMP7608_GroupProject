@@ -4,8 +4,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import threading
+import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from model_agent import ModelAgent, ModelFailure
 import test_literature
@@ -170,6 +171,38 @@ class ScriptedProvider(BaseHTTPRequestHandler):
 
 
 class ModelResearchTest(unittest.TestCase):
+    def test_repeated_calls_hint_after_batch_and_retry_only_the_model(self):
+        agent = ModelAgent(Path("."), "fixture")
+        tools = Mock(schemas=[{"type": "function"}])
+        tools.execute.return_value = []
+        call = {"name": "paper_search", "arguments": '{"query":"ghosting","version":"v"}'}
+        batch = {"tool_calls": [{"id": str(i), "function": call} for i in range(3)]}
+        def complete(messages, *args, **kwargs):
+            if len(messages) == 2:
+                return batch, {}, "tool_calls"
+            self.assertEqual([m["role"] for m in messages[-4:]], ["tool", "tool", "tool", "user"])
+            self.assertIn("3 consecutive", messages[-1]["content"])
+            if mock.call_count == 2:
+                raise ModelFailure("MODEL_UNAVAILABLE", True, "retry")
+            return {"content": '{"ok": true}'}, {}, "stop"
+        event = threading.Event()
+        with patch.object(agent, "completion", side_effect=complete) as mock, patch.object(event, "wait"):
+            raw, _, _, usage, _ = agent.run("Locate evidence", event, tools)
+        self.assertTrue(raw["ok"])
+        self.assertEqual(tools.execute.call_count, 3)
+        self.assertEqual(usage["model_steps"], 3)
+
+    def test_truncated_tool_call_is_not_executed(self):
+        agent = ModelAgent(Path("."), "fixture")
+        tools = Mock(schemas=[{"type": "function"}])
+        final = {"content": '{"sentences":[{"text":"Insufficient evidence","evidence":[]}]}'}
+        with patch.object(agent, "completion", side_effect=[
+                ({"tool_calls": [{"id": "cut"}]}, {}, "length"), (final, {}, "stop")]):
+            raw, _, _, _, _ = agent.run("Question", threading.Event(), tools, reading=True,
+                                        fixed={"p": {"text": "Background only"}})
+        tools.execute.assert_not_called()
+        self.assertEqual(raw["sentences"][0]["evidence"], [])
+
     def test_search_read_and_reviewed_wiki(self):
         # Reuse the real PDF setup and the same task/approval API as the desktop UI.
         fixture = test_literature.LiteratureTest()
@@ -230,6 +263,28 @@ class ModelResearchTest(unittest.TestCase):
                     self.assertEqual(followup["points"][0]["prior_id"], point["id"])
                     expected_tools = {"paper_search", "paper_read", "wiki_search", "paper_refs"}
                     self.assertTrue(all(tools == expected_tools for tools in provider.observed_tools), provider.observed_tools)
+                    # Exercise real session dispatch with a custom endpoint and the reviewer disabled.
+                    worker.discovery_fixture = False
+                    sid = fixture.call("session.create", topic_id=fixture.topic)["session_id"]
+                    query = dict(kind="reading_qa", topic_id=fixture.topic, session_id=sid,
+                                 input={"question": "What benchmark does Alpha define?", "sources": [{
+                                     "paper_id": fixture.a["paper_id"], "source_version_id": fixture.versions[0],
+                                     "requested_scope": "full_text"}]})
+                    approval = fixture.call("task.prepare", **query)
+                    task = fixture.call("task.start", confirmation_id=approval["confirmation_id"], **query)
+                    deadline = time.monotonic() + 10
+                    while time.monotonic() < deadline:
+                        snapshot = fixture.call("task.get", task_id=task["task_id"])
+                        if snapshot["status"] not in ("queued", "running"):
+                            break
+                        time.sleep(.02)
+                    self.assertEqual(snapshot["status"], "completed", snapshot)
+                    anchor = snapshot["result"]["sentences"][0]["anchor_ids"][0]
+                    located = fixture.call("evidence.open", topic_id=fixture.topic, anchor_id=anchor)
+                    self.assertIn(located["quote"], located["source"]["passages"][0]["text"])
+                    history = fixture.call("task.history", topic_id=fixture.topic)["items"]
+                    steps = next(row["steps"] for row in history if row["task_id"] == task["task_id"])
+                    self.assertIn("paper_search", [step["title"] for step in steps])
                     version = fixture.versions[0]
                     sources = [{"source_version_id": version, "title": "Alpha", "available_scope": "full_text"}]
                     steps = []
