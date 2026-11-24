@@ -1,3 +1,6 @@
+import './wiki-directory.css'
+import { usePreferences } from '../data/preferences'
+import { Fragment } from 'react'
 import { AuditText } from '../components/AuditText'
 import { Icon } from '../components/Icon'
 import { HeaderActions, HeaderContext } from '../components/PageHead'
@@ -39,6 +42,10 @@ export function ManuscriptReader({ topic, draft, version, report, name, onAsk, o
   topic: string; draft: string; version: Snapshot; report?: Report; name: string; onAsk: (question: string, mark?: CitationMark) => Promise<void>; onError: (err: unknown) => void; onChoose: () => void
 }) {
   const { tr, language } = useLanguage()
+  const t = (zh: string, en: string) => language === 'zh-CN' ? zh : en
+  const prefs = usePreferences()
+  const composer = useRef<HTMLTextAreaElement>(null)
+  const latest = useRef<HTMLDivElement>(null)
   const actions = useContext(HeaderActions)
   const [panel, setPanel] = useState(true)
   const [view, setView] = useState<'audit' | 'ask'>('audit')
@@ -47,6 +54,9 @@ export function ManuscriptReader({ topic, draft, version, report, name, onAsk, o
   const [mark, select] = useState<CitationMark>()
   const [wire, setWire] = useState('')
   const answered = report?.discussion?.length ?? 0
+  useEffect(() => {
+    if (panel && view === 'ask') latest.current?.scrollIntoView({ block: 'nearest' })
+  }, [answered, panel, view])
   const previousCount = useRef(answered)
   useEffect(() => {
     if (answered > previousCount.current) setQuestion(q => report?.discussion?.at(-1)?.question === q.trim() ? '' : q)
@@ -97,27 +107,49 @@ export function ManuscriptReader({ topic, draft, version, report, name, onAsk, o
         pageOverlay={number => <CitationPins topic={topic} draft={draft} version={version} page={number} selected={mark}
           onSelect={(value, button) => { setPanel(true); pin.current = button; select(value); setView('audit') }}/>} /></Suspense>
       {panel && wire && mark && view === 'audit' && <svg className="audit-wire" aria-hidden="true"><path d={wire}/></svg>}
-      <aside hidden={!panel} className="audit-inspector" aria-label={tr('Citation check')}>
+      <aside hidden={!panel} className={'audit-inspector' + (view === 'ask' ? ' assistant-chat audit-chat' : '')} aria-label={tr('Citation check')}>
         <nav className="audit-panel-nav" aria-label={tr('Citation check')}>
           <button aria-pressed={view === 'audit'} onClick={() => setView('audit')}>{tr('Citation check')}</button>
           <button aria-pressed={view === 'ask'} onClick={() => setView('ask')}>{tr('Ask AI')}</button>
         </nav>
         {view === 'ask' ? <>
-          <div className="audit-inspector-body" aria-live="polite">
-            {report?.discussion?.map((turn,i) => <article key={i}><strong>{turn.question}</strong>
-              <AuditText text={turn.text}/>{turn.anchor_ids.map(id => <EvidenceLink key={id} id={id}/>)}</article>)}
+          <div className="audit-inspector-body audit-chat-thread" aria-live="polite">
+            {answered ? report?.discussion?.map((turn,i) => <Fragment key={i}>
+              <div className="msg user"><p>{turn.question}</p></div>
+              <div className="msg agent" ref={i === answered - 1 ? latest : undefined}>
+                <AuditText text={turn.text}/>{turn.anchor_ids.map(id => <EvidenceLink key={id} id={id}/>)}
+              </div>
+            </Fragment>) : <div className="audit-chat-start">
+              <Icon name="message" size={24}/>
+              <strong>{mark ? t('询问这条引用', 'Ask about this citation') : t('询问核查报告', 'Ask about the report')}</strong>
+              {report ? <div className="suggest-row">{(mark
+                ? [t('哪些证据支持这条引用？', 'What evidence supports this citation?'), t('这句话该怎么改？', 'How could I revise this sentence?')]
+                : [t('哪些引用需要优先复核？', 'Which citations should I review first?'), t('哪些结论缺少证据？', 'Which claims lack evidence?')]
+              ).map(prompt => <button type="button" className="chip-btn" key={prompt} onClick={() => {
+                setQuestion(prompt); composer.current?.focus()
+              }}>{prompt}</button>)}</div> : <small>{tr('A report is needed to answer audit questions.')}</small>}
+            </div>}
           </div>
-          <form className="audit-question" onSubmit={async e => { e.preventDefault()
-            if (!question.trim() || busy || !report) return
-            try { await onAsk(question.trim(), mark) } catch (error) { onError(error) }
-          }}>
-            <small>{mark ? tr('Current citation {0}', mark.label || sentence?.text || '') : tr('Current audit report')}</small>
-            {mark && <button type="button" className="link-btn" onClick={close}>{tr('Use whole report')}</button>}
-            <textarea className="text-field" aria-label={tr('Ask about this audit')} placeholder={tr('Ask about this audit')}
-              value={question} maxLength={2000} onChange={e => setQuestion(e.target.value)}/>
-            <button className="primary" disabled={busy || !question.trim() || !report}>{tr('Ask')}</button>
-            {!report && <p>{tr('A report is needed to answer audit questions.')}</p>}
-          </form>
+          <footer className="audit-chat-footer">
+            <div className="audit-chat-scope"><Icon name="quote" size={13}/>
+              <small>{mark ? tr('Current citation {0}', mark.label || sentence?.text || '') : tr('Current audit report')}</small>
+              {mark && <button type="button" className="link-btn" onClick={close}>{tr('Use whole report')}</button>}
+            </div>
+            <form className="composer" onSubmit={async e => {
+              e.preventDefault()
+              if (!question.trim() || busy || !report) return
+              try { await onAsk(question.trim(), mark) } catch (error) { onError(error) }
+            }}>
+              <textarea ref={composer} rows={1} aria-label={tr('Ask about this audit')} placeholder={tr('Ask about this audit')}
+                value={question} disabled={!report} maxLength={2000} onChange={e => setQuestion(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (prefs.send === 'enter' || e.ctrlKey || e.metaKey)) {
+                    e.preventDefault(); e.currentTarget.form?.requestSubmit()
+                  }
+                }}/>
+              <button className="send" aria-label={tr('Send')} disabled={busy || !question.trim() || !report}><Icon name="arrowUp" size={16}/></button>
+            </form>
+          </footer>
         </> : mark ? <>
         <header><h3 ref={heading}>{tr('Citation check')} {mark.label}</h3>
           <button className="icon-btn" aria-label={tr('Close')} onClick={close}>×</button></header>

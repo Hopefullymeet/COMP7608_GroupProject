@@ -45,15 +45,15 @@
 .wiki-assistant>header small {color:var(--ink-3);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wiki-assistant-scroll {flex:1;min-height:0;overflow:auto;padding:18px;display:flex;flex-direction:column}
 .wiki-assistant .wiki-thread {margin:0;padding:0;border:0;gap:20px}
-.wiki-assistant .msg.user,.wiki-assistant .answer {font-size:var(--chat-size,14px)}
-.wiki-assistant .msg.user p {white-space:pre-wrap;overflow-wrap:anywhere}
-.wiki-assistant .msg.agent {min-width:0}
-.wiki-assistant .suggest-row {align-items:flex-start}
-.wiki-assistant .chip-btn {max-width:100%}
+.assistant-chat .msg.user,.assistant-chat .answer {font-size:var(--chat-size,14px)}
+.assistant-chat .msg.user p {white-space:pre-wrap;overflow-wrap:anywhere}
+.assistant-chat .msg.agent {min-width:0}
+.assistant-chat .suggest-row {align-items:flex-start}
+.assistant-chat .chip-btn {max-width:100%}
 .wiki-assistant footer {padding:10px 14px 8px;text-align:center}
-.wiki-assistant .composer {display:flex;align-items:flex-end;gap:8px;padding:9px 10px 9px 12px}
-.wiki-assistant .composer textarea {field-sizing:content;max-height:8em;min-width:0;flex:1}
-.wiki-assistant .composer-bar {margin:0}
+.assistant-chat .composer {display:flex;align-items:flex-end;gap:8px;padding:9px 10px 9px 12px}
+.assistant-chat .composer textarea {field-sizing:content;max-height:8em;min-width:0;flex:1}
+.assistant-chat .composer-bar {margin:0}
 .dialog.wiki-source-reader {width:min(1100px,92vw);height:88vh;display:flex;flex-direction:column}
 .wiki-mode {font-size:11px;color:var(--ink-3);text-decoration:underline;text-underline-offset:3px;margin-top:6px}
 .wiki-mode:hover {color:var(--ink-2)}

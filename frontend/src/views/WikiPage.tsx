@@ -333,7 +333,7 @@ function TopicWiki({ topicId, title, unread }: { topicId: string; title:string; 
         </Disclosure>
       </div>
     </div>
-    {open && <aside className="wiki-assistant" aria-label={t('Wiki 助手','Wiki assistant')}>
+    {open && <aside className="wiki-assistant assistant-chat" aria-label={t('Wiki 助手','Wiki assistant')}>
       <header><strong>{t('Wiki 助手','Wiki assistant')}</strong><small>{title}</small>
         {!!wiki.thread.length && !wiki.pending_reply && <button className="icon-btn" disabled={working} title={tr('Clear conversation')} aria-label={tr('Clear conversation')} onClick={async ()=>{if(await confirmAction(tr('Clear conversation'),tr('Cancel'),tr('Clear conversation'))) void run(()=>call('wiki.clear_chat',scope))}}><Icon name="trash" size={14}/></button>}
         <button className="icon-btn" aria-label={tr('Close')} onClick={()=>setOpen(false)}><Icon name="x" size={16}/></button></header>
