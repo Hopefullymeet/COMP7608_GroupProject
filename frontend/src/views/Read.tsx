@@ -809,7 +809,14 @@ function ReadingSplit({ selections, onSource, reader, annotations, askRegion, bl
         </button>}
         <button className="icon-btn sm" type="button" title={paperLabel} aria-label={paperLabel}
           aria-controls={paperId} aria-expanded={collapsed !== 'paper'}
-          onClick={() => setCollapsed(collapsed === 'paper' ? undefined : 'paper')}>
+          onClick={() => {
+            if (collapsed === 'paper') {
+              setCollapsed(undefined)
+            } else {
+              act.closeEvidence()
+              setCollapsed('paper')
+            }
+          }}>
           <Icon name="panelRight" size={16} />
         </button>
       </>} />
