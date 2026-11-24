@@ -1,0 +1,19 @@
+{
+  "case_id": "template_do_not_score",
+  "topic": null,
+  "task_type": "citation_check",
+  "split": "pilot",
+  "origin": "controlled",
+  "input": {"question_or_draft": null, "allowed_paper_ids": []},
+  "reference": {
+    "answer": null,
+    "relevant_paper_ids": [],
+    "atomic_claims": [{"claim_id": null, "text": null, "source_paper_ids": [], "semantic_label": null, "execution_status": "not_reviewed", "evidence_ids": [], "conditions": [], "checked_sections": [], "reason": null}],
+    "evidence": [{"evidence_id": null, "paper_id": null, "pdf_sha256": null, "pdf_page": null, "section": null, "exact_quote": null, "context": null}],
+    "paper_relation": {"source_paper_id": null, "target_paper_id": null, "citation_confirmed": null, "bibliography_entry": null, "citation_evidence_ids": [], "intent_labels": [], "method_relation": null, "method_evidence_ids": []},
+    "comparison": {"left": {"paper_id": null, "task": null, "dataset_split": null, "metric": null, "settings": null, "evidence_ids": []}, "right": {"paper_id": null, "task": null, "dataset_split": null, "metric": null, "settings": null, "evidence_ids": []}, "directly_comparable": null, "reason": null}
+  },
+  "review_status": "template",
+  "annotations": [],
+  "adjudication": null
+}
