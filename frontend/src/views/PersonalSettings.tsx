@@ -1,7 +1,7 @@
 import { Dialog } from '../components/PageHead'
 import { type Shortcut, applyPreferencesFile, options, setPreference, usePreferences } from '../data/preferences'
 import { version } from '../../src-tauri/tauri.conf.json'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLanguage } from '../i18n'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import type { PersonalProfile } from '../api/services'
@@ -17,6 +17,15 @@ export function PersonalSettings() {
   const [configError,setConfigError] = useState('')
   const [recording,setRecording] = useState<Shortcut>()
   const [shortcutError,setShortcutError] = useState(false)
+  const permission = useRef<HTMLSelectElement>(null)
+  const focused = useRef(false)
+  useEffect(()=>{
+    if (profile && !busy && !focused.current && permission.current?.closest('.wiki-permission-target')) {
+      focused.current = true
+      permission.current.scrollIntoView({block:'center'})
+      permission.current.focus()
+    }
+  },[profile,busy])
   const labels = {
     appearance: ['Appearance','Light','Dark','Follow system'],
     font: ['Conversation font size','14 px','16 px','18 px','20 px'],
@@ -35,7 +44,7 @@ export function PersonalSettings() {
       onChange={e=>profile && void write('profile.save',{...profile,session_access:e.target.value as 'read'|'edit'}).catch(report)}>
       <option value="edit">{tr('Allow Wiki and memory updates')}</option><option value="read">{tr('Save conversation only')}</option></select></label>
     <div className="preference-row"><label htmlFor="wiki-permission">{tr('Assistant edits in Wiki chat')}</label>
-      <select id="wiki-permission" disabled={!profile || busy} value={profile?.wiki_access ?? 'edit'}
+      <select ref={permission} id="wiki-permission" disabled={!profile || busy} value={profile?.wiki_access ?? 'edit'}
         onChange={e=>profile && void write('profile.save',{...profile,wiki_access:e.target.value as 'read'|'edit'}).catch(report)}>
         <option value="edit">{tr('Allow entry edits')}</option><option value="read">{tr('Answer only')}</option></select></div>
     <div className="preference-row"><span>{tr('Language')}</span><LanguagePicker/></div>

@@ -334,7 +334,7 @@ code { font: 12px/1.45 var(--mono); }
 .chat-bottom .composer > :not(textarea, .composer-bar) { grid-column: 1 / -1; }
 .chat-bottom textarea { align-self: center; padding: 0; min-height: 1.55em; max-height: min(160px, 24dvh); overflow-y: auto; }
 .chat-bottom .composer-bar { margin: 0; }
-.chat-bottom .send { width: 30px; height: 30px; border-radius: 50%; }
+.chat-bottom .send { width: 38px; height: 38px; border-radius: var(--composer-radius); }
 .suggest-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .chip-btn { text-align: left; padding: 7px 12px; border: 1px solid var(--line-2); border-radius: 9px; background: var(--surface); color: var(--ink-2); font-size: 13px; }
 .chip-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }

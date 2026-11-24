@@ -1062,6 +1062,7 @@ export const zhCN: Readonly<Record<string, string>> = {
   'Retry connection': '重试连接',
   'Archive this topic? You can restore it from Library.': '归档此主题？归档后可在资料库中恢复。',
   'Archive this session? You can restore it from Library.': '归档此会话？归档后可在资料库中恢复。',
+  'Confirm archive': '归档',
   'Answer saved to the topic’s research notes.': '回答已保存到此主题的研究笔记。',
   'Task cancelled.': '任务已取消。',
   '{0} is paused. The next step would exceed the limit for {1}.': '{0}已暂停。下一步将超出以下限额：{1}。',

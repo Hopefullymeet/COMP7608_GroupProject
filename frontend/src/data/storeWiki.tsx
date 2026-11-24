@@ -81,6 +81,6 @@ export function StoreWikiSource({ children }: { children: ReactNode }) {
   const Source = useCallback(({ id, anchor }: { id: string; anchor: string }) => <SourceChip evidenceId={id} anchor={anchor} />, [])
   // Re-read when topic activity changes so new answers, notes and papers are captured while the page is open.
   const tick = state.messages.length + state.noted.length * 1000 + state.library.length * 100000
-  const source: WikiSource = { call, tick, Source }
+  const source: WikiSource = { call, tick, Source, access: "edit" }
   return <WikiSourceProvider value={source}>{children}</WikiSourceProvider>
 }
