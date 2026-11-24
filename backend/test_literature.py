@@ -93,6 +93,16 @@ class BodyEvidenceTest(unittest.TestCase):
 
 
 class LiteratureTest(unittest.TestCase):
+    def test_read_budget_counts_new_passages_and_keeps_rows_that_fit(self):
+        sources = [{"source_version_id": version, "available_scope": "full_text"}
+                   for version in self.versions]
+        tools = ResearchTools(Path(self.workspace.name), sources, [], passage_limit=1)
+        ids = [tools.search(["benchmark"], version)[0]["passage_id"] for version in self.versions]
+        result = tools.read(ids)
+        self.assertTrue(result["limit_reached"])
+        self.assertEqual([row["passage_id"] for row in result["passages"]], ids[:1])
+        self.assertEqual(tools.read(ids[:1]), result["passages"])
+
     @unittest.skipUnless(os.name == "nt", "Windows extended workspace path")
     def test_desktop_extended_path_can_read_scoped_passages(self):
         root = Path("\\\\?\\" + str(Path(self.workspace.name).resolve()))
