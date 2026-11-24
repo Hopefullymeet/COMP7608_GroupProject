@@ -121,7 +121,7 @@ class ScriptedProvider(BaseHTTPRequestHandler):
                     for row in sentences]}
             if prompt.startswith("Answer using paper_search"):
                 response = {"sentences": [{"text": "The source defines the benchmark.", "evidence": citations}]}
-                if prompt.endswith("Return an invalid response."):
+                if "Question: Return an invalid response." in prompt.splitlines():
                     response = {"invalid": True}
             block = {"type": "text", "text": json.dumps(response)}
         self.respond(block)
@@ -237,12 +237,16 @@ class ModelResearchTest(unittest.TestCase):
                         "What benchmark does Alpha define?", sources, threading.Event(),
                         progress=lambda name, detail, activity: steps.append((name, activity)),
                     )
-                    self.assertEqual([name for name, _ in steps], ["paper_search", "paper_read"])
-                    self.assertEqual(steps[0][1]["query"], "benchmark")
-                    fragment = steps[1][1]["passages"][0]
-                    self.assertEqual(fragment["source_version_id"], version)
-                    self.assertTrue(fragment["excerpt"])
-                    self.assertGreaterEqual(fragment["page"], 1)
+                    self.assertEqual([name for name, _ in steps], ["paper_read", "paper_search", "paper_read"])
+                    seeded, search, reread = [activity for _, activity in steps]
+                    self.assertEqual(search["query"], "benchmark")
+                    for activity in (seeded, reread):
+                        self.assertTrue(activity["passages"])
+                        for fragment in activity["passages"]:
+                            self.assertEqual(fragment["source_version_id"], version)
+                            self.assertIn(fragment["passage_id"], seen)
+                            self.assertTrue(fragment["excerpt"])
+                            self.assertGreaterEqual(fragment["page"], 1)
                     self.assertIsNone(issue)
                     self.assertIn(full[0]["references"][0]["passage"]["passage_id"], seen)
                     full, seen, issue = agent.answer_full_text("Return an invalid response.", sources, threading.Event())

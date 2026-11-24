@@ -40,5 +40,10 @@ with tempfile.TemporaryDirectory() as directory:
                         "test_model_research.ModelResearchTest.test_search_read_and_reviewed_wiki"],
                        cwd=repo / "backend", env=env, check=True, timeout=240)
     finally:
-        app_process.terminate()
+        # The app's Python worker also loads DLLs from the temporary runtime.
+        if app_process.poll() is None:
+            if windows:
+                subprocess.run(["taskkill", "/PID", str(app_process.pid), "/T", "/F"], check=True, timeout=30)
+            else:
+                app_process.terminate()
         app_process.wait(timeout=30)

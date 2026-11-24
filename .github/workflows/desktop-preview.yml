@@ -7,7 +7,9 @@ on:
       - '.github/workflows/desktop-preview.yml'
       - 'backend/model_agent.py'
       - 'backend/research_tools.py'
+      - 'backend/test_model_research.py'
       - 'frontend/scripts/release-runtime.py'
+      - 'frontend/scripts/smoke-installer.py'
       - 'frontend/src-tauri/tauri.release.conf.json'
 permissions:
   contents: read
