@@ -45,11 +45,12 @@ with tempfile.TemporaryDirectory() as directory:
         (worker,) = (workspace / "runtime").glob("*/papertrace.py")
         tests = workspace / "smoke-tests"
         tests.mkdir()
-        for name in ("test_model_research.py", "test_literature.py"):
+        for name in ("test_model_research.py", "test_literature.py", "test_citations.py", "evaluate_synthesis.py"):
             shutil.copyfile(repo / "backend" / name, tests / name)
         env.update(PAPERTRACE_NODE=str(root / ("node.exe" if windows else "node")), PYTHONNOUSERSITE="1", PYTHONPATH=os.pathsep.join(map(str, (worker.parent, root / "site"))))
         subprocess.run([str(python), "-B", "-m", "unittest",
-                        "test_model_research.ModelResearchTest.test_search_read_and_reviewed_wiki"],
+                        "test_model_research.ModelResearchTest.test_search_read_and_reviewed_wiki",
+                        "test_citations.TestIndexer.test_empty_topic_draft_import_without_poppler_or_pypdf"],
                        cwd=tests, env=env, check=True, timeout=240)
     finally:
         # The app's Python worker also loads DLLs from the temporary runtime.

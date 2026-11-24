@@ -49,7 +49,7 @@ pnpm --dir frontend test
 
 安装 Poppler，确保 `pdftotext` 与 `pdftoppm` 可调用。启动桌面 RPC 模式并配置文本模型后，创建主题，进入 **Synthesize**，拖入 PDF 或点 **Add PDFs**。可选择 2–12 篇论文；单个 PDF 上限 50 MB、150 页。当前从 PDF 提取已有文字，扫描版需要先做 OCR。
 
-如果 `pdftotext` 缺失或运行失败，文字提取会回退到 pypdf。可在运行 worker 的 Python 环境中执行 `python -m pip install pypdf`。PDF 页面的后端图片渲染继续使用 `pdftoppm`。
+如果 `pdftotext` 缺失或运行失败，文字提取会回退到 pypdf；pypdf 不可用时，桌面端使用随应用打包的 PyMuPDF 读取稿件。PDF 页面的后端图片渲染继续使用 `pdftoppm`。
 
 提出想写的研究问题并确认发送范围。生成后点击观点下的 **Source** 在右侧打开保存的 PDF 页。**Review for Wiki** 可逐项勾选采纳，证据仍可从 **Topic Wiki** 回到原文。某篇论文换版时，在该论文旁选择 **Add version**，Wiki 会提示复核依赖旧版的项目。
 

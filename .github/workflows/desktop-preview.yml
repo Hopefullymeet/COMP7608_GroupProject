@@ -5,6 +5,8 @@ on:
     branches: [papertrace/settings-backend-4247508]
     paths:
       - '.github/workflows/desktop-preview.yml'
+      - 'backend/literature.py'
+      - 'backend/test_citations.py'
       - 'backend/model_agent.py'
       - 'backend/agent_host.py'
       - 'backend/engine/**'

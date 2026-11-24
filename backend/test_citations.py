@@ -1,11 +1,14 @@
 """Regression coverage for offline citation navigation and PDF manuscript audits."""
 
+from contextlib import ExitStack
 import base64
+import os
 from pathlib import Path
 import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 from citations import grobid_index, parse_document
 from evaluate_synthesis import call
@@ -39,6 +42,24 @@ def make_pdf(*lines):
 
 
 class TestIndexer(unittest.TestCase):
+    def test_empty_topic_draft_import_without_poppler_or_pypdf(self):
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as cleanup:
+            root = Path(directory)
+            (root / "pypdf.py").write_text("raise ImportError('unavailable')")
+            worker = Worker(root, lambda _: None)
+            cleanup.callback(worker.close)
+            topic = call(worker, "topic.create", title="Empty topic")["topic_id"]
+            path = root / "Draft.pdf"
+            path.write_bytes(base64.b64decode(make_pdf("Draft title", "This method is cited [1].",
+                                  "References", "[1] Jane Doe. 2020. A study of reference matching.")))
+            with patch("literature.poppler", return_value=str(root / "missing-pdftotext")), patch.dict(
+                    os.environ, PYTHONPATH=os.pathsep.join([directory, os.getenv("PYTHONPATH", "")])):
+                draft = call(worker, "draft.import", topic_id=topic, path=str(path))
+            version = draft["versions"][0]
+            self.assertEqual(version["page_count"], 1)
+            self.assertEqual(version["references"][0]["status"], "unmatched")
+            self.assertEqual(version["sentences"][0]["cites"], ["1"])
+
     def test_author_year_and_index_only_mentions(self):
         result = parse_document(["Article\nAuthor\nThe dataset is reused (Doe et al., 2020).\nReferences\n"
                                  "Jane Doe, Alice North. 2020. A benchmark for evidence attribution. In Proceedings.\n"])

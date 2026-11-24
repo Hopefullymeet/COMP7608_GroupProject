@@ -10,12 +10,10 @@ import os
 import re
 import sys
 from pathlib import Path
-import tempfile
-import zipfile
 from textwrap import wrap
 
 from model_agent import ENDPOINT
-from literature import LiteratureError, digest
+from literature import LiteratureError, digest, pdf_engine
 
 CAPTION = re.compile(r"^(figure|fig\.?|table)\s*([A-Z]?\d+[a-z]?)\s*[:.]", re.I)
 EQUATION = re.compile(r"\(([A-Z]?\d+)\)\s*$")
@@ -63,35 +61,6 @@ def region(value):
     ) or value[0] >= value[2] or value[1] >= value[3]:
         raise LiteratureError("INVALID_PARAMS", "Select a valid region on the original PDF page.")
     return value
-
-
-def pdf_engine():
-    runtime = Path(__file__).parent
-    wheel = runtime / "pdf-engine.whl"
-    if wheel.is_file():
-        package = runtime / "pdf-engine"
-        if not package.exists():
-            with tempfile.TemporaryDirectory(dir=runtime) as temporary:
-                stage = Path(temporary) / "contents"
-                with zipfile.ZipFile(wheel) as archive:
-                    archive.extractall(stage)
-                try:
-                    stage.rename(package)
-                except OSError:
-                    if not package.is_dir():
-                        raise
-        if str(package) not in sys.path:
-            sys.path.insert(0, str(package))
-    try:
-        import pymupdf
-        return pymupdf
-    except ImportError:
-        try:
-            import fitz
-            return fitz
-        except ImportError:
-            raise LiteratureError("LAYOUT_ENGINE_MISSING", "Install PyMuPDF to index PDF figures or crop regions.",
-                                  "configure_service") from None
 
 
 def page_rect(page, box, engine):

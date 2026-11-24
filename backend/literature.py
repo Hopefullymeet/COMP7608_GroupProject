@@ -10,6 +10,8 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
+import zipfile
 
 
 MAX_PDF = 50 * 1024 * 1024
@@ -81,6 +83,35 @@ def pdf_content(params):
     return filename, content
 
 
+def pdf_engine():
+    runtime = Path(__file__).parent
+    wheel = runtime / "pdf-engine.whl"
+    if wheel.is_file():
+        package = runtime / "pdf-engine"
+        if not package.exists():
+            with tempfile.TemporaryDirectory(dir=runtime) as temporary:
+                stage = Path(temporary) / "contents"
+                with zipfile.ZipFile(wheel) as archive:
+                    archive.extractall(stage)
+                try:
+                    stage.rename(package)
+                except OSError:
+                    if not package.is_dir():
+                        raise
+        if str(package) not in sys.path:
+            sys.path.insert(0, str(package))
+    try:
+        import pymupdf
+        return pymupdf
+    except ImportError:
+        try:
+            import fitz
+            return fitz
+        except ImportError:
+            raise LiteratureError("LAYOUT_ENGINE_MISSING", "Install PyMuPDF to index PDF figures or crop regions.",
+                                  "configure_service") from None
+
+
 def extract_pdf(content):
     command = [poppler("pdftotext"), "-enc", "UTF-8", "-", "-"]
     try:
@@ -88,7 +119,7 @@ def extract_pdf(content):
             command, input=content, capture_output=True, timeout=10, check=True,
         )
     except (subprocess.SubprocessError, OSError) as failure:
-        return extract_with_pypdf(content, isinstance(failure, FileNotFoundError))
+        return extract_with_python(content, isinstance(failure, FileNotFoundError))
     pages = completed.stdout.decode("utf-8", errors="replace").split("\f")
     if pages[-1] == "":
         pages.pop()
@@ -101,7 +132,7 @@ def pdf_too_large():
     return LiteratureError("PDF_TOO_LARGE", "Choose a paper with at most 150 pages of extractable text.")
 
 
-def extract_with_pypdf(content, poppler_missing):
+def extract_with_python(content, poppler_missing):
     try:
         parsed = subprocess.run(
             [sys.executable, "-B", str(Path(__file__).resolve())],
@@ -121,20 +152,30 @@ def extract_with_pypdf(content, poppler_missing):
     raise LiteratureError("PDF_READ_FAILED", "Could not extract text from this PDF.")
 
 
-def pypdf_main():
+def extract_text_main():
     from io import BytesIO
 
     try:
         from pypdf import PdfReader
     except ImportError:
-        return 3
+        try:
+            engine = pdf_engine()
+        except LiteratureError:
+            return 3
+        with engine.open(stream=sys.stdin.buffer.read(), filetype="pdf") as document:
+            if document.needs_pass:
+                return 1
+            return write_pages(len(document), (page.get_text("text", sort=True) for page in document))
     reader = PdfReader(BytesIO(sys.stdin.buffer.read()))
-    if len(reader.pages) > 150:
+    return write_pages(len(reader.pages), (page.extract_text() for page in reader.pages))
+
+
+def write_pages(count, texts):
+    if count > 150:
         return 4
     pages = []
     total = 0
-    for page in reader.pages:
-        text = page.extract_text()
+    for text in texts:
         total += len(text)
         if total > 2_000_000:
             return 4
@@ -346,4 +387,4 @@ def entry_anchors(entry):
 
 
 if __name__ == "__main__":
-    sys.exit(pypdf_main())
+    sys.exit(extract_text_main())
