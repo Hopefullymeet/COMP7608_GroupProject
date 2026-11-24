@@ -1,0 +1,83 @@
+name: Desktop preview installers
+on:
+  workflow_dispatch:
+  push:
+    branches: [papertrace/settings-backend-4247508]
+    paths:
+      - '.github/workflows/desktop-preview.yml'
+      - 'backend/literature.py'
+      - 'backend/test_citations.py'
+      - 'backend/model_agent.py'
+      - 'backend/agent_host.py'
+      - 'backend/engine/**'
+      - 'frontend/src-tauri/src/worker.rs'
+      - 'backend/research_tools.py'
+      - 'backend/test_model_research.py'
+      - 'frontend/scripts/release-runtime.py'
+      - 'frontend/scripts/smoke-installer.py'
+      - 'frontend/src-tauri/tauri.release.conf.json'
+permissions:
+  contents: read
+jobs:
+  installer:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            bundle: dmg
+            arch: arm64
+          - os: windows-2022
+            bundle: nsis
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.28.5
+      - uses: astral-sh/setup-uv@v6
+      - name: Pack standalone runtime
+        run: |
+          uv python install 3.12.13
+          mkdir -p "$RUNNER_TEMP/runtime-build"
+          curl -fsSL https://raw.githubusercontent.com/nodejs/node/v24.14.0/LICENSE -o "$RUNNER_TEMP/runtime-build/NODE-LICENSE"
+          uv run --no-project --python 3.12.13 frontend/scripts/release-runtime.py "$RUNNER_TEMP/runtime-build"
+      - name: Build installer
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm test
+          pnpm exec tauri build --features bundled-runtime --bundles ${{ matrix.bundle }} --config src-tauri/tauri.release.conf.json
+      - name: Install macOS preview into a temporary Applications directory
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p "$RUNNER_TEMP/mount" "$RUNNER_TEMP/Applications"
+          hdiutil attach frontend/src-tauri/target/release/bundle/dmg/*.dmg -mountpoint "$RUNNER_TEMP/mount" -nobrowse
+          ditto "$RUNNER_TEMP/mount/PaperTrace.app" "$RUNNER_TEMP/Applications/PaperTrace.app"
+          hdiutil detach "$RUNNER_TEMP/mount"
+          echo "PACKAGE_RESOURCES=$RUNNER_TEMP/Applications/PaperTrace.app/Contents/Resources" >> "$GITHUB_ENV"
+      - name: Install Windows preview for current user
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = Get-Item frontend/src-tauri/target/release/bundle/nsis/*.exe
+          $dest = Join-Path $env:RUNNER_TEMP 'PaperTrace'
+          $proc = Start-Process $installer.FullName -ArgumentList "/S /D=$dest" -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "Installer failed ($($proc.ExitCode))" }
+          "PACKAGE_RESOURCES=$dest" >> $env:GITHUB_ENV
+      - name: Verify installed runtime, PDF import and paper Q&A
+        run: uv run --no-project --python 3.12.13 frontend/scripts/smoke-installer.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PaperTrace-${{ runner.os }}-${{ matrix.arch }}
+          if-no-files-found: error
+          path: |
+            frontend/src-tauri/target/release/bundle/dmg/*.dmg
+            frontend/src-tauri/target/release/bundle/nsis/*.exe

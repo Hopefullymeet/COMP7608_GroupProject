@@ -1,0 +1,36 @@
+{
+  "name": "papertrace-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "desktop": "tauri dev",
+    "desktop:build": "uv python install 3.12.13 && uv run --no-project --python 3.12.13 scripts/release-runtime.py src-tauri/target/portable-runtime && tauri build --features bundled-runtime --config src-tauri/tauri.portable.conf.json && node scripts/publish-exe.mjs",
+    "build": "tsc --noEmit && vite build",
+    "test": "node --test tests/workspace.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.5",
+    "@tesseract.js-data/chi_sim": "1.0.0",
+    "@tesseract.js-data/eng": "1.0.0",
+    "idb-keyval": "6.3.0",
+    "marked": "18.0.11",
+    "onnxruntime-web": "1.20.1",
+    "pdfjs-dist": "5.7.284",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tesseract.js": "6.0.1",
+    "tesseract.js-core": "6.0.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.5",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "~5.6.3",
+    "vite": "^5.4.11"
+  }
+}

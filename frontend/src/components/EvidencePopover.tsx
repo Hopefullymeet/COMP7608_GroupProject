@@ -1,0 +1,124 @@
+import { createPortal } from 'react-dom'
+import { useLanguage } from '../i18n'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { evidenceFor, paperFor, sourceStatus, useStore } from '../data/store'
+import { Icon } from './Icon'
+
+const W = 360
+
+export function EvidencePopover({ onAsk }: { onAsk?: (id: string) => void }) {
+  const { tr } = useLanguage()
+  const { state, act } = useStore()
+  const active = state.activeEvidence
+  const [expandedFor, setExpandedFor] = useState<typeof active>(null)
+  const expanded = !!active && expandedFor === active
+  const trigger = useRef<HTMLButtonElement>(null)
+  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+
+  useLayoutEffect(() => {
+    if (!active) { setPos(null); return }
+    const anchor = () => document.querySelector<HTMLElement>(`[data-ev-anchor="${active.anchor}"]`)
+    let revealed = false
+    let range: Range | undefined
+    const place = () => {
+      const el = anchor()
+      if (!el || !el.getClientRects().length) { setPos(null); return }
+      if (!revealed && active.scroll) {
+        revealed = true
+        const frame = el.closest<HTMLElement>('.reader-scroll, .pt-reader-frame')
+        if (frame) {
+          frame.scrollTop += el.getBoundingClientRect().top - frame.getBoundingClientRect().top - frame.clientHeight / 2
+          if (el.matches('mark')) {
+            range = document.createRange()
+            range.selectNodeContents(el)
+            window.getSelection()?.removeAllRanges()
+            window.getSelection()?.addRange(range)
+          }
+        }
+      }
+      const r = el.getBoundingClientRect()
+      const frame = el.closest('.reader-scroll, .pt-reader-frame')?.getBoundingClientRect()
+      if (frame && (r.bottom < frame.top || r.top > frame.bottom)) { setPos(null); return }
+      const h = ref.current?.offsetHeight ?? 240
+      const left = Math.max(16, Math.min(r.left, window.innerWidth - (ref.current?.offsetWidth ?? W) - 16))
+      let top = r.bottom + 10
+      if (top + h > window.innerHeight - 16) top = Math.max(16, r.top - h - 10)
+      setPos({ top, left })
+    }
+    const reader = document.querySelector('.read-paper-pane')
+    const observer = new MutationObserver(place)
+    if (reader) observer.observe(reader, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'data-ev-anchor'] })
+    const size = new ResizeObserver(place)
+    if (ref.current) size.observe(ref.current)
+    place()
+    const raf = requestAnimationFrame(place)
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      size.disconnect()
+      observer.disconnect()
+      const selection = window.getSelection()
+      if (range && selection?.rangeCount && selection.getRangeAt(0) === range) selection.removeAllRanges()
+      cancelAnimationFrame(raf)
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
+    }
+  }, [active, state.readerPaperId])
+
+  useEffect(() => {
+    if (!expanded) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setExpandedFor(null)
+        requestAnimationFrame(() => trigger.current?.focus({ preventScroll: true }))
+      }
+    }
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement
+      if (ref.current?.contains(t) || t.closest('[data-ev-anchor], .cite')) return
+      setExpandedFor(null)
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onDown)
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('mousedown', onDown) }
+  }, [expanded])
+
+  if (!active) return null
+  const ev = evidenceFor(state, active.id)
+  const paper = paperFor(state, ev.paperId)
+  const passage = paper.passages.find((p) => p.id === ev.passageId)
+  const cited = state.cited.includes(ev.id)
+  const noted = state.noted.includes(ev.id)
+  const status = sourceStatus(state, paper.id)
+  const cleared = state.purgedPapers[paper.id]?.clearExcerpts
+
+  return createPortal(
+    <div ref={ref} className={expanded ? 'evidence' : 'ev-marker'}
+      style={{ width: expanded ? 'min(360px, calc(100vw - 32px))' : undefined, top: pos?.top ?? -9999, left: pos?.left ?? -9999, visibility: pos ? 'visible' : 'hidden' }}>
+      <button className="ev-trigger" ref={trigger} hidden={expanded} aria-label={tr('Evidence')} title={tr('Evidence')}
+        aria-expanded={expanded} onClick={() => setExpandedFor(active)}><Icon name="messageDots" size={20} /></button>
+      {expanded && <div role="dialog" aria-label={tr('Evidence')}>
+        <div className="ev-head">
+          <span>{state.route.view === 'wiki' ? paper.title : paper.short} · {passage?.section}{(passage?.page??0)>0 && <>{' '}{tr('· PDF p.')}{' '}{passage?.page}</>}</span>
+          <button className="icon-btn sm" onClick={() => { setExpandedFor(null); requestAnimationFrame(() => trigger.current?.focus({ preventScroll: true })) }} aria-label={tr('Close')}><Icon name="x" size={14} /></button>
+        </div>
+        {!cleared && <blockquote>“{ev.quote}”</blockquote>}
+        <p className="ev-scope"><Icon name="eye" size={13} /> {status === 'available' ? tr(ev.scope)
+          : cleared ? tr('Source permanently deleted. Its excerpt was cleared.')
+          : status === 'in trash' ? tr('Source in trash. This excerpt is available for historical reference.')
+          : tr('Source permanently deleted. This excerpt is available for historical reference.')}</p>
+        {status === 'available' && <><div className="ev-actions">
+          <button className={cited ? 'toggle on' : 'toggle'} onClick={() => act.toggleCite(ev.id)}>
+            <Icon name={cited ? 'check' : 'quote'} size={14} /> {cited ? tr('Citation picked') : tr('Use as citation')}
+          </button>
+          {onAsk && <button className="toggle" onClick={() => onAsk(ev.id)}><Icon name="message" size={14} /> {tr('Ask AI')}</button>}
+          <button className={noted ? 'toggle on' : 'toggle'} onClick={() => act.toggleNote(ev.id)}>
+            <Icon name={noted ? 'check' : 'note'} size={14} /> {noted ? tr('Saved to notes') : tr('Save as note')}
+          </button>
+        </div>
+        <p className="ev-fine">{tr('Your choice is stored apart from the agent’s result. A picked citation is checked again against your draft before use.')}</p></>}
+      </div>}
+    </div>, document.body
+  )
+}

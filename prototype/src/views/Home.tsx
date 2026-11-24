@@ -3,6 +3,7 @@ import { useStore } from '../data/store'
 import { DEFAULT_QUESTION, DEMO_TOPIC } from '../data/fixtures'
 import { Icon } from '../components/Icon'
 import { Logo } from '../components/Logo'
+import { Disclosure } from '../components/Disclosure'
 
 export function Home() {
   const { state, act } = useStore()
@@ -26,11 +27,12 @@ export function Home() {
     return () => observer.disconnect()
   }, [text, expanded])
   const fileRef = useRef<HTMLInputElement>(null)
-  const canDemo = state.topics.some((t) => t.id === DEMO_TOPIC)
+  const canDemo = !state.mainline ? state.topics.some((t) => t.id === DEMO_TOPIC) : state.mainline.demo
 
   const canSubmit = !!text.trim() || state.dropped.length > 0
   const submit = () => { if (canSubmit) act.startFromHome(text) }
   const addFiles = (files: FileList | null) => {
+    if (state.mainline) { state.mainline.attachFiles?.(Array.from(files??[]));return }
     const names = Array.from(files ?? []).map((f) => f.name)
     if (names.length) act.drop(names)
   }
@@ -41,7 +43,7 @@ export function Home() {
         <h1 className="home-title"><Logo size={38} /><span>What are you researching today?</span></h1>
 
         <div
-          className={`composer big ${expanded ? 'has-content' : ''} ${over ? 'over' : ''}`}
+          className={`composer big ${state.mainline ? 'with-attachments' : ''} ${expanded ? 'has-content' : ''} ${over ? 'over' : ''}`}
           onDragOver={(e) => { e.preventDefault(); setOver(true) }}
           onDragLeave={() => setOver(false)}
           onDrop={(e) => { e.preventDefault(); setOver(false); addFiles(e.dataTransfer.files) }}
@@ -52,7 +54,7 @@ export function Home() {
               style={{ height: inputHeight }}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() } }}
-              placeholder="Ask a research question, or drop PDFs here…"
+              placeholder={state.mainline ? 'Ask a research question…' : 'Ask a research question, or drop PDFs here…'}
               rows={1}
               aria-label="Research question"
             />
@@ -61,14 +63,17 @@ export function Home() {
           {state.dropped.length > 0 && (
             <div className="dropped">
               {state.dropped.map((n, i) => <span key={i} className="chip"><Icon name="file" size={13} />{n}</span>)}
-              <small>Files are listed but not read in this prototype.</small>
+              <small>{state.mainline?'Review the import scope after creating the topic.':'Files are listed but not read in this prototype.'}</small>
             </div>
           )}
           <div className="home-actions">
             <div className="home-actions-inner">
               <div className="composer-bar">
-                <button className="ghost-btn" disabled={!expanded} onClick={() => fileRef.current?.click()}>
-                  <Icon name="paperclip" size={15} /> Add papers
+                <button className="ghost-btn sm home-attach" aria-label="Add papers" title={expanded ? undefined : 'Add papers'}
+                  disabled={!expanded && !state.mainline}
+                  onClick={() => state.mainline ? state.mainline.attachFiles?.() : fileRef.current?.click()}>
+                  <Icon name="paperclip" size={15} />
+                  <span className="home-attach-label" aria-hidden="true">Add papers</span>
                 </button>
               </div>
             </div>
@@ -77,11 +82,25 @@ export function Home() {
           <button className="send" disabled={!canSubmit} onClick={submit} aria-label="Start research"><Icon name="arrowUp" size={17} /></button>
         </div>
 
-        <button className="suggestion" disabled={!canDemo} title={canDemo ? undefined : "Refresh to restore the demo topic"} onClick={() => act.startDemo()}>
+        {(!state.mainline || state.mainline.demo) && <button className="suggestion" disabled={!canDemo} title={canDemo ? undefined : "Refresh to restore the demo topic"} onClick={() => act.startDemo()}>
           <Icon name="compass" size={15} />
-          <span><small>Try the demo</small>{DEFAULT_QUESTION}</span>
+          <span><small>Try the demo</small>{state.mainline ? 'Which scientific QA datasets use paper abstracts?' : DEFAULT_QUESTION}</span>
           <Icon name="arrowRight" size={14} />
-        </button>
+        </button>}
+        {!!state.mainline?.activity?.length && (
+          <Disclosure className="activity-list" icon="clock" title={<>Research updates <span className="tag">{state.mainline.activity.length}</span></>}>
+            <ul className="activity-items scroll">
+              {state.mainline.activity.map((a) => (
+                <li key={a.id}>
+                  <button onClick={a.open} className="activity-item">
+                    <span className="grow"><strong>{a.title}</strong><small>{a.detail}</small></span>
+                    <Icon name="arrowRight" size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </Disclosure>
+        )}
       </div>
     </div>
   )

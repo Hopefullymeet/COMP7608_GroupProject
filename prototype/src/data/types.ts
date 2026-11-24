@@ -44,6 +44,7 @@ export interface Topic {
 }
 
 export interface Session {
+  hasTurns?:boolean
   attachments?: string[]
   id: string
   topicId: string
@@ -67,11 +68,12 @@ export interface SearchAngle {
 export type Decision = 'pending' | 'added' | 'held' | 'excluded'
 
 export interface Candidate {
+  change?:'new'|'updated'
   id: string
   paperId: string
   angleId: string
   reason: string
-  readLevel: 'Abstract read' | 'Metadata only'
+  readLevel: 'Abstract read' | 'Metadata only' | 'Full text read'
   source: string
   decision: Decision
   round: number
@@ -90,12 +92,12 @@ export interface AgentStep {
   ms?: number
 }
 
-export type RunStatus = 'running' | 'done' | 'partial'
+export type RunStatus = 'running' | 'done' | 'partial' | 'failed' | 'cancelled'
 
 export interface AgentRun {
   id: string
   manuscriptId?: string
-  task: 'Discovery' | 'Question' | 'Comparison' | 'Citation check' | 'Wiki draft'
+  task: 'Discovery' | 'Question' | 'Comparison' | 'Citation check' | 'Wiki draft' | 'Citation suggestions' | 'Import' | 'Resume'
   label: string
   status: RunStatus
   steps: AgentStep[]
@@ -109,6 +111,7 @@ export interface AgentRun {
 export interface AnswerSegment {
   text: string
   evidenceId?: string
+  evidenceIds?: string[]
   tone?: 'scope'
 }
 

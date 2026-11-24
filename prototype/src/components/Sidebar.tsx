@@ -39,7 +39,7 @@ export function Sidebar() {
   const topics = state.topics.filter((t) => match(t.title) || sessionsOf(state, t.id).some((s) => match(s.title)))
   const shownTopics = q || allTopics ? topics : topics.slice(0, TOPIC_LIMIT)
   const recents = [...state.sessions]
-    .filter((s) => hasMessages(state, s.id) || !state.topics.find((t) => t.id === s.topicId)?.scripted)
+    .filter((s) => s.hasTurns || hasMessages(state, s.id) || !state.topics.find((t) => t.id === s.topicId)?.scripted)
     .sort((a, b) => b.order - a.order)
     .slice(0, RECENT_LIMIT)
 
@@ -65,11 +65,11 @@ export function Sidebar() {
         <button className="side-item" onClick={() => { setFilter(''); act.newTopic() }}>
           <Icon name="plus" size={15} /> <span className="grow">New topic</span>
         </button>
-        {PAGES.map((l) => (
+        {PAGES.filter(p=>!state.mainline || state.mainline.pages?.includes(p.page)).map((l) => (
           <button key={l.page} className={`side-item ${route.view === l.page ? 'active' : ''}`} aria-current={route.view === l.page ? 'page' : undefined}
             onClick={() => act.navigate({ view: l.page })}>
             <Icon name={l.icon} size={15} /> <span className="grow">{l.label}</span>
-            {l.page === 'library' && state.dupReview === 'pending' && <span className="side-badge" title="1 import needs review">1</span>}
+            {!state.mainline && l.page === 'library' && state.dupReview === 'pending' && <span className="side-badge" title="1 import needs review">1</span>}
           </button>
         ))}
       </nav>
@@ -91,10 +91,10 @@ export function Sidebar() {
                   title={`New session in ${t.title}`} aria-label={`New session in ${t.title}`}>
                   <Icon name="plus" size={14} />
                 </button>
-                <button className="side-delete" onClick={() => act.deleteTopic(t.id)}
+                {<button className="side-delete" onClick={() => act.deleteTopic(t.id)}
                   title={`Delete topic: ${t.title}`} aria-label={`Delete topic: ${t.title}`}>
                   <Icon name="trash" size={14} />
-                </button>
+                </button>}
               </div>
               {open && (
                 <div className="session-list">
@@ -104,10 +104,10 @@ export function Sidebar() {
                         <span className="grow">{s.title}</span>
                         <small>{s.updated}</small>
                       </button>
-                      <button className="side-delete" onClick={() => act.deleteSession(s.id)}
+                      {<button className="side-delete" onClick={() => act.deleteSession(s.id)}
                         title={`Delete session: ${s.title}`} aria-label={`Delete session: ${s.title}`}>
                         <Icon name="trash" size={14} />
-                      </button>
+                      </button>}
                     </div>
                   ))}
                   {all.length === 0 && <div className="side-empty">No sessions yet</div>}
@@ -123,7 +123,7 @@ export function Sidebar() {
         {!q && topics.length > TOPIC_LIMIT && (
           <ShowMore hidden={topics.length - TOPIC_LIMIT} open={allTopics} onToggle={() => setAllTopics((v) => !v)} />
         )}
-        {topics.length === 0 && <div className="side-empty">Nothing matches “{filter}”.</div>}
+        {topics.length === 0 && <div className="side-empty">{filter ? 'Nothing matches “'+filter+'”.' : 'No topics yet.'}</div>}
       </nav>
 
       {!q && (
@@ -135,18 +135,18 @@ export function Sidebar() {
                 <span>{s.title}</span>
                 <small>{state.topics.find((t) => t.id === s.topicId)?.title} · {s.updated}</small>
               </button>
-              <button className="side-delete" onClick={() => act.deleteSession(s.id)}
+              {<button className="side-delete" onClick={() => act.deleteSession(s.id)}
                 title={`Delete session: ${s.title}`} aria-label={`Delete session: ${s.title}`}>
                 <Icon name="trash" size={14} />
-              </button>
+              </button>}
             </div>
           ))}
         </div>
       )}
 
       <div className="side-foot">
-        <span className="proto-badge">Prototype · mock data</span>
-        <small>Local workspace · nothing leaves this page</small>
+        {(!state.mainline || state.mainline.demo) && <span className="proto-badge">{state.mainline ? "Contract demo · mock data" : "Prototype · mock data"}</span>}
+        {(!state.mainline || state.mainline.demo) && <small>Local workspace · nothing leaves this page</small>}
       </div>
     </aside>
   )

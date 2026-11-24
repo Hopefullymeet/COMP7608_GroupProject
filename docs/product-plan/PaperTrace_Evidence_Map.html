@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>PaperTrace · 主题证据图</title>
+<style>
+:root{color-scheme:light;--bg:#f7f6f1;--paper:#fffefa;--ink:#24251f;--muted:#62665a;--line:#dedfd4;--accent:#305740;--warn:#8b5032}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 system-ui,sans-serif}button,a{touch-action:manipulation}button{font:inherit;cursor:pointer;color:inherit}a{color:var(--accent)}:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+main{max-width:1450px;margin:auto;padding:28px clamp(16px,4vw,64px) 52px}.mast{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line);padding-bottom:14px}.mast strong{color:var(--accent);letter-spacing:.035em}.mast span,.muted{color:var(--muted)}header{padding:42px 0 24px}h1,h2,h3,p{margin:0}h1{font:600 clamp(32px,5vw,58px)/1.2 Georgia,"Songti SC",serif;letter-spacing:-.035em}header p{margin-top:14px;color:var(--muted)}.tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}.tabs button{border:1px solid var(--line);border-radius:7px;background:var(--paper);padding:7px 12px}.tabs button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:white}
+.workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(270px,340px);gap:16px;align-items:start}.map,.inspector{background:var(--paper);border:1px solid var(--line);border-radius:12px}.map{position:relative;min-width:0;overflow:hidden;padding:21px}.columns{display:grid;grid-template-columns:minmax(130px,1fr) minmax(100px,.72fr);gap:clamp(24px,9vw,136px);position:relative;z-index:1;pointer-events:none}.columns button{pointer-events:auto}.lane{display:flex;flex-direction:column;justify-content:space-between;gap:11px}.lane h2{margin:0 0 2px;color:var(--muted);font-size:13px;font-weight:550}.node{text-align:left;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-height:54px;width:100%;overflow-wrap:anywhere}.node strong,.node small{display:block}.node small{color:var(--muted);font-size:12px}.node.active{border-color:var(--accent);background:#e8efe6}.node.gap{border-style:dashed}.node:hover{border-color:var(--accent)}.node.dim{color:var(--muted);background:#f7f7f0}.wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}.wire{fill:none;stroke:#c3c9bd;stroke-width:1.3}.wire.hot{stroke:var(--accent);stroke-width:2.1}.wire.citation{stroke-dasharray:5 5}.wire.hot.citation{stroke:var(--warn)}
+.inspector{padding:23px;min-height:340px}.inspector h2{font:600 25px/1.35 Georgia,"Songti SC",serif}.inspector>p{margin:10px 0 16px}.inspector h3{font-size:14px;margin-top:10px}.source{padding:13px 0;border-top:1px solid var(--line)}.source a{display:inline-block;margin-top:6px}.source p{font-size:14px}.warning{color:var(--warn)}footer{margin-top:16px;font-size:13px;color:var(--muted)}@media(max-width:810px){.workspace{grid-template-columns:1fr}.inspector{min-height:0}}@media(max-width:450px){.map{padding:12px}.columns{grid-template-columns:minmax(115px,1.2fr) minmax(90px,.8fr);gap:24px}.node{padding:7px}.mast span{text-align:right}}
+</style>
+</head>
+<body>
+<main>
+  <div class="mast"><strong>PaperTrace</strong><span>研究主题 / 证据图</span></div>
+  <header><h1>长回答怎样做到有据可查？</h1><p>打开一个论点，看每篇论文提供了哪部分依据。</p></header>
+  <nav class="tabs" aria-label="视图">
+    <button type="button" data-mode="claims" aria-pressed="true">按论点看</button>
+    <button type="button" data-mode="citations" aria-pressed="false">查论文引用</button>
+  </nav>
+  <div class="workspace">
+    <section class="map" aria-label="主题关系图">
+      <svg class="wires" aria-hidden="true"><defs><marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#8b5032"/></marker></defs><g></g></svg>
+      <div class="columns"><div class="lane" id="left"></div><div class="lane" id="right"></div></div>
+    </section>
+    <aside class="inspector" aria-label="所选证据" aria-live="polite"></aside>
+  </div>
+  <footer>交互原型 · 关系由人工查阅公开论文标注。链接按 PDF 文件页序定位。</footer>
+</main>
+<script>
+const papers = {
+  ASQA: { year: '2022', url: 'https://aclanthology.org/2022.emnlp-main.566.pdf' },
+  ALCE: { year: '2023', url: 'https://aclanthology.org/2023.emnlp-main.398.pdf' },
+  RARR: { year: '2023', url: 'https://aclanthology.org/2023.acl-long.910.pdf' },
+  'Self-RAG': { year: '2024', url: 'https://arxiv.org/pdf/2310.11511v1' },
+  AIS: { year: '2023', url: 'https://aclanthology.org/2023.cl-4.2.pdf' },
+  FActScore: { year: '2023', url: 'https://aclanthology.org/2023.emnlp-main.741.pdf' },
+}
+const claims = [
+  { id: 'dataset', title: '长回答要覆盖不同解释', summary: 'ASQA 为这个论点提供任务定义。ALCE 说明这个任务后来如何被采用，作为研究背景。',
+    sources: [
+      ['ASQA', '定义任务', 1, '摘要', '同一个问题在不同解释下有不同答案。长回答需要把这些答案组织在一起。'],
+      ['ALCE', '背景 · 采用数据集', 3, '§3.1', '将 ASQA 纳入评估，使用 Wikipedia 语料定位可引用的片段。'],
+    ] },
+  { id: 'timing', title: '查证可以发生在不同阶段', summary: '两种方法可以放在同一段相关工作中比较流程。若要比较总体表现，需先对齐数据、模型和评估口径。',
+    sources: [
+      ['RARR', '生成后核查', 1, '摘要', '从已生成的文本出发，查找归因来源，再修订缺乏支持的内容。'],
+      ['Self-RAG', '生成过程中按需检索', 1, '摘要', '模型在生成时决定是否检索，并用反思标记评估证据和输出。'],
+    ] },
+  { id: 'evaluation', title: '引用质量可以逐条核查', summary: '来源归因、事实支持和引用覆盖回答三个不同的问题。在写作中可用它们逐项检查同一句话。',
+    sources: [
+      ['AIS', '检查来源归因', 2, '引言', '判断生成内容能否由明确指出的来源支持。'],
+      ['FActScore', '拆分并检查原子事实', 1, '摘要', '把一段文字拆成原子事实，统计其中得到指定知识来源支持的比例。'],
+      ['ALCE', '衡量引用召回与精确率', 4, '§3.3', '检查一句话是否得到引用充分支持，以及各条引用是否实际提供帮助。'],
+    ] },
+  { id: 'gap', title: '检索能保证长回答正确吗？', summary: '当前证据不足。要检验这个说法，需要同一任务下的对照实验，并分别检查证据是否找齐、答案是否正确。', sources: [] },
+]
+const citations = [
+  { id: 'uses-asqa', from: 'ALCE', to: 'ASQA', title: '采用数据集', summary: 'ALCE 将 ASQA 作为用于评价带引用长回答的三个数据集之一。',
+    sources: [claims[0].sources[1], claims[0].sources[0]] },
+  { id: 'uses-ais', from: 'ALCE', to: 'AIS', title: '借鉴评估框架', summary: 'ALCE 在定义引用质量指标时援引 AIS。',
+    sources: [['ALCE', '引用 AIS 的位置', 4, '§3.3', '介绍引用质量时，说明指标与 AIS 框架的联系。'], claims[2].sources[0]] },
+]
+const map = document.querySelector('.map')
+const inspector = document.querySelector('.inspector')
+const left = document.querySelector('#left')
+const right = document.querySelector('#right')
+const wires = document.querySelector('.wires g')
+let mode = 'claims'
+let selection = 'dataset'
+
+function element(tag, text, parent, className) {
+  const node = document.createElement(tag)
+  node.textContent = text
+  if (className) node.className = className
+  parent.append(node)
+  return node
+}
+
+function node(lane, id, title, detail, gap = false) {
+  const button = element('button', '', lane, gap ? 'node gap' : 'node')
+  button.type = 'button'
+  button.dataset.id = id
+  element('strong', title, button)
+  element('small', detail, button)
+  button.addEventListener('click', () => { selection = id; update() })
+}
+
+function edges() {
+  if (mode === 'citations') return citations.map(item => ['from:' + item.from, 'to:' + item.to])
+  return claims.flatMap(claim => claim.sources.map(([paper]) => [claim.id, paper]))
+}
+
+function draw() {
+  const bounds = map.getBoundingClientRect()
+  const buttons = new Map([...map.querySelectorAll('[data-id]')].map(button => [button.dataset.id, button]))
+  wires.replaceChildren()
+  for (const [from, to] of edges()) {
+    const a = buttons.get(from).getBoundingClientRect()
+    const b = buttons.get(to).getBoundingClientRect()
+    const x1 = a.right - bounds.left, x2 = b.left - bounds.left
+    const y1 = a.top + a.height / 2 - bounds.top, y2 = b.top + b.height / 2 - bounds.top
+    const mid = (x1 + x2) / 2
+    const linked = [from, to].includes(selection)
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+    path.setAttribute('d', 'M ' + x1 + ' ' + y1 + ' C ' + mid + ' ' + y1 + ' ' + mid + ' ' + y2 + ' ' + x2 + ' ' + y2)
+    path.setAttribute('class', ['wire', linked && 'hot', mode === 'citations' && 'citation'].filter(Boolean).join(' '))
+    if (mode === 'citations') path.setAttribute('marker-end', 'url(#arrow)')
+    wires.append(path)
+  }
+}
+
+function showSources(sources, claimTitle) {
+  for (const [paper, role, page, location, description] of sources) {
+    const section = element('article', '', inspector, 'source')
+    element('h3', claimTitle ? claimTitle + ' · ' + role : paper + ' · ' + role, section)
+    element('p', description, section)
+    const link = element('a', '打开 PDF 第 ' + page + ' 页 · ' + location + ' ↗', section)
+    link.href = papers[paper].url + '#page=' + page
+    link.target = '_blank'
+    link.rel = 'noopener noreferrer'
+  }
+}
+
+function update() {
+  inspector.replaceChildren()
+  if (mode === 'claims') {
+    const claim = claims.find(item => item.id === selection)
+    element('h2', claim?.title ?? selection, inspector)
+    if (claim) {
+      element('p', claim.summary, inspector, claim.sources.length ? '' : 'warning')
+      showSources(claim.sources)
+    } else {
+      element('p', '这篇论文在当前主题中的贡献', inspector)
+      for (const item of claims) showSources(item.sources.filter(([paper]) => paper === selection), item.title)
+    }
+  } else {
+    const [direction, paper] = selection.split(':')
+    const selected = citations.filter(item => item[direction] === paper)
+    element('h2', paper + (direction === 'from' ? ' 的引用' : ' 的被引记录'), inspector)
+    for (const item of selected) {
+      element('h3', item.from + ' → ' + item.to + ' · ' + item.title, inspector)
+      element('p', item.summary, inspector)
+      showSources(item.sources)
+    }
+  }
+  const related = new Set(edges().flatMap(([a, b]) => a === selection ? [b] : b === selection ? [a] : []))
+  for (const button of map.querySelectorAll('[data-id]')) {
+    const active = button.dataset.id === selection
+    button.setAttribute('aria-pressed', String(active))
+    button.classList.toggle('active', active)
+    button.classList.toggle('dim', !active && !related.has(button.dataset.id))
+  }
+  draw()
+}
+
+function render() {
+  left.replaceChildren()
+  right.replaceChildren()
+  element('h2', mode === 'claims' ? '作者的论点' : '引用方', left)
+  element('h2', mode === 'claims' ? '贡献论文' : '被引用方', right)
+  if (mode === 'claims') {
+    for (const claim of claims) node(left, claim.id, claim.title, claim.sources.length ? claim.sources.length + ' 篇相关论文' : '待查问题', !claim.sources.length)
+    for (const [id, paper] of Object.entries(papers)) node(right, id, id, paper.year)
+  } else {
+    for (const id of new Set(citations.map(item => item.from))) node(left, 'from:' + id, id, papers[id].year)
+    for (const id of new Set(citations.map(item => item.to))) node(right, 'to:' + id, id, papers[id].year)
+  }
+  update()
+}
+
+for (const button of document.querySelectorAll('[data-mode]')) {
+  button.addEventListener('click', () => {
+    mode = button.dataset.mode
+    selection = mode === 'claims' ? claims[0].id : 'from:' + citations[0].from
+    for (const tab of document.querySelectorAll('[data-mode]')) tab.setAttribute('aria-pressed', String(tab === button))
+    render()
+  })
+}
+new ResizeObserver(draw).observe(map)
+render()
+</script>
+</body>
+</html>

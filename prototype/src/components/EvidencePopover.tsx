@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { sourceStatus, useStore } from '../data/store'
-import { EVIDENCE, PAPERS } from '../data/fixtures'
+import { evidenceFor, paperFor, sourceStatus, useStore } from '../data/store'
 import { Icon } from './Icon'
 import { scrollWithin } from './util'
 
@@ -51,8 +50,8 @@ export function EvidencePopover() {
   }, [active, act])
 
   if (!active) return null
-  const ev = EVIDENCE[active.id]
-  const paper = PAPERS[ev.paperId]
+  const ev = evidenceFor(state, active.id)
+  const paper = paperFor(state, ev.paperId)
   const passage = paper.passages.find((p) => p.id === ev.passageId)
   const cited = state.cited.includes(ev.id)
   const noted = state.noted.includes(ev.id)
@@ -63,7 +62,7 @@ export function EvidencePopover() {
     <div ref={ref} className="evidence" role="dialog" aria-label="Evidence"
       style={{ width: W, top: pos?.top ?? -9999, left: pos?.left ?? -9999, visibility: pos ? 'visible' : 'hidden' }}>
       <div className="ev-head">
-        <span>{state.route.view === 'wiki' ? paper.title : paper.short} · {passage?.section} · PDF p. {passage?.page}</span>
+        <span>{state.route.view === 'wiki' ? paper.title : paper.short} · {passage?.section}{(passage?.page??0)>0 && <> · PDF p. {passage?.page}</>}</span>
         <button className="icon-btn sm" onClick={() => act.closeEvidence()} aria-label="Close"><Icon name="x" size={14} /></button>
       </div>
       {!cleared && <blockquote>“{ev.quote}”</blockquote>}

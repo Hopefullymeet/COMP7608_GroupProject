@@ -1,0 +1,9 @@
+{
+  "bundle": {
+    "active": true,
+    "resources": {
+      "release-resources/runtime.tar.gz": "runtime.tar.gz",
+      "release-resources/runtime.sha256": "runtime.sha256"
+    }
+  }
+}
