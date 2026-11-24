@@ -89,6 +89,11 @@
 .result-card .lib-tools, .lib-detail .lib-tools { margin: 0; }
 .result-card > button, .lib-detail > button, .dialog > button { justify-self: start; }
 .result-card > select { justify-self: start; }
+.comparison-progress { border-inline-start: 3px solid var(--accent); }
+.comparison-progress header, .comparison-progress-body { display: flex; align-items: center; gap: 10px; }
+.comparison-progress header svg { color: var(--accent); }
+.comparison-progress-body { border-top: 1px solid var(--line); padding-top: 12px; justify-content: space-between; flex-wrap: wrap; }
+.comparison-progress-body p { margin: 0; color: var(--ink-2); font-size: 14px; }
 .table-scroll { overflow: auto; }
 .table-scroll table { width: 100%; table-layout: fixed; }
 .table-scroll th:first-child { width: 20%; }

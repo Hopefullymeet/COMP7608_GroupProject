@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { errorText, RpcError } from '../api/contract'
 import type { Client, Finished, Start, Step, HistoryRun, TaskInput, Transfer } from '../api/contract'
 
-type Preview = { text: string; steps: Step[]; tools: HistoryRun['steps']; progress: string }
+type Preview = { text: string; steps: Step[]; tools: HistoryRun['steps']; progress: string; stage?: string }
 const empty: Preview = { text: '', steps: [], tools: [], progress: '' }
 type Confirmation = { budget?:import('../api/services').Budget;source_versions?:string[]; input: TaskInput; confirmation_id: string; transfers: Transfer[]; startKey: string }
 export const operation = () => crypto.randomUUID()
@@ -75,7 +75,7 @@ export function useTask(api: Client, onFinished: (task: string, result: Finished
             switch (event.type) {
               case 'task.progress': {
                 const { stage, message, activity } = event.payload
-                setPreview(state => ({ ...state, progress: message, tools: stage.startsWith('tool.')
+                setPreview(state => ({ ...state, stage, progress: message, tools: stage.startsWith('tool.')
                   ? [...state.tools, { kind: 'tool', title: stage.slice(5), detail: message, activity }] : state.tools }))
                 break
               }
