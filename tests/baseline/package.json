@@ -1,0 +1,11 @@
+{
+  "name": "papertrace-baseline",
+  "scripts": {
+    "test": "bash run.sh"
+  },
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "tsx": "4.20.6"
+  }
+}
