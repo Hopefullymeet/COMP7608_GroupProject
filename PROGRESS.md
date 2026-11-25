@@ -23,6 +23,18 @@
 - 正式报告已删除跨论文提纲及其对照实验，改为说明 App 论文比较的维度表评判口径，并已重新编译 PDF。
 - [临时交接目录](submission/eval-review-temp/README.md) 保存正式比较入口的六次真实运行。48 个单元格中 44 个引文可定位，2 次完成、4 次部分完成。逐格语义初评待组员复核，再决定是否合并数字。原提纲实验不计入产品评估。
 
+- 已合入主分支的评估文档。正式报告和提交包沿用本地更新，复算步骤见[最终报告评估说明](evaluation/experiments/README.md)。
+
+- Added [the full HTML test catalog](docs/TEST_CASE_CATALOG.html) and [the detailed pilot evaluation report](docs/EVALUATION_RESULTS.md), preserving the supplied local documents.
+
+## 论文测试与评估（2026-11-25）
+
+- 两份评估报告已接入同一份[测试用例目录](docs/test-case-catalog.md)，可按题查看参考答案、证据位置和待复核标签。
+
+- [测试基线](docs/test-baseline.md)覆盖客户端主线、语言与工作区、后端回归及论文集，离线流水线对当前检出的代码执行。
+- [评估报告](docs/paper-evaluation.md)记录 18 篇论文的两轮三组真实模型试验、预测试对照和 21 道桌面 RPC 任务。三道桌面比较均返回部分结果，11/18 格带证据；下一步核对缺证据的七格及英文问题的回答语言。
+- 已收录[同版本独立试评估](docs/paper-evaluation-pilot.md)，补充桌面核验争议、匹配失败及元数据对引用连接的影响。下一步对阅读答案做逐条引文复核，并仲裁两条核验分歧。
+
 ## 论文比较（2026-11-25）
 
 - 便携工作区最近两次中、英文比较都完成了论文检索与阅读，随后以 `MODEL_OUTPUT_INVALID` 结束，每次保存的十个单元格均为缺省占位。
