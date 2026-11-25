@@ -1,6 +1,6 @@
 {
   "judge": "Codex assistant",
-  "human_checked": 0,
+  "human_checked": 12,
   "core_rule": "Credit when all reference answer elements are conveyed. Additional prose is outside this narrow metric.",
   "evidence_rule": "First cited sentence in round 1 per paper. Each material qualifier must be supported by the combined quoted excerpts.",
   "anchor_checks": {
@@ -26,7 +26,13 @@
         "title: and context: before the question, title and text of each passage."
       ],
       "full_sentence_supported": true,
-      "rationale": "Core factual details are present in the linked quotations."
+      "rationale": "Core factual details are present in the linked quotations.",
+      "human_review": {
+        "review_id": "QA-04",
+        "core_reference_covered": true,
+        "full_sentence_supported": true,
+        "notes": "回答涵盖编码器独立编码各段落、解码器对拼接表示执行注意力。两条引文合起来也支持目标句中的输入拼接、三个特殊标记和独立编码。"
+      }
     },
     {
       "case_id": "specter_qa_001",
@@ -44,7 +50,13 @@
       "case_id": "scicite_qa_001",
       "repeat": 2,
       "task_id": "c54750080ba2480283fb2dee87dcca00",
-      "core_reference_covered": true
+      "core_reference_covered": true,
+      "human_review": {
+        "review_id": "QA-12",
+        "core_reference_covered": true,
+        "full_sentence_supported": null,
+        "notes": "正确列出两项辅助任务：预测引用所在章节的标题，以及判断句子是否需要引用。"
+      }
     },
     {
       "case_id": "eraser_qa_001",
@@ -81,13 +93,25 @@
         "style or structure, enabling the revised text to be seamlessly used in place of the original."
       ],
       "full_sentence_supported": true,
-      "rationale": "Core factual details are present in the linked quotations."
+      "rationale": "Core factual details are present in the linked quotations.",
+      "human_review": {
+        "review_id": "QA-06",
+        "core_reference_covered": true,
+        "full_sentence_supported": true,
+        "notes": "回答涵盖检索归因证据、修订缺乏支持的内容和尽量保留原文。两条引文共同支持目标句中的操作顺序及保留风格、结构的要求。"
+      }
     },
     {
       "case_id": "scibert_qa_001",
       "repeat": 2,
       "task_id": "86b94419b071439589aeac2a610df84d",
-      "core_reference_covered": true
+      "core_reference_covered": true,
+      "human_review": {
+        "review_id": "QA-11",
+        "core_reference_covered": true,
+        "full_sentence_supported": null,
+        "notes": "正确指出 SciBERT 沿用 BERT 架构，并使用科学论文文本进行预训练。"
+      }
     },
     {
       "case_id": "alce_qa_001",
@@ -105,7 +129,13 @@
         "we release structured, machinereadable full text extracted from PDFs for 8.1M papers which we’ve identified as having open access status"
       ],
       "full_sentence_supported": true,
-      "rationale": "Core factual details are present in the linked quotations."
+      "rationale": "Core factual details are present in the linked quotations.",
+      "human_review": {
+        "review_id": "QA-07",
+        "core_reference_covered": true,
+        "full_sentence_supported": true,
+        "notes": "回答和引文均明确指出，810 万篇开放获取论文提供了从 PDF 提取的结构化、机器可读全文。"
+      }
     },
     {
       "case_id": "alce_qa_001",
@@ -117,7 +147,13 @@
         "We design automatic evaluation methods in three dimensions: fluency, correctness, and citation quality."
       ],
       "full_sentence_supported": true,
-      "rationale": "Core factual details are present in the linked quotations."
+      "rationale": "Core factual details are present in the linked quotations.",
+      "human_review": {
+        "review_id": "QA-01",
+        "core_reference_covered": true,
+        "full_sentence_supported": true,
+        "notes": "回答和引文均列出三个维度：流畅性、正确性和引文质量。"
+      }
     },
     {
       "case_id": "drqa_qa_001",
@@ -182,7 +218,13 @@
       "sampled_sentence": null,
       "quotes": [],
       "full_sentence_supported": null,
-      "rationale": "No cited sentence available."
+      "rationale": "No cited sentence available.",
+      "human_review": {
+        "review_id": "QA-09",
+        "core_reference_covered": true,
+        "full_sentence_supported": null,
+        "notes": "正确指出 CATTS 使用论文标题作为生成 TLDR 的辅助训练信号。"
+      }
     },
     {
       "case_id": "dpr_qa_001",
@@ -225,7 +267,13 @@
         "we propose to pre-train our retrieval module with an Inverse Cloze Task"
       ],
       "full_sentence_supported": false,
-      "rationale": "The quoted passage establishes ICT pretraining, but does not describe it as unsupervised."
+      "rationale": "The quoted passage establishes ICT pretraining, but does not describe it as unsupervised.",
+      "human_review": {
+        "review_id": "QA-05",
+        "core_reference_covered": true,
+        "full_sentence_supported": false,
+        "notes": "回答正确指出检索器使用逆完形填空任务（ICT）预训练。论文确认该任务是无监督的，但所引片段只说明用 ICT 预训练检索器，缺少无监督这一限定。"
+      }
     },
     {
       "case_id": "scifact_qa_001",
@@ -237,7 +285,13 @@
         "The S CI FACT dataset consists of 1,409 scientific claims3 verified against a corpus of 5,183 abstracts."
       ],
       "full_sentence_supported": false,
-      "rationale": "The quote establishes the counts and abstract unit, but does not establish expert authorship."
+      "rationale": "The quote establishes the counts and abstract unit, but does not establish expert authorship.",
+      "human_review": {
+        "review_id": "QA-08",
+        "core_reference_covered": true,
+        "full_sentence_supported": false,
+        "notes": "回答说明专家撰写的论断与含证据的摘要配对。所引句支持 1,409 条论断、5,183 篇摘要及验证关系，但缺少论断由专家撰写这一信息。"
+      }
     },
     {
       "case_id": "rarr_qa_001",
@@ -255,7 +309,13 @@
       "case_id": "dpr_qa_001",
       "repeat": 2,
       "task_id": "64ee60a1d76049e4a78920f462096390",
-      "core_reference_covered": true
+      "core_reference_covered": true,
+      "human_review": {
+        "review_id": "QA-10",
+        "core_reference_covered": true,
+        "full_sentence_supported": null,
+        "notes": "正确指出 DPR 使用双编码器，分别将问题和段落映射为稠密向量。"
+      }
     },
     {
       "case_id": "eraser_qa_001",
@@ -279,7 +339,13 @@
         "These consisted of 5,000 from a Wikipedia ‘most accessed pages’ list and the pages hyperlinked from them."
       ],
       "full_sentence_supported": false,
-      "rationale": "The quote establishes the sample of pages and links but omits the June 2017 dump date."
+      "rationale": "The quote establishes the sample of pages and links but omits the June 2017 dump date.",
+      "human_review": {
+        "review_id": "QA-03",
+        "core_reference_covered": true,
+        "full_sentence_supported": false,
+        "notes": "回答说明了标注者如何基于维基百科句子撰写并改写论断。所引句支持约 5,000 个高访问量页面及其链接页面，缺少 2017 年 6 月这一版本日期。"
+      }
     },
     {
       "case_id": "multifc_qa_001",
@@ -309,7 +375,13 @@
         "In what follows we describe the three phases of FEVER2.0 in more detail:"
       ],
       "full_sentence_supported": false,
-      "rationale": "The quote mentions three phases but does not identify their names."
+      "rationale": "The quote mentions three phases but does not identify their names.",
+      "human_review": {
+        "review_id": "QA-02",
+        "core_reference_covered": true,
+        "full_sentence_supported": false,
+        "notes": "回答正确列出构建、攻击和修复三个阶段。所引句只说共有三个阶段，缺少三个阶段的名称。"
+      }
     },
     {
       "case_id": "scifact_qa_001",

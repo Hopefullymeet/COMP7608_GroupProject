@@ -8,6 +8,12 @@ python -B -X utf8 evaluation/experiments/report_results.py
 
 Use `--figure-data DIR` to export both time/token scatter series.
 
+## Reading QA judging and human check
+
+Codex assigned the two binary reading QA scores. Core coverage requires the full answer to accurately convey every core fact in the reference. Evidence support requires the quotes linked to the first cited sentence in run 1 to jointly support every material detail and qualifier in that sentence. The answer with no cited sentence has no evidence-support score. The scorer checks whether quotes resolve to the selected source version separately.
+
+A group member independently applied the same criteria with the Codex scores hidden. The targeted sample included nine answers from run 1 and three from run 2. In run 1, it covered all four sentences initially marked as having insufficient evidence, the answer with no citations, and four randomly selected answers with supported sentences. The three run 2 answers were randomly selected from questions absent from the run 1 sample. The human judgments agreed on all 12 core-coverage scores and all eight evidence-support scores. `recorded/qa-assessment.json` stores the per-answer judgments and notes under `human_review`. `human_checked` counts reviewed answers.
+
 ## Collect fresh model responses
 
 Run from the repository root or extracted PaperTrace folder. Use Python 3.12.13 with `pypdf==6.4.0` installed in the same environment (`python -m pip install pypdf==6.4.0`). Put Node 24 on PATH or set `PAPERTRACE_NODE` to its executable. Configure `deepseek-flash` at `https://api.deepseek.com`, disable the optional reviewer, and make the API key available to the worker via the selected desktop provider or the shell's `DEEPSEEK_API_KEY` when no saved provider is selected. Live requests consume provider quota. Use a fresh extraction for a new experiment because runners can reuse earlier results.

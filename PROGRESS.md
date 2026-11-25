@@ -1,5 +1,11 @@
 # 当前进度
 
+- 提交包的 AI 使用声明已补录 Codex 参与 Wiki 实验评分。
+
+- 阅读问答人工复核已完成。组员复核了 36 条回答中的 12 条，覆盖 12 项核心覆盖和 8 项引文支持判断，均与原评分一致。[逐题评分和复核说明](evaluation/experiments/recorded/qa-assessment.json)已记录，核心覆盖仍为 36/36，第一轮引文支持仍为 13/17。
+
+- GitHub 仓库已更名为 `Hopefullymeet/PaperTrace`。测试基线和提交 ZIP 已同步新地址，提交包 README 的发布页与 Windows、macOS 下载地址统一为 `v0.1.0-preview.2`。组员可将各自克隆的 `origin` 更新为 `https://github.com/Hopefullymeet/PaperTrace.git`。
+
 - 最终报告已重新排版。图表不再插在截图所示的段落或列表之间，References 和 Appendix 分别独占第 15、16 页。已重建提交 ZIP 并核对包内两份报告。
 
 - 最终提交包命名为 `submission/[Group 52] PaperTrace.zip`。归档根目录与 `PaperTrace/` 各含一份 `[Group 52] PaperTrace Report.pdf`，作者栏按 NeurIPS 模板列出四位成员的姓名、学号和邮箱。更新 `submission/` 下的同名报告后，运行 `python submission/Refresh-ZIP.py` 可同步更新包内两份 PDF。

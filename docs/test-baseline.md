@@ -35,10 +35,10 @@
 
 [最终报告评估说明](../evaluation/experiments/README.md)列出了桌面阅读与核查、论文比较、研究引擎引用标签和跨会话 Wiki 的采集及离线复算命令。
 
-[index]: https://github.com/Hopefullymeet/COMP7608_GroupProject/blob/4f472c75dcf5c2f4155b11d48fdeab215f8f9f48/docs/contracts/README.md
-[discover]: https://github.com/Hopefullymeet/COMP7608_GroupProject/blob/4f472c75dcf5c2f4155b11d48fdeab215f8f9f48/docs/contracts/discover-read-locate.md
-[library]: https://github.com/Hopefullymeet/COMP7608_GroupProject/blob/4f472c75dcf5c2f4155b11d48fdeab215f8f9f48/docs/contracts/library-reading.md
-[wiki]: https://github.com/Hopefullymeet/COMP7608_GroupProject/blob/4f472c75dcf5c2f4155b11d48fdeab215f8f9f48/docs/contracts/comparison-wiki.md
-[citation]: https://github.com/Hopefullymeet/COMP7608_GroupProject/blob/4f472c75dcf5c2f4155b11d48fdeab215f8f9f48/docs/contracts/citation-export.md
-[services]: https://github.com/Hopefullymeet/COMP7608_GroupProject/blob/4f472c75dcf5c2f4155b11d48fdeab215f8f9f48/docs/contracts/services-workspace.md
-[protocol]: https://github.com/Hopefullymeet/COMP7608_GroupProject/blob/4f472c75dcf5c2f4155b11d48fdeab215f8f9f48/docs/contracts/protocol.md
+[index]: https://github.com/Hopefullymeet/PaperTrace/blob/4f472c75dcf5c2f4155b11d48fdeab215f8f9f48/docs/contracts/README.md
+[discover]: https://github.com/Hopefullymeet/PaperTrace/blob/4f472c75dcf5c2f4155b11d48fdeab215f8f9f48/docs/contracts/discover-read-locate.md
+[library]: https://github.com/Hopefullymeet/PaperTrace/blob/4f472c75dcf5c2f4155b11d48fdeab215f8f9f48/docs/contracts/library-reading.md
+[wiki]: https://github.com/Hopefullymeet/PaperTrace/blob/4f472c75dcf5c2f4155b11d48fdeab215f8f9f48/docs/contracts/comparison-wiki.md
+[citation]: https://github.com/Hopefullymeet/PaperTrace/blob/4f472c75dcf5c2f4155b11d48fdeab215f8f9f48/docs/contracts/citation-export.md
+[services]: https://github.com/Hopefullymeet/PaperTrace/blob/4f472c75dcf5c2f4155b11d48fdeab215f8f9f48/docs/contracts/services-workspace.md
+[protocol]: https://github.com/Hopefullymeet/PaperTrace/blob/4f472c75dcf5c2f4155b11d48fdeab215f8f9f48/docs/contracts/protocol.md
