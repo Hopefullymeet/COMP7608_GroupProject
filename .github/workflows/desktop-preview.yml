@@ -9,6 +9,9 @@ on:
       - 'backend/test_citations.py'
       - 'backend/model_agent.py'
       - 'backend/agent_host.py'
+      - 'backend/opencode_acp.py'
+      - 'backend/test_opencode_acp.py'
+      - 'frontend/scripts/smoke-opencode.py'
       - 'backend/engine/**'
       - 'frontend/src-tauri/src/worker.rs'
       - 'backend/research_tools.py'
@@ -74,6 +77,17 @@ jobs:
           "PACKAGE_RESOURCES=$dest" >> $env:GITHUB_ENV
       - name: Verify installed runtime, PDF import and paper Q&A
         run: uv run --no-project --python 3.12.13 frontend/scripts/smoke-installer.py
+      - name: Check OpenCode reading with a local test model
+        shell: pwsh
+        run: |
+          $pkg = if ($IsWindows) { "opencode-windows-x64" } else { "opencode-darwin-arm64" }
+          $root = Join-Path $env:RUNNER_TEMP "opencode-qa"
+          npm install --prefix $root "${pkg}@1.19.6" --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:PATH = (Join-Path $root "node_modules/$pkg/bin") + [IO.Path]::PathSeparator + $env:PATH
+          $env:PAPERTRACE_ACP_TEST_PDF = Join-Path $root "attention.pdf"
+          Invoke-WebRequest "https://arxiv.org/pdf/1706.03762" -OutFile $env:PAPERTRACE_ACP_TEST_PDF
+          uv run --no-project --python 3.12.13 --with pypdf==6.4.0 frontend/scripts/smoke-opencode.py
       - uses: actions/upload-artifact@v4
         with:
           name: PaperTrace-${{ runner.os }}-${{ matrix.arch }}

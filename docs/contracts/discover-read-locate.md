@@ -16,7 +16,8 @@
 | `session.list` | `{ topic_id: Id }` | `{ items: { session_id: Id; title?: NonEmptyText }[] }` |
 | `topic.rename` | `{ operation_id: Id, topic_id: Id, title: NonEmptyText }` | `{ topic_id: Id, title: NonEmptyText }` |
 | `session.rename` | `{ operation_id: Id, topic_id: Id, session_id: Id, title: NonEmptyText }` | `{ topic_id: Id, session_id: Id, title: NonEmptyText }` |
-| `session.get` | `{ topic_id: Id; session_id: Id }` | `{ turns: ReadingTurn[]; active_task_id?: Id; title?: string }` |
+| `session.agent` | `{ operation_id, topic_id, session_id, reading_agent: "builtin" 或 "opencode" }` | `{ reading_agent }`。运行中的会话返回 `TASK_IN_PROGRESS`，首次选择 OpenCode 需先在设置启用。 |
+| `session.get` | `{ topic_id: Id; session_id: Id }` | `{ turns: ReadingTurn[]; active_task_id?: Id; title?: string; reading_agent?: "builtin" 或 "opencode"; can_select_agent?: boolean }` |
 | `task.prepare` | `{ operation_id: Id } & TaskInput` | `{ confirmation_id: Id; transfers: Transfer[] }` |
 | `task.start` | `{ operation_id: Id; confirmation_id: Id } & TaskInput` | `StartResult`，阅读问答另返回 `scope_id: Id` |
 | `discovery.latest` | `{ topic_id: Id }` | `{ search_id?: Id; active_task_id?: Id }` |

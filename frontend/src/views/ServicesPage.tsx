@@ -145,6 +145,7 @@ function SettingsForm({ config, modelPage = false }: { config: Config; modelPage
   function restoreDefaults() {
     const defaults = demo ? defaultConfig() : {
       ...saved,
+      reading_agent: 'builtin' as const,
       models: saved.models.map(model => ({ ...model, model: model.id, endpoint: 'https://api.deepseek.com' })),
       budget: { ...unlimitedBudget },
       ask_before_overage: true,
@@ -165,6 +166,21 @@ function SettingsForm({ config, modelPage = false }: { config: Config; modelPage
   return (
     <>
       <div className={modelPage ? 'settings-content scroll' : undefined}>
+      {!demo && <section className="set-section">
+        <div className="set-intro"><h2>{tr('Reading agent')}</h2></div>
+        <div className="set-body"><label className="set-field">{tr('Agent for new reading sessions')}
+          <select value={draft.reading_agent ?? 'builtin'} disabled={saving}
+            onChange={e => set({ ...draft, reading_agent: e.target.value as Config['reading_agent'] })}>
+            <option value="builtin">{tr('Built-in agent')}</option>
+            <option value="opencode">{tr('Local OpenCode')}</option>
+          </select></label>
+          {draft.reading_agent === 'opencode' && <>
+            <p>{tr('If OpenCode uses a remote model, your questions and selected paper excerpts may be sent to its provider.')}</p>
+            <button className="ghost-btn" disabled={busy} onClick={() => tryService('opencode')}>{tr('Test connection')}</button>
+            {testStatus('opencode')}
+          </>}
+        </div>
+      </section>}
       <section className="set-section">
         <div className="set-intro">
           <h2>{tr('Model')}</h2>
@@ -558,7 +574,7 @@ export function FirstRunSettings() {
     setStage(next)
   }
   if (stage === 'done' || !config) return null
-  const ready = config.models.some(m => m.id === config.model_id && (m.local || m.credential_configured))
+  const ready = config.reading_agent === 'opencode' || config.models.some(m => m.id === config.model_id && (m.local || m.credential_configured))
   if (!ready && stage === 'api-deferred') return null
   return <Dialog title={tr(ready ? 'Set up your research assistant' : 'Connect your model')} onClose={finish} panelClass="first-run-settings">
     {ready ? <RoleSettings onSaved={finish}/> : <SettingsForm config={config}/>}

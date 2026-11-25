@@ -150,7 +150,7 @@ function AgentMessage({ m, onSource }: { m: ChatMessage; onSource?: (source: Pic
       {s.text}<ClaimSources ids={[...new Set(s.evidenceIds)]} sentence={i + 1} numbers={citationNumbers} />
     </span>
     if (s.evidenceIds?.length === 0) return <span key={i} className="claim" title={tr('No verified passage was found.')}>
-      {s.text}
+      {s.text} <small>{tr('Unverified')}</small>
     </span>
     if (!s.evidenceId) return <span key={i}>{s.text}</span>
     const source = evidenceFor(state, s.evidenceId)
@@ -236,6 +236,17 @@ function useAnnotations() {
 }
 type Annotations = ReturnType<typeof useAnnotations>
 type AskRegion = (annotation: Annotation, question: string) => Promise<boolean>
+
+function SessionAgent({ topic_id, session_id, running }: {topic_id: string; session_id: string; running: boolean}) {
+  const { tr } = useLanguage()
+  const { write, report, demo, busy } = useWorkspace()
+  const session = useRead('session.get', {topic_id, session_id}, !demo)
+  if (!session?.can_select_agent) return null
+  return <select aria-label={tr('Reading agent')} value={session.reading_agent} disabled={running || busy}
+    onChange={e => void write('session.agent', {topic_id, session_id, reading_agent: e.target.value as 'builtin' | 'opencode'}).catch(report)}>
+    <option value="builtin">{tr('Built-in agent')}</option><option value="opencode">{tr('Local OpenCode')}</option>
+  </select>
+}
 
 function Chat({ controls, selections = [], onSource, annotations, askRegion, blocked }: {
   annotations: Annotations; askRegion?: AskRegion; blocked?: string
@@ -441,6 +452,7 @@ function Chat({ controls, selections = [], onSource, annotations, askRegion, blo
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (prefs.send === 'enter' || e.metaKey || e.ctrlKey)) { e.preventDefault(); submit() } }} />
           <div className="composer-bar">
+            {state.mainline && session && <SessionAgent topic_id={session.topicId} session_id={session.id} running={state.qaRunning} />}
             <span className="grow" />
             <button className="send" disabled={(state.qaRunning && !canQueue) || !canAsk || !!blocked || !text.trim()} onClick={submit} aria-label={tr('Send')}><Icon name="arrowUp" size={16} /></button>
           </div>

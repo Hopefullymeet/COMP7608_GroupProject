@@ -726,7 +726,14 @@ export function createMock(): Client {
       })
       return { topic_id, session_id }
     },
-    'session.get': ({ session_id }) => ({
+    'session.agent': ({ topic_id, session_id, reading_agent }) => {
+      const session = state.sessions[topic_id]?.find(s => s.session_id === session_id)
+      if (!session) throw new Error('Unknown session')
+      session.reading_agent = reading_agent
+      return { reading_agent }
+    },
+    'session.get': ({ topic_id, session_id }) => ({
+      reading_agent: state.sessions[topic_id]?.find(s => s.session_id === session_id)?.reading_agent,
       turns: state.turns[session_id] ?? [],
       reader: state.shelf.positions['session/' + session_id]
         ? { source_version_id: state.shelf.positions['session/' + session_id] }

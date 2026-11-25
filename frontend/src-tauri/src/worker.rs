@@ -23,6 +23,7 @@ const CITATIONS: &[u8] = include_bytes!("../../../backend/citations.py");
 const READER: &[u8] = include_bytes!("../../../backend/reader.py");
 const CORE: &[u8] = include_bytes!("../../../backend/engine/core.mjs");
 const CORE_NOTICES: &[u8] = include_bytes!("../../../backend/engine/NOTICES.txt");
+const OPENCODE: &[u8] = include_bytes!("../../../backend/opencode_acp.py");
 const HOST: &[u8] = include_bytes!("../../../backend/agent_host.py");
 const MODEL_AGENT: &[u8] = include_bytes!("../../../backend/model_agent.py");
 const DECISION: &[u8] = include_bytes!("../../../backend/decision.py");
@@ -59,6 +60,7 @@ impl Worker {
         WORKER.hash(&mut hash);
         CORE.hash(&mut hash);
         CORE_NOTICES.hash(&mut hash);
+        OPENCODE.hash(&mut hash);
         HOST.hash(&mut hash);
         MODEL_AGENT.hash(&mut hash);
         DECISION.hash(&mut hash);
@@ -82,6 +84,7 @@ impl Worker {
         for (path, contents) in [
             (&runtime.join("engine/core.mjs"), CORE),
             (&runtime.join("engine/NOTICES.txt"), CORE_NOTICES),
+            (&runtime.join("opencode_acp.py"), OPENCODE),
             (&runtime.join("agent_host.py"), HOST),
             (&runtime.join("Agent-LICENSE.txt"), AGENT_LICENSE),
             (&runtime.join("agent.md"), AGENT_POLICY), (&script, WORKER), (&runtime.join("model_agent.py"), MODEL_AGENT),
@@ -272,6 +275,7 @@ impl Host {
         };
         let timeout = match method {
             "candidate.decide" => 240,
+            "services.test" => 90,
             "library.preview_pdf" | "reader.pdf" | "visual.objects" => 90,
             _ => 20,
         };

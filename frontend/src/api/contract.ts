@@ -11,7 +11,7 @@ export type NonEmpty<T> = [T, ...T[]]
 export type Scope = 'abstract' | 'full_text'
 export type Version = { source_version_id: Id; available_scope: 'metadata' | Scope; pdf_available?: boolean }
 export type Topic = { topic_id: Id; wiki_unread?:boolean; wiki_turns?:string[]; title: string }
-export type Session = { session_id: Id; title?: string;updated_at?:string;has_turns?:boolean }
+export type Session = { reading_agent?: "builtin" | "opencode"; session_id: Id; title?: string;updated_at?:string;has_turns?:boolean }
 export type LibraryItem = { paper_id: Id; title: string; alias?: string; topic_ids: Id[]; source_versions: NonEmpty<Version> }
 export type Action = 'pending' | 'hold' | 'exclude' | 'add'
 export type Decision = Exclude<Action, 'add'> | 'added'
@@ -89,7 +89,8 @@ export type Methods = WikiMethods & ReaderMethods & SynthesisMethods & LibraryMe
   'session.rename': [Write & InSession & { title: string }, InSession & { title: string }]
   'session.list': [InTopic, { items: Session[] }]
   'session.create': [Write & InTopic, InSession]
-  'session.get': [InSession, { title?: string; turns: Turn[]; active_task_id?: Id; reader?: { source_version_id: Id } & ReadingPosition }]
+  'session.agent': [Write & InSession & { reading_agent: 'builtin' | 'opencode' }, { reading_agent: 'builtin' | 'opencode' }]
+  'session.get': [InSession, { reading_agent?: 'builtin' | 'opencode'; can_select_agent?: boolean; title?: string; turns: Turn[]; active_task_id?: Id; reader?: { source_version_id: Id } & ReadingPosition }]
   'discovery.latest': [InTopic, { search_id?: Id; active_task_id?: Id;task_id?:Id }]
   'discovery.get': [InSearch, Discovery]
   'discovery.steps': [ForTask, { steps: Step[] }]

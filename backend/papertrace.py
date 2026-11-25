@@ -24,6 +24,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
 
 import decision
+import opencode_acp
 from credentials import deepseek_api_key, system_key, store
 from model_agent import AGENT_POLICY, ANSWER_LAYOUT, TITLE_INSTRUCTION, ModelAgent, ModelFailure, ENDPOINT, MODEL, read_json_answer
 from literature import LiteratureError, MAX_VERSIONS, body_passage_starts, digest, init_corpus
@@ -148,7 +149,7 @@ def probe_model(endpoint, model, key):
 class Worker:
     writes = {
         "comparison.save", "draft.import", "draft.resolve_reference", "audit.review", "audit.save_to_wiki", "export.create",
-        "topic.create", "topic.rename", "session.create", "session.rename", "task.prepare", "task.start", "task.cancel",
+        "topic.create", "topic.rename", "session.create", "session.rename", "session.agent", "task.prepare", "task.start", "task.cancel",
         "candidate.decide", "reader.bookmark", "note.save", "library.import_pdf", "library.set_alias", "synthesis.review",
         "reader.mark_save", "reader.mark_delete", "reader.answer_save", "reader.mark_to_wiki",
         "services.save", "profile.save", "preset.save",
@@ -160,6 +161,7 @@ class Worker:
 
     def __init__(self, directory, send):
         directory.mkdir(parents=True, exist_ok=True)
+        self.workspace = directory
         self.log_path = directory / "worker-errors.log"
         self.error_log = logging.Logger("papertrace.worker")
         handler = RotatingFileHandler(self.log_path, maxBytes=512_000, backupCount=1,
@@ -473,7 +475,7 @@ class Worker:
             reviewer_key_stored = bool(vault and vault.read())
         except OSError:
             reviewer_key_stored = False
-        return {"reviewer_key_stored": reviewer_key_stored, "revision": settings["revision"], "reviewer": self.reviewer_config(), "model_id": MODEL, "models": [{
+        return {"reading_agent": settings.get("reading_agent", "builtin"), "reviewer_key_stored": reviewer_key_stored, "revision": settings["revision"], "reviewer": self.reviewer_config(), "model_id": MODEL, "models": [{
             "id": MODEL, "label": "DeepSeek", "model": settings["model"], "endpoint": settings["endpoint"],
             "local": False, "credential_configured": credential["configured"],
             "credential_stored": credential["stored"], "credential_preview": credential["preview"],
@@ -525,11 +527,14 @@ class Worker:
         ask = params.get("ask_before_overage")
         if type(ask) is not bool:
             raise invalid("ask_before_overage must be a boolean.")
-        if (reviewer != config["reviewer"] or model != config["models"][0]["model"] or endpoint != config["models"][0]["endpoint"]
+        reading_agent = params.get("reading_agent", config["reading_agent"])
+        if reading_agent not in ("builtin", "opencode"):
+            raise invalid("Unknown reading agent.")
+        if (reading_agent != config["reading_agent"] or reviewer != config["reviewer"] or model != config["models"][0]["model"] or endpoint != config["models"][0]["endpoint"]
                 or budget != config["budget"]
                 or ask != config["ask_before_overage"]):
             self.put("service_config", "active", {"revision": identifier(), "model": model, "endpoint": endpoint,
-                                                  "budget": budget, "ask_before_overage": ask, "reviewer": reviewer})
+                                                  "reading_agent": reading_agent, "budget": budget, "ask_before_overage": ask, "reviewer": reviewer})
             config = self.services_config()
         return config
 
@@ -549,12 +554,14 @@ class Worker:
                 saved = self.saved_operation("services.test", operation, fingerprint)
                 if saved is not None:
                     return saved
-                if service_id not in (MODEL, "reviewer"):
+                if service_id not in (MODEL, "reviewer", "opencode"):
                     raise missing("This service was not found.")
                 provider = self.service_settings()
                 key = deepseek_api_key() if service_id == MODEL else None
                 reviewer = self.reviewer_config()
-            if service_id == "reviewer":
+            if service_id == "opencode":
+                result = opencode_acp.probe()
+            elif service_id == "reviewer":
                 try:
                     sample = decision.request(reviewer, "A square has four sides.", {"check": {"type": "choice",
                         "instructions": "Does the text explicitly mention four sides?", "criteria": {"yes": "Yes", "no": "No"}}})
@@ -583,8 +590,21 @@ class Worker:
             return self.archived()
         if method == "session.create":
             topic, sid = self.topic(params), identifier()
-            self.put("session", sid, {"session_id": sid, "topic_id": topic, "updated_at": now(), "turns": [], "access": self.user_profile()["session_access"]})
+            self.put("session", sid, {"session_id": sid, "topic_id": topic, "updated_at": now(), "turns": [], "reading_agent": self.service_settings().get("reading_agent", "builtin"), "access": self.user_profile()["session_access"]})
             return {"topic_id": topic, "session_id": sid}
+        if method == "session.agent":
+            session = self.session(params)
+            agent = required(params, "reading_agent")
+            if agent not in ("builtin", "opencode"):
+                raise invalid("Unknown reading agent.")
+            if agent == "opencode" and self.service_settings().get("reading_agent") != "opencode" and session.get("reading_agent") != agent:
+                raise invalid("Enable local OpenCode in settings first.")
+            active = self.active("reading_qa", session["session_id"])
+            if active:
+                raise RpcError(-32013, "TASK_IN_PROGRESS", "open_task", "Finish the current turn before switching agents.")
+            session["reading_agent"] = agent
+            self.put("session", session["session_id"], session)
+            return {"reading_agent": agent}
         if method in ("topic.rename", "session.rename"):
             title = required(params, "title").strip()
             if len(title) > 160:
@@ -608,7 +628,8 @@ class Worker:
         if method == "session.get":
             session = self.session(params)
             active = self.active("reading_qa", session["session_id"])
-            result = {"turns": session["turns"]}
+            result = {"turns": session["turns"], "reading_agent": session.get("reading_agent", "builtin")}
+            result["can_select_agent"] = result["reading_agent"] == "opencode" or self.service_settings().get("reading_agent") == "opencode"
             if session.get("title"):
                 result["title"] = session["title"]
             if active:
@@ -1518,7 +1539,10 @@ class Worker:
                 task_data["search_request"] = {"query": label, "filters": filters}
             target = topic
         elif kind == "reading_qa":
-            target = self.session(params)["session_id"]
+            session = self.session(params)
+            target = session["session_id"]
+            if session.get("reading_agent") == "opencode":
+                task_data["reading_agent"] = "opencode"
             task_data["session_id"] = target
             label = required(input_, "question")
             sources = input_.get("sources")
@@ -1637,7 +1661,10 @@ class Worker:
                 confirmation = self.get("confirmation", cid)
             except RpcError:
                 confirmation = {}
-        if live and kind == "reading_qa":
+        external = task_data.get("reading_agent") == "opencode" and not task_data.get("figure_lookup_only")
+        if external:
+            live, endpoint, model = True, "OpenCode", "OpenCode"
+        if live and kind == "reading_qa" and not external:
             memory = (self.topic_wiki.reading_context(topic, label) if method == "task.prepare"
                       else confirmation.get("topic_memory"))
             if method == "task.prepare":
@@ -1651,7 +1678,7 @@ class Worker:
             task_data["input"] = input_
         review_cfg = self.reviewer_config()
         review_transfer = []
-        if review_cfg["enabled"] and ((live and kind in ("reading_qa", "citation_audit", "citation_suggest",
+        if not external and review_cfg["enabled"] and ((live and kind in ("reading_qa", "citation_audit", "citation_suggest",
                 "paper_comparison", "literature_synthesis", "reader_question")) or task_data.get("figures")):
             task_data["reviewer"] = review_cfg
             categories = ["Question, claims and selected paper excerpts"]
@@ -1678,6 +1705,9 @@ class Worker:
             if live and kind == "reading_qa" and any(s["requested_scope"] == "full_text" for s in input_["sources"]):
                 transfers = [{"endpoint": endpoint, "purpose": "Answer using selected sources",
                               "data_categories": ["Research question and excerpts from the selected papers"]}]
+            if external:
+                transfers = [{"endpoint": "OpenCode", "purpose": "Answer with the model configured in OpenCode",
+                              "data_categories": ["Question and recent OpenCode turns about the same selected papers", "Selected paper titles and excerpts"]}]
             if task_data.get("topic_memory"):
                 transfers[0]["data_categories"].append("Topic Wiki and enabled personal preferences")
             if audit:
@@ -1824,7 +1854,7 @@ class Worker:
                 reader_task = task["kind"] in ("reader_question", "visual_index", "reader_translation")
                 synthesis = task["kind"] in ("literature_synthesis", "paper_comparison")
                 live = audit or suggest or reader_task or synthesis or (
-                    task["kind"] == "reading_qa" and not self.discovery_fixture and not task.get("figure_lookup_only"))
+                    task["kind"] == "reading_qa" and (not self.discovery_fixture or task.get("reading_agent") == "opencode") and not task.get("figure_lookup_only"))
                 if live or remote_search or task.get("reviewer"):
                     signal = threading.Event()
                     self.inflight[task_id] = signal
@@ -2151,7 +2181,8 @@ class Worker:
                              "if none match, say so. Candidates: " + json.dumps(descriptions, ensure_ascii=False))
             has_pdf = any(source["available_scope"] == "full_text" for source in sources)
             endpoint = task.get("model_endpoint", ENDPOINT)
-            runtime = self.agent_for_task(task)
+            external = task.get("reading_agent") == "opencode"
+            runtime = None if external else self.agent_for_task(task)
             memory = task.get("topic_memory")
             issue = None
             titles = {s["source_version_id"]: s["title"] for s in sources}
@@ -2182,7 +2213,13 @@ class Worker:
                     streamed = True
                     self.send_events([event])
 
-            if runtime is not None:
+            if external:
+                scope = {s["source_version_id"]: s["requested_scope"] for s in task["input"]["sources"]}
+                history = [{"question": turn["question"][:2000],
+                            "answer": " ".join(s["text"] for s in turn["answer"]["sentences"])[:4000]}
+                           for turn in session["turns"][-6:] if turn.get("opencode_scope") == scope]
+                claims, seen, issue = opencode_acp.answer(self.workspace, question, sources, history, signal, record_tool, preview)
+            elif runtime is not None:
                 if has_pdf:
                     claims, seen, issue = runtime.answer_full_text(question, sources, signal, memory=memory, progress=record_tool, name_session=name_session, preview=preview)
                 else:
@@ -2382,6 +2419,8 @@ class Worker:
         if not session["turns"] and not session.get("title"):
             session["title"] = title or local_session_title(input_["question"], task.get("figure_lookup_only"))
         session["turns"].append({"task_id": task["task_id"], "question": input_["question"], "answer": answer,
+                                 **({"opencode_scope": {s["source_version_id"]: s["requested_scope"] for s in input_["sources"]}}
+                                    if task.get("reading_agent") == "opencode" else {}),
                                  **({"wiki_review": review} if review is not None else {})})
         session["updated_at"] = now()
         self.put("session", session["session_id"], session)

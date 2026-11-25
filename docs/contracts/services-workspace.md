@@ -69,3 +69,12 @@ type Activity={id:Id,topic_id:Id,title:string,detail:string,target:'library'|'re
 桌面端 services.get 和 services.save 支持 reviewer 对象，字段为 enabled、endpoint 和 model。默认关闭。endpoint 为完整 System One 判断接口地址。services.test 使用 reviewer 标识发送固定样例。services.credentials 使用同一标识和已保存的 endpoint，在系统凭据库中按地址存取独立密钥。
 
 任务准备时列出审查端点及涉及的数据类别。候选段落和图片按相关性排序，事实陈述与已定位的原文一起进行选项判断。审查接口不可用时沿用原检索结果。历史任务在智能体轨迹中保留复核记录。缓存按主题、服务配置、问题、原文和图片内容隔离。
+
+
+### 本机 OpenCode
+
+`services.get` 返回新阅读会话的默认 `reading_agent`。`services.save` 接受 `builtin` 和 `opencode`，旧配置使用内置智能体。新会话保存当时的设置。选择 OpenCode 时，界面说明问题和所选论文片段可能会发送至用户配置的远程模型。
+
+`services.test` 使用 `id: "opencode"` 时会建立 ACP 会话，发送不含论文的简短问题。结果包含 `ok` 和 `message`。程序缺失、需要登录、协议不兼容、连接中断以及超时分别报告。仅握手成功无法确认模型授权。
+
+每轮问答使用独立的本机 MCP 地址和临时令牌，仅提供本轮已确认版本的 `paper_search` 与 `paper_read`。原文核对在 PaperTrace 内完成。跨轮上下文取自当前 PaperTrace 会话内相同论文范围的近期 OpenCode 问答。本机运行的 OpenCode 仍使用用户配置的模型服务。[OpenCode 的 ACP 接口](https://opencode.ai/docs/cli/acp/)

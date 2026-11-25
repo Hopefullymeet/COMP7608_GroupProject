@@ -22,6 +22,7 @@ export type Service = {
 export type Budget = Record<'calls' | 'tokens' | 'minutes' | 'cost', number | null>
 export const unlimitedBudget: Budget = { calls: null, tokens: null, minutes: null, cost: null }
 export type Config = {
+  reading_agent?: "builtin" | "opencode"
   reviewer?: { enabled: boolean; endpoint: string; model: string }
   reviewer_key_stored?: boolean
   revision: string
