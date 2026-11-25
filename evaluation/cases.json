@@ -1,0 +1,23 @@
+[
+  {
+    "id": "ordinary",
+    "source": "Alpha",
+    "question": "What benchmark does Alpha define?",
+    "expected_status": "completed",
+    "expected_quote": "Alpha proposes the benchmark for evidence attribution."
+  },
+  {
+    "id": "changed-source",
+    "source": "Beta",
+    "question": "Now use only Beta. How does its test split compare?",
+    "expected_status": "completed",
+    "expected_quote": "Beta uses the Alpha benchmark with a different test split."
+  },
+  {
+    "id": "invalid-model-output",
+    "source": "Beta",
+    "question": "Return an invalid response.",
+    "expected_status": "failed",
+    "expected_issue": "MODEL_OUTPUT_INVALID"
+  }
+]

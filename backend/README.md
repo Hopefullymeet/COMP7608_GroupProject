@@ -30,9 +30,9 @@ RIS 和 CSL JSON 由标准库读取。书目预览和提交均可离线进行。
 
 ## 配置文本模型
 
-Windows 和 macOS 用户可在「模型和服务 → 管理系统凭据」保存或移除 API 密钥。密钥保存在 Windows 凭据库或 macOS 钥匙串的 `PaperTrace/DeepSeek` 项中。若 Windows 凭据管理器拒绝访问，应用会使用当前用户的 Windows DPAPI 将密钥加密保存到 `%LOCALAPPDATA%/PaperTrace/deepseek.dpapi`。没有系统凭据时，应用读取启动环境中的 `DEEPSEEK_API_KEY`。
+Windows 和 macOS 用户可在「设置 → 模型 → 新增模型供应商」填写名称、端点基础地址、模型 ID 和 API 密钥，然后点击「保存连接」。每条连接有独立的密钥引用，密钥保存在 Windows 凭据库或 macOS 钥匙串。Windows 凭据管理器拒绝访问时，应用使用当前用户的 DPAPI 加密存储。未选用已保存的连接时，工作进程也可从启动环境读取 `DEEPSEEK_API_KEY`。
 
-默认模型为 `deepseek-flash`，默认端点为 `https://api.deepseek.com`。在「模型与服务」中可修改 OpenAI 兼容基础地址，例如 `https://provider.example/v1`，应用会在基础地址后追加 `/chat/completions`。「测试连接」直接请求已保存的端点并显示结果。内置的 DeepSeek Harness 核心负责安排多轮工具调用，Python 后端执行论文工具、流式呈现回答并核验证据，可检索本轮选定的论文、补读同页上下文并核对引句。确认对话框显示端点及发送范围。
+默认模型为 `deepseek-flash`，默认端点为 `https://api.deepseek.com`。新增供应商时，按服务要求在 OpenAI 兼容基础地址中保留版本路径，例如 `https://provider.example/v1`，应用会追加 `/chat/completions`。在「模型提供方」下拉框切换连接，点击「测试所选供应商」验证该连接，或在「管理供应商」中编辑和删除。可选的证据复核模型在任务预算下方的「复核服务连接」中单独配置。内置的 DeepSeek Harness 核心负责安排多轮工具调用，Python 后端执行论文工具、流式呈现回答并核验证据，可检索本轮选定的论文、补读同页上下文并核对引句。确认对话框显示端点及发送范围。
 
 在首页输入研究问题（例如 `Which scientific QA datasets use paper abstracts?`）。提交后点 **Find papers**，确认范围并启动，选择 PubMedQA 加入主题。进入 **Read & ask**，询问 `What context does PubMedQA use?`，再点回答中的来源。退出并用同一工作区重开，核对主题、文献和历史回答。
 
@@ -52,15 +52,6 @@ pnpm --dir frontend test
 如果 `pdftotext` 缺失或运行失败，文字提取会回退到 pypdf；pypdf 不可用时，桌面端使用随应用打包的 PyMuPDF 读取稿件。PDF 页面的后端图片渲染继续使用 `pdftoppm`。
 
 提出想写的研究问题并确认发送范围。生成后点击观点下的 **Source** 在右侧打开保存的 PDF 页。**Review for Wiki** 可逐项勾选采纳，证据仍可从 **Topic Wiki** 回到原文。某篇论文换版时，在该论文旁选择 **Add version**，Wiki 会提示复核依赖旧版的项目。
-
-### 六篇公开论文的对照实验
-
-从 `backend/evaluate_synthesis.py` 的 `PAPERS` 链接下载公开全文，保留相应的六个文件名。先用下列命令检查入库与人工标注的页级证据，再去掉 `--corpus-only` 启动三组模型对照。对照先要求审阅一组用于积累 Wiki 的种子结果。报告中的人工质量评分字段留空，供评估者根据列明的预期证据和误支持样例填写。
-
-```sh
-python3 -B backend/evaluate_synthesis.py /path/to/corpus --corpus-only
-python3 -B backend/evaluate_synthesis.py /path/to/corpus --output synthesis-evaluation.json
-```
 
 桌面发现默认使用 OpenAlex。可在启动时通过 `PAPERTRACE_OPENALEX_API_KEY` 提高额度。仅在离线样例和自动化测试使用 `PAPERTRACE_DISCOVERY_FIXTURE=1`。DOI 与 arXiv 查询通过各自的公开服务执行，PDF 和笔记保存在本地。
 

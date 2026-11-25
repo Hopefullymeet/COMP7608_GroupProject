@@ -7,7 +7,7 @@ import time
 import unittest
 
 from model_agent import failure
-from evaluate_synthesis import call
+from worker_rpc import call
 from literature import LiteratureError
 from papertrace import RpcError, Worker
 from reader import pdf_engine

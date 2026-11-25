@@ -1,0 +1,100 @@
+{
+  "provider": "deterministic loopback fixture",
+  "cases_passed": 3,
+  "cases_total": 3,
+  "traces": [
+    {
+      "id": "ordinary",
+      "question": "What benchmark does Alpha define?",
+      "selected_paper": "Alpha",
+      "steps": [
+        {
+          "title": "paper_read",
+          "detail": "1 result(s)."
+        },
+        {
+          "title": "paper_search",
+          "detail": "1 result(s). benchmark"
+        },
+        {
+          "title": "paper_read",
+          "detail": "1 result(s)."
+        }
+      ],
+      "status": "completed",
+      "issue": null,
+      "answers": [
+        "The source defines the benchmark."
+      ],
+      "anchors": [
+        {
+          "page": 1,
+          "quote": "Alpha proposes the benchmark for evidence attribution.",
+          "within_selected_version": true,
+          "verbatim": true
+        }
+      ],
+      "elapsed_seconds": 0.344,
+      "passed": true
+    },
+    {
+      "id": "changed-source",
+      "question": "Now use only Beta. How does its test split compare?",
+      "selected_paper": "Beta",
+      "steps": [
+        {
+          "title": "paper_read",
+          "detail": "1 result(s)."
+        },
+        {
+          "title": "paper_search",
+          "detail": "1 result(s). benchmark"
+        },
+        {
+          "title": "paper_read",
+          "detail": "1 result(s)."
+        }
+      ],
+      "status": "completed",
+      "issue": null,
+      "answers": [
+        "The source defines the benchmark."
+      ],
+      "anchors": [
+        {
+          "page": 1,
+          "quote": "Beta uses the Alpha benchmark with a different test split.",
+          "within_selected_version": true,
+          "verbatim": true
+        }
+      ],
+      "elapsed_seconds": 0.344,
+      "passed": true
+    },
+    {
+      "id": "invalid-model-output",
+      "question": "Return an invalid response.",
+      "selected_paper": "Beta",
+      "steps": [
+        {
+          "title": "paper_read",
+          "detail": "1 result(s)."
+        },
+        {
+          "title": "paper_search",
+          "detail": "1 result(s). benchmark"
+        },
+        {
+          "title": "paper_read",
+          "detail": "1 result(s)."
+        }
+      ],
+      "status": "failed",
+      "issue": "MODEL_OUTPUT_INVALID",
+      "answers": [],
+      "anchors": [],
+      "elapsed_seconds": 0.406,
+      "passed": true
+    }
+  ]
+}

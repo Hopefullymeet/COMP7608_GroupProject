@@ -1,0 +1,75 @@
+% PaperTrace architecture. Included from report.tex; needs tikz with the fit, arrows.meta and
+% backgrounds libraries. Muted, colour-blind-safe palette: one hue per component type.
+\definecolor{ptClientLine}{HTML}{3B6EA5}\definecolor{ptClientFill}{HTML}{E4EDF7}
+\definecolor{ptStageLine}{HTML}{3A8A6E}\definecolor{ptStageFill}{HTML}{E3F2EA}\definecolor{ptStageHot}{HTML}{C6E6D5}
+\definecolor{ptCoreLine}{HTML}{C8742F}\definecolor{ptCoreFill}{HTML}{FBE7D5}
+\definecolor{ptToolLine}{HTML}{7A5BA6}\definecolor{ptToolFill}{HTML}{EDE7F5}
+\definecolor{ptStoreLine}{HTML}{9A7B2F}\definecolor{ptStoreFill}{HTML}{FBF3DC}
+\definecolor{ptExtLine}{HTML}{B5525A}\definecolor{ptExtFill}{HTML}{FAE6E7}
+\definecolor{ptGroupLine}{HTML}{8C9BAD}\definecolor{ptGroupFill}{HTML}{F6F8FB}
+\definecolor{ptArrow}{HTML}{4A4F57}
+\begin{tikzpicture}[
+    font=\footnotesize,
+    >={Stealth[length=4pt]},
+    box/.style={draw, line width=0.6pt, rounded corners=2pt, align=center, inner sep=3pt},
+    stage/.style={box, draw=ptStageLine, fill=ptStageFill, minimum width=1.35cm, minimum height=0.62cm},
+    core/.style={box, draw=ptCoreLine, fill=ptCoreFill, minimum width=2.4cm, minimum height=0.95cm},
+    tool/.style={box, draw=ptToolLine, fill=ptToolFill},
+    ext/.style={box, draw=ptExtLine, fill=ptExtFill, dashed, minimum width=2.1cm, minimum height=0.95cm},
+    group/.style={draw=ptGroupLine, fill=ptGroupFill, dashed, line width=0.6pt, rounded corners=4pt, inner sep=7pt},
+    flow/.style={->, draw=ptArrow, line width=0.55pt},
+    note/.style={font=\scriptsize, text=black!65, align=center},
+  ]
+
+  % Task lifecycle inside the worker
+  \node[stage] (prepare) at (4.2, 4.9) {Prepare};
+  \node[stage] (confirm) at (5.9, 4.9) {Confirm};
+  \node[stage, fill=ptStageHot] (run) at (7.6, 4.9) {Run};
+  \node[stage] (finish) at (9.3, 4.9) {Finish};
+  \draw[flow] (prepare) -- (confirm);
+  \draw[flow] (confirm) -- (run);
+  \draw[flow] (run) -- (finish);
+  \node[note, below=1pt] at (confirm.south) {user approves\\[-2pt]data to be sent};
+
+  % Agent loop and the Python side that executes it
+  \node[core, minimum width=2.6cm] (loop) at (4.9, 2.95) {Agent loop\\[-1pt]{\scriptsize (Node, DSH AgentLoop)}};
+  \node[core] (agent) at (9.0, 2.95) {ModelAgent\\[-1pt]{\scriptsize (Python)}};
+  \draw[flow] ([yshift=5pt]loop.east) -- node[note, above] {action} ([yshift=5pt]agent.west);
+  \draw[flow] ([yshift=-5pt]agent.west) -- node[note, below] {observation} ([yshift=-5pt]loop.east);
+  \draw[flow] (run.south) -- ++(0,-0.75) -| (loop.north);
+  \draw[flow] ([xshift=0.3cm]agent.north) -- node[note, right] {result or issue} ([xshift=0.3cm]agent.north |- finish.south);
+
+  % Tools and output checks
+  \node[tool, minimum width=2.9cm, minimum height=0.9cm] (tools) at (4.9, 1.45)
+    {Research tools\\[-1pt]{\scriptsize\ttfamily paper\_search \textperiodcentered{} paper\_read}\\[-2pt]{\scriptsize\ttfamily paper\_refs \textperiodcentered{} wiki\_search}};
+  \node[tool, minimum width=2.3cm, minimum height=0.9cm] (checks) at (9.85, 1.45)
+    {Checks\\[-1pt]{\scriptsize scope \textperiodcentered{} budget \textperiodcentered{} schema}\\[-2pt]{\scriptsize verbatim quote match}};
+  \draw[flow] ([xshift=-0.6cm]agent.south) |- node[note, above, pos=0.75] {execute} (tools.east);
+  \draw[flow] ([xshift=0.85cm]agent.south) -- node[note, left] {validate} ([xshift=0.85cm]agent.south |- checks.north);
+
+  % Local workspace
+  \node[box, draw=ptStoreLine, fill=ptStoreFill, minimum width=7.55cm, minimum height=0.75cm] (store) at (7.22, 0.1)
+    {\textbf{Local workspace} (SQLite)\\[-1pt]{\scriptsize passages (FTS5) \textperiodcentered{} tasks \& events \textperiodcentered{} anchors \textperiodcentered{} Wiki}};
+  \draw[flow, <->] (tools.south) -- (tools.south |- store.north);
+  \draw[flow] (checks.south) -- node[note, right] {anchors} (checks.south |- store.north);
+
+  % Worker boundary, drawn behind its contents
+  \begin{scope}[on background layer]
+    \node[group, fit=(prepare) (finish) (loop) (agent) (tools) (checks) (store)] (worker) {};
+  \end{scope}
+  \node[note, anchor=south west, font=\scriptsize\itshape, text=ptGroupLine!70!black] at (worker.north west) {Python worker (\texttt{papertrace.py})};
+
+  % Desktop client
+  \node[box, draw=ptClientLine, fill=ptClientFill, minimum width=2.1cm, minimum height=5.6cm, anchor=north] (client) at (1.05, 5.4) {};
+  \node[align=center, anchor=north] at (client.north) {\textbf{\color{ptClientLine!80!black}Desktop client}\\[-1pt]{\scriptsize (Tauri + React)}};
+  \node[align=left, anchor=north, font=\scriptsize, text=black!80] at ([yshift=-1.0cm]client.north)
+    {Read \& Ask\\Compare\\Citation check\\Wiki\\Library};
+  \draw[flow] (client.east |- prepare) -- node[note, above] {request} (prepare.west);
+  \draw[flow] (worker.west |- 0,2.2) -- node[note, above] {events} (client.east |- 0,2.2);
+
+  % External services
+  \node[ext] (llm) at (12.85, 2.95) {LLM provider\\[-1pt]{\scriptsize (OpenAI API)}};
+  \node[ext] (openalex) at (12.85, 4.9) {OpenAlex\\[-1pt]{\scriptsize Crossref}};
+  \draw[flow, <->] (agent.east) -- (llm.west);
+  \draw[flow] (run.north) -- ++(0,0.42) -| node[note, above, pos=0.25] {discovery search} (openalex.north);
+\end{tikzpicture}

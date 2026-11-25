@@ -1,0 +1,26 @@
+% Figure C: follow-up questions in a new session, with and without the topic Wiki (12 trials each).
+\begin{tikzpicture}
+\begin{axis}[
+    ybar, bar width=13pt,
+    width=\linewidth, height=4.6cm,
+    ymin=0, ymax=14, ytick={0,3,6,9,12},
+    symbolic x coords={Names the question, Answers correctly, Correct with a quote},
+    xtick=data,
+    enlarge x limits=0.22,
+    axis x line*=bottom, axis y line*=left,
+    major tick length=2pt,
+    tick label style={font=\footnotesize},
+    ylabel={Trials (of 12)}, ylabel style={font=\footnotesize},
+    ymajorgrids, grid style={ptGrid},
+    nodes near coords, nodes near coords style={font=\scriptsize, text=black!75},
+    legend style={font=\scriptsize, draw=none, fill=none, at={(0.98,0.98)}, anchor=north east,
+                  legend columns=1},
+    legend image code/.code={\fill[#1] (0cm,-0.08cm) rectangle (0.22cm,0.12cm);},
+  ]
+  \addplot[fill=ptBlue, draw=none] coordinates
+    {(Names the question,12) (Answers correctly,9) (Correct with a quote,6)};
+  \addplot[fill=ptPale, draw=none] coordinates
+    {(Names the question,0) (Answers correctly,0) (Correct with a quote,0)};
+  \legend{Wiki on, Wiki off}
+\end{axis}
+\end{tikzpicture}

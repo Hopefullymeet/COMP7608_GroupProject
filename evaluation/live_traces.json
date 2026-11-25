@@ -1,0 +1,2044 @@
+{
+ "source": "PaperTrace desktop 0.1.0 portable workspace, manual use on 2026-11-24/25 (UTC); the last comparison ran after the comparison fix",
+ "note": "Exploratory use by a team member, not a scored evaluation. No token usage was persisted.",
+ "tasks": 28,
+ "outcomes": {
+  "reading_qa/failed/MODEL_UNAVAILABLE": 4,
+  "discovery/completed/-": 2,
+  "reading_qa/failed/MODEL_OUTPUT_INVALID": 2,
+  "reading_qa/partial/FULL_TEXT_REQUIRED": 2,
+  "citation_audit/partial/CITATIONS_UNRESOLVED": 2,
+  "reading_qa/failed/PROCESS_INTERRUPTED": 3,
+  "reading_qa/cancelled/-": 1,
+  "reading_qa/failed/TEMPORARILY_UNAVAILABLE": 2,
+  "reading_qa/partial/TASK_BUDGET_EXHAUSTED": 2,
+  "reading_qa/completed/-": 3,
+  "paper_comparison/partial/MODEL_OUTPUT_INVALID": 2,
+  "citation_audit/completed/-": 2,
+  "paper_comparison/partial/EVIDENCE_INCOMPLETE": 1
+ },
+ "traces": [
+  {
+   "task_id": "9bfe44e76c0b4ad6ab8dde0cb073f0a3",
+   "kind": "reading_qa",
+   "status": "failed",
+   "issue": "MODEL_UNAVAILABLE",
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T07:45:50.589793+00:00",
+   "elapsed_seconds": 8.4,
+   "request": {
+    "question": "这几篇论文主要讲了什么内容？"
+   },
+   "papers": [
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {},
+   "steps": [],
+   "answer": []
+  },
+  {
+   "task_id": "967bc74ec1bb4b8c8777b4d238b3ce93",
+   "kind": "reading_qa",
+   "status": "failed",
+   "issue": "MODEL_UNAVAILABLE",
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T07:46:21.397310+00:00",
+   "elapsed_seconds": 2.5,
+   "request": {
+    "question": "这几篇论文主要讲了什么内容？"
+   },
+   "papers": [
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {},
+   "steps": [],
+   "answer": []
+  },
+  {
+   "task_id": "baf0d6c82aba4f52864143610daf6c10",
+   "kind": "discovery",
+   "status": "completed",
+   "issue": null,
+   "model": null,
+   "endpoint": null,
+   "started_at": "2026-11-24T07:47:26.590447+00:00",
+   "elapsed_seconds": 2.6,
+   "request": {
+    "query": "NLP"
+   },
+   "papers": [],
+   "read_scopes": {},
+   "steps": [
+    {
+     "kind": "tool",
+     "title": "Search OpenAlex",
+     "detail": "20 candidates available."
+    }
+   ],
+   "answer": []
+  },
+  {
+   "task_id": "538d02cc08a34de79739a8d30d6d371d",
+   "kind": "reading_qa",
+   "status": "failed",
+   "issue": "MODEL_UNAVAILABLE",
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T07:48:15.202493+00:00",
+   "elapsed_seconds": 4.4,
+   "request": {
+    "question": "你好"
+   },
+   "papers": [
+    "Deep Learning applied to NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {},
+   "steps": [],
+   "answer": []
+  },
+  {
+   "task_id": "5f60ff4d45de41adaa1b6f66aad61a3a",
+   "kind": "reading_qa",
+   "status": "failed",
+   "issue": "MODEL_UNAVAILABLE",
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T08:29:46.188227+00:00",
+   "elapsed_seconds": 3.3,
+   "request": {
+    "question": "NLP的定义是什么？"
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {},
+   "steps": [],
+   "answer": []
+  },
+  {
+   "task_id": "26fe92b7f9494614a9aead039c43d6ea",
+   "kind": "reading_qa",
+   "status": "failed",
+   "issue": "MODEL_OUTPUT_INVALID",
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T08:38:29.954256+00:00",
+   "elapsed_seconds": 9.4,
+   "request": {
+    "question": "NLP的定义是什么？"
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {},
+   "steps": [
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). Natural Language Processing focuses on the interactions between human language and computers"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "3 result(s)."
+    }
+   ],
+   "answer": []
+  },
+  {
+   "task_id": "23ec6db867e0450f94cde2f9a4ae087d",
+   "kind": "reading_qa",
+   "status": "partial",
+   "issue": "FULL_TEXT_REQUIRED",
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T08:39:01.601189+00:00",
+   "elapsed_seconds": 13.1,
+   "request": {
+    "question": "NLP的定义是什么？"
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {
+    "none": 6,
+    "full_text": 1
+   },
+   "steps": [
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). Natural Language Processing is a way for computers to analyze, understand, and derive meaning"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). interpretability analysis neural NLP definition methods framework"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "3 result(s)."
+    }
+   ],
+   "answer": [
+    {
+     "text": "按照该论文的定义，自然语言处理（NLP）关注人类语言与计算机之间的交互。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "Natural Language Processing focuses on the interactions between human language and computers."
+      }
+     ]
+    },
+    {
+     "text": "该定义进一步把NLP定位在计算机科学、人工智能与计算语言学的交叉点上。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "It sits at the intersection of computer science, artificial intelligence, and computational linguistics."
+      }
+     ]
+    },
+    {
+     "text": "论文指出，NLP是计算机以智能且有用的方式分析、理解人类语言并从中获取意义的一种途径。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "NLP is a way for computers to analyze, understand, and derive meaning from human language in a smart and useful way."
+      }
+     ]
+    },
+    {
+     "text": "借助NLP，开发者可以组织和结构化知识，以执行自动摘要、翻译、命名实体识别、关系抽取、情感分析、语音识别和话题分割等任务。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "By utilizing NLP, developers can organize and structure knowledge to perform tasks such as automatic summarization, translation, named entity recognition, relationship extraction, sentiment analysis, speech recognition, and topic segmentation."
+      }
+     ]
+    },
+    {
+     "text": "论文同时指出NLP应用开发的困难在于计算机传统上要求用精确、无歧义且高度结构化的编程语言与人类沟通，而人类言语往往不精确、有歧义，其语言结构还依赖俚语、地区方言和社会语境等复杂变量。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "The development of NLP applications is challenging because computers traditionally require humans to communicate to them via a programming language. Programming languages are precise, unambiguous and highly structured. Human speech, however, is not always precise, it is often ambiguous and the lingu"
+      }
+     ]
+    },
+    {
+     "text": "所检索的其余论文（可解释性教程、深度学习与CNN综述、机器人指令解析等工作）均未提供NLP的一般性定义，因此此处仅能依据一篇论文作答。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    }
+   ]
+  },
+  {
+   "task_id": "66a7395a7a3b45f8b8c69395ae759ec4",
+   "kind": "citation_audit",
+   "status": "partial",
+   "issue": "CITATIONS_UNRESOLVED",
+   "model": null,
+   "endpoint": null,
+   "started_at": "2026-11-24T08:57:18.841876+00:00",
+   "elapsed_seconds": 1.1,
+   "request": {},
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {},
+   "steps": [],
+   "answer": []
+  },
+  {
+   "task_id": "1cb4bae53d6f419d825196bc840525c3",
+   "kind": "reading_qa",
+   "status": "failed",
+   "issue": "PROCESS_INTERRUPTED",
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T09:22:55.876056+00:00",
+   "elapsed_seconds": 447.8,
+   "request": {
+    "question": "NLP在工业界有什么应用？"
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {},
+   "steps": [],
+   "answer": []
+  },
+  {
+   "task_id": "6bcc7b2f1b4c41f3a18aebd05cbedee4",
+   "kind": "reading_qa",
+   "status": "cancelled",
+   "issue": null,
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T09:23:51.678531+00:00",
+   "elapsed_seconds": 80.7,
+   "request": {
+    "question": "NLP在工业界有什么应用？"
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {},
+   "steps": [],
+   "answer": []
+  },
+  {
+   "task_id": "976afa38558b4a589e1a76f7028befab",
+   "kind": "reading_qa",
+   "status": "failed",
+   "issue": "PROCESS_INTERRUPTED",
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T09:25:24.005964+00:00",
+   "elapsed_seconds": 299.7,
+   "request": {
+    "question": "NLP在工业界有什么应用？"
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {},
+   "steps": [],
+   "answer": []
+  },
+  {
+   "task_id": "d0429dc2f8b14f6487a0d8967e41c574",
+   "kind": "reading_qa",
+   "status": "partial",
+   "issue": "FULL_TEXT_REQUIRED",
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T09:30:48.014551+00:00",
+   "elapsed_seconds": 9.7,
+   "request": {
+    "question": "NLP在工业界有什么应用？"
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {
+    "none": 7
+   },
+   "steps": [],
+   "answer": [
+    {
+     "text": "在综述论文所述的NLP应用中，包括自动摘要、翻译、命名实体识别、关系抽取、情感分析、语音识别和主题分割等任务。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    },
+    {
+     "text": "深度学习方法因在复杂学习问题上的成功表现、高性能计算资源与开源库的普及而变得越来越可行，这是其被广泛采用的原因。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    },
+    {
+     "text": "论文指出NLP应用开发具有挑战性，因为人类语言往往不精确、存在歧义，其语言结构还依赖俚语、地区方言和社会语境等复杂变量。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    },
+    {
+     "text": "论文强调，卷积神经网络虽通常与计算机视觉相关，但近年来已被应用于自然语言处理问题并取得一些有趣的结果。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    },
+    {
+     "text": "在机器人领域，自然语言指令可被学习解析为机器人执行系统可实现的动作序列和控制结构。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    },
+    {
+     "text": "该方法通过英文指令与控制语言表达式的示例对来学习解析器，并在室内环境路线指令跟随任务中进行了评估。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    },
+    {
+     "text": "系统能够学习将英文指令翻译为期望的动作序列，并正确捕捉涉及复杂控制结构的语句语义意图。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    },
+    {
+     "text": "广义接地图（G3）模型依据指令的层级与组合语义结构动态实例化概率图模型，用于处理自动驾驶叉车等移动操作场景中的自然语言命令。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    },
+    {
+     "text": "G3使用众包收集的指令语料训练，将每条指令与机器人动作配对，并在真实感机器人模拟器中执行推断出的计划、由用户评价系统表现。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    },
+    {
+     "text": "在导航指令解释方面，有系统在无先验语言知识的条件下，通过观察人类如何遵循导航指令来学习将其转换为可执行的正式计划。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    },
+    {
+     "text": "该系统借助学习得到的词典修正推断出的计划，并用监督学习器归纳语义解析器，从而自动学会正确解释该语料中相当一部分复杂指令。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    },
+    {
+     "text": "上述机器人指令解析研究仅覆盖受控任务（室内路线跟随、模拟器中的导航与移动操作），论文未提供真实工业部署或规模化商业应用的证据。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    },
+    {
+     "text": "所给论文中未提供关于NLP工业应用市场规模、部署效果或商业案例的直接证据。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    }
+   ]
+  },
+  {
+   "task_id": "50c06b4af0fe411a904994a111119be7",
+   "kind": "reading_qa",
+   "status": "failed",
+   "issue": "TEMPORARILY_UNAVAILABLE",
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T09:36:16.553728+00:00",
+   "elapsed_seconds": 0.0,
+   "request": {
+    "question": "NLP的原理是什么？"
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {},
+   "steps": [],
+   "answer": []
+  },
+  {
+   "task_id": "b271fdef3edd4bfeba9631f1e899f567",
+   "kind": "reading_qa",
+   "status": "failed",
+   "issue": "TEMPORARILY_UNAVAILABLE",
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T09:36:29.326722+00:00",
+   "elapsed_seconds": 0.0,
+   "request": {
+    "question": "Hello"
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {},
+   "steps": [],
+   "answer": []
+  },
+  {
+   "task_id": "07d26a4fcd274bc4ba4814de1231a141",
+   "kind": "reading_qa",
+   "status": "failed",
+   "issue": "MODEL_OUTPUT_INVALID",
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T09:40:16.812772+00:00",
+   "elapsed_seconds": 47.5,
+   "request": {
+    "question": "NLP的原理是什么？"
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {},
+   "steps": [
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "12 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). convolutional neural network sentence representation NLP method"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). semantic parser learned lexicon plan refinement navigation"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "10 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). limitations future work"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "9 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). word embeddings distributed representation vector word2vec"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "6 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). G3 grounding graph model factors environment command inference"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "10 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "8 result(s). results accuracy percentage user study evaluation"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "Evidence budget reached."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). probing classifier structural analysis limitations shortcoming"
+    }
+   ],
+   "answer": []
+  },
+  {
+   "task_id": "a5827abf01eb48418f78f986aff2bc30",
+   "kind": "reading_qa",
+   "status": "partial",
+   "issue": "TASK_BUDGET_EXHAUSTED",
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T09:44:08.014009+00:00",
+   "elapsed_seconds": 38.1,
+   "request": {
+    "question": "NLP的原理是什么？"
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {
+    "full_text": 5,
+    "abstract": 2
+   },
+   "steps": [
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "12 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). NLP definition challenges ambiguity programming language"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). convolutional neural network architecture applied to NLP sentences"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). probing classifiers limitations analysis methods"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "8 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "7 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "6 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). limitations future work"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "8 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). future work limitations of our approach"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "6 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). accuracy results evaluation percentage instructions correctly"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "Evidence budget reached."
+    }
+   ],
+   "answer": [
+    {
+     "text": "从基本界定看，NLP 关注人与计算机之间的语言交互，是计算机科学、人工智能与计算语言学的交叉领域。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "Natural Language Processing focuses on the interactions between human language and computers. It sits at the intersection of computer science, artificial intelligence, and computational linguistics."
+      }
+     ]
+    },
+    {
+     "text": "NLP 要让计算机以智能且有用的方式分析、理解人类语言并从中提取意义，从而组织知识完成摘要、翻译、命名实体识别、情感分析等任务。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "NLP is a way for computers to analyze, understand, and derive meaning from human language in a smart and useful way. By utilizing NLP, developers can organize and structure knowledge to perform tasks such as automatic summarization, translation, named entity recognition, relationship extraction, sen"
+      }
+     ]
+    },
+    {
+     "text": "NLP 的困难根源在于自然语言本身不精确、有歧义，其结构受俚语、方言与社会语境等复杂变量影响，而传统程序语言则是精确、无歧义且高度结构化的。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "Programming languages are precise, unambiguous and highly structured. Human speech, however, is not always precise, it is often ambiguous and the linguistic structure can depend on many complex variables, including slang, regional dialects and social context."
+      }
+     ]
+    },
+    {
+     "text": "在深度学习路线中，CNN 被用于 NLP：句子或文档被表示为词向量矩阵，卷积滤波器在词行上滑动，池化层再保留最显著特征。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 2,
+       "quote": "Instead of image pixels, the input to most NLP tasks are sentences or documents represented as a matrix. Each row of the matrix corresponds to one token, typically a word, but it could be a character."
+      },
+      {
+       "page": 1,
+       "quote": "A key aspect of Convolutional Neural Networks is the use of pooling layers, typically applied after the convolutional layers. Pooling layers subsample their input."
+      }
+     ]
+    },
+    {
+     "text": "但该综述也指出，深度学习在 NLP 的成果仍只是“有希望”，未达到计算机视觉那样的跃升，部分原因在于CNN本是为图像设计、领域缺乏共同目标。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 13,
+       "quote": "However, the results, for now, are only promising. There is evidence that deep learning tools provide good solutions, but they haven’t provided such a big leap as the one in Computer Vision."
+      }
+     ]
+    },
+    {
+     "text": "神经网络路线带来可解释性代价：与依赖手工特征的早期方法相比，解释神经网络内部运作并阐明其行为更具挑战性，分析方法至今仍缺乏统一框架。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "methods for the analysis and interpretability of neural networks in NLP are so far lacking a common framework and methodology."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "task_id": "9103ec8ee2cb493f9c0e95614b410896",
+   "kind": "reading_qa",
+   "status": "partial",
+   "issue": "TASK_BUDGET_EXHAUSTED",
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T09:59:22.583756+00:00",
+   "elapsed_seconds": 37.1,
+   "request": {
+    "question": "这些文章里是否有提到将NLP转化为机器人语言？"
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {
+    "full_text": 5,
+    "abstract": 2
+   },
+   "steps": [
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "12 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). control language expression parser learn pairs commands"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). evaluation results accuracy route instructions"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). limitations future work"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). grounding graph training corpus results"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "7 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "9 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "11 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). results correct commands percentage evaluation subjects accuracy of commands"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "5 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). results percentage correct instructions semantic parser"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "Evidence budget reached."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "Evidence budget reached."
+    }
+   ],
+   "answer": [
+    {
+     "text": "有，且多篇论文明确讨论了把自然语言命令转化为机器人可执行控制语言的问题。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "We discuss the problem of parsing natural language commands to actions and control structures that can be readily implemented in a robot execution system."
+      }
+     ]
+    },
+    {
+     "text": "Matuszek 等人的工作把接地定义为从自然语言解析到形式化控制语言（RCL），并训练语义解析模型为新句子输出机器人控制序列。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 2,
+       "quote": "We treat grounding as a problem of parsing from a natural language to a formal control language capable of representing a robot’s operation in an environment. Specifically, we train a semantic parsing model that defines, for any natural language sentence, a distribution over possible robot control s"
+      }
+     ]
+    },
+    {
+     "text": "实验表明该解析器能把新指令翻译为 RCL 命令并交由模拟机器人执行。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 10,
+       "quote": "The learned parser is asked to interpret these novel route instructions into RCL commands, which were executed by the simulated robot."
+      }
+     ]
+    },
+    {
+     "text": "Tellex 等人的 G3 模型同样把自然语言命令对应为机器人可执行的规划。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "Our system performs inference in the model to successfully ﬁnd and execute plans corresponding to natural language commands such as “Put the tire pallet on the truck.”"
+      },
+      {
+       "page": 2,
+       "quote": "At the top level, the system infers a grounding corresponding to the entire command, which is then interpreted as a plan for the robot to execute."
+      }
+     ]
+    },
+    {
+     "text": "Chen 与 Mooney 的系统则把自然语言导航指令转换为可执行的形式化计划。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "We present a system that learns to transform natural-language navigation instructions into executable formal plans."
+      }
+     ]
+    },
+    {
+     "text": "至于《Deep Learning applied to NLP》一文，仅在第1页正文中读到 NLP 的定义与应用任务清单，没有发现把 NLP 输出转为机器人语言的内容。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "By utilizing NLP, developers can organize and structure knowledge to perform tasks such as automatic summarization, translation, named entity recognition, relationship extraction, sentiment analysis, speech recognition, and topic segmentation."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "task_id": "e95a67411bd14f73a10d365175cbc25b",
+   "kind": "reading_qa",
+   "status": "completed",
+   "issue": null,
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T10:22:17.006775+00:00",
+   "elapsed_seconds": 12.1,
+   "request": {
+    "question": "NLP在现实生活的应用？"
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {
+    "full_text": 5,
+    "abstract": 2
+   },
+   "steps": [
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "12 result(s)."
+    }
+   ],
+   "answer": [
+    {
+     "text": "NLP 在现实生活中的应用首先体现为让计算机以智能且有用的方式分析、理解和提取人类语言的意义，从而组织与结构化知识。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "NLP is a way for computers to analyze, understand, and derive meaning from human language in a smart and useful way. By utilizing NLP, developers can organize and structure knowledge to perform tasks such as automatic summarization, translation, named entity recognition, relationship extraction, sen"
+      }
+     ]
+    },
+    {
+     "text": "这些任务具体包括自动摘要、翻译、命名实体识别、关系抽取、情感分析、语音识别和话题分割。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "tasks such as automatic summarization, translation, named entity recognition, relationship extraction, sentiment analysis, speech recognition, and topic segmentation"
+      }
+     ]
+    },
+    {
+     "text": "现实中应用NLP之所以困难，是因为计算机传统上要求人类用编程语言与之交流，而编程语言精确、无歧义且高度结构化。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "The development of NLP applications is challenging because computers traditionally require humans to communicate to them via a programming language. Programming languages are precise, unambiguous and highly structured."
+      }
+     ]
+    },
+    {
+     "text": "人类语言却不总是精确的，往往存在歧义，其语言结构还依赖俚语、地域方言和社会语境等复杂变量。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "Human speech, however, is not always precise, it is often ambiguous and the linguistic structure can depend on many complex variables, including slang, regional dialects and social context."
+      }
+     ]
+    },
+    {
+     "text": "NLP 位于计算机科学、人工智能与计算语言学的交叉点，关注人与计算机之间的语言交互。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "Natural Language Processing focuses on the interactions between human language and computers. It sits at the intersection of computer science, artificial intelligence, and computational linguistics."
+      }
+     ]
+    },
+    {
+     "text": "在机器人场景中，让未经训练的用户能够与机器人交互的重要性随机器人普及而上升，无约束自然语言交互已成为重要研究领域。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "As robots become more ubiquitous and capable of performing complex tasks, the importance of enabling untrained users to interact with them has increased. In response, unconstrained natural-language interaction with robots has emerged as a significant research area."
+      }
+     ]
+    },
+    {
+     "text": "该工作研究将自然语言命令解析为可直接在机器人执行系统中实现的动作和控制结构，并基于英语命令与控制语言表达式的配对样例学习解析器。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "We discuss the problem of parsing natural language commands to actions and control structures that can be readily implemented in a robot execution system. Our approach learns a parser based on example pairs of English commands and corresponding control language expressions."
+      }
+     ]
+    },
+    {
+     "text": "实验在室内环境中跟随路线指令进行评测，系统能把英语命令翻译为期望的动作序列，并在涉及复杂控制结构的语句上正确捕捉语义意图。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "We evaluate this approach in the context of following route instructions through an indoor environment, and demonstrate that our system can learn to translate English commands into sequences of desired actions, while correctly capturing the semantic intent of statements involving complex control str"
+      }
+     ]
+    },
+    {
+     "text": "自然语言是人类与周围系统交互的一种丰富而直观的机制，能为机器人任务规划提供充分信号，因此指令接地是NLP的现实应用方向之一。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "Natural language (NL) is a rich, intuitive mechanism by which humans can interact with systems around them, offering sufficient signal to support robot task planning."
+      }
+     ]
+    },
+    {
+     "text": "面向半结构化环境中的导航与移动操作，相关系统被要求理解诸如“Put the tire pallet on the truck”这类命令，并推断出可执行的计划。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "Our system performs inference in the model to successfully ﬁnd and execute plans corresponding to natural language commands such as “Put the tire pallet on the truck.”"
+      }
+     ]
+    },
+    {
+     "text": "该系统使用众包收集的命令语料训练模型参数，将每条命令与机器人动作配对，并在真实感的机器人模拟器中执行计划、请用户评估系统表现。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "The model is trained using a corpus of commands collected using crowdsourcing. We pair each command with robot actions and use the corpus to learn the parameters of the model. We evaluate the robot’s performance by inferring plans from natural language commands, executing each plan in a realistic ro"
+      }
+     ]
+    },
+    {
+     "text": "另一条路线把理解自然语言指令视为构建与人交互的智能体的关键能力，其目标是先将导航指令转化为可执行的形式化计划再执行以到达目的地。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "An important application of natural language processing is the interpretation of human instructions. The ability to parse instructions and perform the intended actions is essential for smooth interactions with a computer or a robot."
+      },
+      {
+       "page": 1,
+       "quote": "The goal of the navigation task is to take a set of naturallanguage directions, transform it into a navigation plan that can be understood by the computer, and then execute that plan to reach the desired destination."
+      }
+     ]
+    },
+    {
+     "text": "该系统无需先验语言学知识，仅通过观察人类如何遵循导航指令来学习，并在三个带大量物体与地标的复杂虚拟室内环境中评测。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "Given no prior linguistic knowledge, the system learns by simply observing how humans follow navigation instructions. The system is evaluated in three complex virtual indoor environments with numerous objects and landmarks."
+      }
+     ]
+    },
+    {
+     "text": "在深度学习支撑的NLP应用中存在可解释性代价：神经网络内部运作难以解释，其行为难以阐明。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": null,
+       "quote": "While deep learning has transformed the natural language processing (NLP) field and impacted the larger computational linguistics community, the rise of neural networks is stained by their opaque nature: It is challenging to interpret the inner workings of neural network models, and explicate their "
+      }
+     ]
+    },
+    {
+     "text": "分析工作目前缺乏统一的框架与方法论，现代神经网络分析对新手门槛高，且现有分析方法的局限仍有待厘清。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": null,
+       "quote": "This body of work is so far lacking a common framework and methodology. Moreover, approaching the analysis of modern neural networks can be difficult for newcomers to the field."
+      },
+      {
+       "page": 1,
+       "quote": "Due to these recent developments, methods for the analysis and interpretability of neural networks in NLP are so far lacking a common framework and methodology."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "task_id": "f3439f91166b4a7691b25886c30651cc",
+   "kind": "paper_comparison",
+   "status": "partial",
+   "issue": "MODEL_OUTPUT_INVALID",
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T12:05:10.553135+00:00",
+   "elapsed_seconds": 48.8,
+   "request": {
+    "question": "How do these papers compare?",
+    "dimensions": [
+     "Method",
+     "Data split",
+     "Metrics",
+     "Baseline",
+     "Conditions"
+    ]
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP"
+   ],
+   "read_scopes": {},
+   "steps": [
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). interpretability analysis neural NLP methods"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). deep learning applied to NLP methods"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "7 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "8 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_refs",
+     "detail": "0 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_refs",
+     "detail": "0 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). visualization attention interactive limitation future work"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). dataset train test split table"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "10 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "5 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "wiki_search",
+     "detail": "0 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). no standard metrics evaluation lack of common framework"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). accuracy F1 results comparison state-of-the-art baseline"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "7 result(s)."
+    }
+   ],
+   "answer": [],
+   "comparison_cells": [
+    {
+     "dimension": "Method",
+     "paper": "Interpretability and Analysis in Neural NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    },
+    {
+     "dimension": "Method",
+     "paper": "Deep Learning applied to NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    },
+    {
+     "dimension": "Data split",
+     "paper": "Interpretability and Analysis in Neural NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    },
+    {
+     "dimension": "Data split",
+     "paper": "Deep Learning applied to NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    },
+    {
+     "dimension": "Metrics",
+     "paper": "Interpretability and Analysis in Neural NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    },
+    {
+     "dimension": "Metrics",
+     "paper": "Deep Learning applied to NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    },
+    {
+     "dimension": "Baseline",
+     "paper": "Interpretability and Analysis in Neural NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    },
+    {
+     "dimension": "Baseline",
+     "paper": "Deep Learning applied to NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    },
+    {
+     "dimension": "Conditions",
+     "paper": "Interpretability and Analysis in Neural NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    },
+    {
+     "dimension": "Conditions",
+     "paper": "Deep Learning applied to NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    }
+   ]
+  },
+  {
+   "task_id": "d4920e6887454729b07737d76bef7788",
+   "kind": "paper_comparison",
+   "status": "partial",
+   "issue": "MODEL_OUTPUT_INVALID",
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T12:17:31.854033+00:00",
+   "elapsed_seconds": 42.2,
+   "request": {
+    "question": "这两篇论文有哪些异同？",
+    "dimensions": [
+     "方法",
+     "数据划分",
+     "指标",
+     "基线",
+     "实验条件"
+    ]
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP"
+   ],
+   "read_scopes": {},
+   "steps": [
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). interpretability analysis neural NLP"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). deep learning applied to NLP"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "6 result(s). dataset split evaluation metric benchmark"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "4 result(s). baseline comparison experiment"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "4 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "8 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "8 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_refs",
+     "detail": "0 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_refs",
+     "detail": "0 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). probing classifier limitations methodology evaluation"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). sentiment analysis accuracy table results"
+    },
+    {
+     "kind": "tool",
+     "title": "wiki_search",
+     "detail": "0 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "8 result(s)."
+    }
+   ],
+   "answer": [],
+   "comparison_cells": [
+    {
+     "dimension": "方法",
+     "paper": "Interpretability and Analysis in Neural NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    },
+    {
+     "dimension": "方法",
+     "paper": "Deep Learning applied to NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    },
+    {
+     "dimension": "数据划分",
+     "paper": "Interpretability and Analysis in Neural NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    },
+    {
+     "dimension": "数据划分",
+     "paper": "Deep Learning applied to NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    },
+    {
+     "dimension": "指标",
+     "paper": "Interpretability and Analysis in Neural NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    },
+    {
+     "dimension": "指标",
+     "paper": "Deep Learning applied to NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    },
+    {
+     "dimension": "基线",
+     "paper": "Interpretability and Analysis in Neural NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    },
+    {
+     "dimension": "基线",
+     "paper": "Deep Learning applied to NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    },
+    {
+     "dimension": "实验条件",
+     "paper": "Interpretability and Analysis in Neural NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    },
+    {
+     "dimension": "实验条件",
+     "paper": "Deep Learning applied to NLP",
+     "status": "missing",
+     "text": "No source passage was established.",
+     "evidence": []
+    }
+   ]
+  },
+  {
+   "task_id": "13e6ccb5adb64b64b807f793ee53ae00",
+   "kind": "reading_qa",
+   "status": "completed",
+   "issue": null,
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T12:55:23.449633+00:00",
+   "elapsed_seconds": 13.1,
+   "request": {
+    "question": "1"
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {
+    "full_text": 5,
+    "abstract": 2
+   },
+   "steps": [
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "7 result(s)."
+    }
+   ],
+   "answer": [
+    {
+     "text": "自然语言处理被界定为计算机智能地分析、理解人类语言并从中提取意义的途径，可支撑自动摘要、翻译、命名实体识别、关系抽取、情感分析、语音识别和话题分割等任务。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    },
+    {
+     "text": "该文指出NLP应用开发的根本困难在于编程语言精确、无歧义且高度结构化，而人类言语往往模糊，语言结构依赖俚语、地区方言和社会语境等复杂变量。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    },
+    {
+     "text": "CNN最初主要与计算机视觉相关，近年开始被应用于NLP问题并取得有趣结果，该文旨在解释CNN基础、变体及其在NLP中的应用。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": null,
+       "quote": "CNNs are responsible for major breakthroughs in Image Classification and are the core of most Computer Vision systems today. More recently CNNs have been applied to problems in Natural Language Processing and gotten some interesting results. In this paper, we will try to explain the basics of CNNs, "
+      }
+     ]
+    },
+    {
+     "text": "深度学习虽已改造NLP领域并影响整个计算语言学群体，但其不透明的特性成为明显缺陷：与依赖人工设计特征的早期方法相比，解释神经网络内部运作更具挑战。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "The rise of neural networks is, however, stained by their opaque nature. In contrast to earlier approaches that made use of manually crafted features, it is more challenging to interpret the"
+      }
+     ]
+    },
+    {
+     "text": "相关综述指出该领域迄今缺乏共同框架与方法论，教程覆盖探测分类器等结构分析、行为研究与测试集、交互式可视化三类主要方法，并强调现有方法的具体局限。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": null,
+       "quote": "This body of work is so far lacking a common framework and methodology. Moreover, approaching the analysis of modern neural networks can be difficult for newcomers to the field. This tutorial aims to fill this gap and introduce the nascent field of interpretability and analysis of neural networks in"
+      },
+      {
+       "page": null,
+       "quote": "The tutorial will cover the main lines of analysis work, such as structural analyses using probing classifiers, behavioral studies and test suites, and interactive visualizations."
+      }
+     ]
+    },
+    {
+     "text": "Matuszek等将语义接地定义为把人类语言解释为具有语义信息结构的过程，并以跟随室内路线指令为场景，学习从英语指令到控制语言表达式的解析器。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    },
+    {
+     "text": "其实验为每10组五名不同参与者构成一个测试集，共10个测试集，每集约随机生成1200条路径，其中1000条由单句描述、200条需多句描述（平均5句），由模拟机器人执行解析出的指令。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 10,
+       "quote": "For each of 10 different sets Stest1−10 (every combination of five different participants), 1,200 paths through map D were randomly generated: 1,000 short paths described by single NL sentences, and 200 paths that required multiple sentences to express (5, on average)."
+      }
+     ]
+    },
+    {
+     "text": "端到端结果显示短路径成功率为66.3 ± 10.7%，长路径为48.9%，说明复杂多句指令仍是性能瓶颈。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 10,
+       "quote": "data set success (short) success (long) enriched 66.3 ± 10.7% 48.9%"
+      }
+     ]
+    },
+    {
+     "text": "Tellex等提出广义接地图（G3）模型，依据指令的层级与组合语义结构动态实例化概率图模型，结构由空间描述子句（SDC）诱导。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    },
+    {
+     "text": "该文批评固定/扁平结构无法区分类似“beside”的关系词与对象，也无法利用动词的论元结构，因此建模组合与层级语言结构在学习和推理时都至关重要。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    },
+    {
+     "text": "模型使用众包收集的指令语料训练，并将每条指令与机器人动作配对，随后在真实感机器人模拟器中执行并在测试集上评估，整体与各类SDC的对应变量预测性能约为0.86–0.90。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 5,
+       "quote": "0.80 Overall 0.90 0.88 0.89 0.86"
+      }
+     ]
+    },
+    {
+     "text": "Chen与Mooney在无先验语言知识条件下，仅通过观察人类如何执行导航指令来学习将指令转为可执行形式化计划，并结合学习到的词典修正推断计划与监督学习器归纳语义解析器。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    },
+    {
+     "text": "其数据构建将原始语料切分为单句并与多数跟随者动作配对后形成训练数据，接近300条无法匹配任何动作的句子被丢弃；在精炼地标计划下部分解析F1达78.32。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 5,
+       "quote": "During this process, close to 300 sentences that could not be matched to any actions were discarded."
+      },
+      {
+       "page": 5,
+       "quote": "Reﬁned landmarks plans Recall 55.88 85.46 78.10 F1 66.27 59.29 78.32"
+      }
+     ]
+    },
+    {
+     "text": "现有证据仍缺少对上述NLP可解释性方法与机器人语义接地方法之间关系的系统比较，各文的方法局限讨论也仅在摘要层面出现。",
+     "assessment": "evidence_not_established",
+     "evidence": []
+    }
+   ]
+  },
+  {
+   "task_id": "21b66380afe34e8387fa91d7a5a266bb",
+   "kind": "reading_qa",
+   "status": "completed",
+   "issue": null,
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T12:55:28.963370+00:00",
+   "elapsed_seconds": 25.2,
+   "request": {
+    "question": "2"
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {
+    "full_text": 5,
+    "abstract": 2
+   },
+   "steps": [
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "7 result(s)."
+    }
+   ],
+   "answer": [
+    {
+     "text": "深度学习方法推动了NLP领域变革，但神经网络的不透明性使解释其内部机制与行为仍然困难。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": null,
+       "quote": "While deep learning has transformed the natural language processing (NLP) field and impacted the larger computational linguistics community, the rise of neural networks is stained by their opaque nature: It is challenging to interpret the inner workings of neural network models, and explicate their "
+      }
+     ]
+    },
+    {
+     "text": "该分析领域仍缺乏统一框架和方法论，对新手而言门槛较高，教程旨在涵盖探测分类器、行为测试集和交互可视化等主线。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": null,
+       "quote": "This body of work is so far lacking a common framework and methodology."
+      },
+      {
+       "page": null,
+       "quote": "The tutorial will cover the main lines of analysis work, such as structural analyses using probing classifiers, behavioral studies and test suites, and interactive visualizations."
+      }
+     ]
+    },
+    {
+     "text": "卷积神经网络起源于计算机视觉的图像分类突破，近年才被迁移到NLP并取得有趣结果，该文旨在解释CNN基础、变体及其NLP应用。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": null,
+       "quote": "Convolutional Neural Network (CNNs) are typically associated with Computer Vision. CNNs are responsible for major breakthroughs in Image Classification and are the core of most Computer Vision systems today. More recently CNNs have been applied to problems in Natural Language Processing and gotten s"
+      }
+     ]
+    },
+    {
+     "text": "机器人命令解析研究中，Matuszek等的方法学习一个基于CCG的解析器，将自然语言指令转换为λ演算逻辑式并最终生成机器人可执行的RCL程序。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 6,
+       "quote": "Fig. 4: CCG parse of a test sentence performed by the learned parser. Here the natural language input is first, followed by alternating CCG syntactic categorization and λ -calculus logical forms. The bottom row shows the RCL program to be executed by the robot."
+      }
+     ]
+    },
+    {
+     "text": "Tellex等的G3模型依据命令的层次化与组合式语义结构动态实例化概率图模型，用空间描述子句将语言成分映射到对象、地点、路径或事件。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 3,
+       "quote": "EV EN T1 (r = Put, l = OBJ2 (f = the pallet), l2 = P LACE3 (r = on, l = OBJ4 (f = the truck)))"
+      }
+     ]
+    },
+    {
+     "text": "Chen与Mooney的系统在导航指令语料上经词汇表与语义解析器诱导后，细化地标计划F1为78.32，显示能正确解释语料中相当一部分复杂指令，但建训练数据时有近300句无法匹配动作而被丢弃。",
+     "assessment": "supported",
+     "evidence": [
+      {
+       "page": 5,
+       "quote": "Recall 55.88 85.46 78.10 F1 66.27 59.29 78.32"
+      },
+      {
+       "page": 5,
+       "quote": "During this process, close to 300 sentences that could not be matched to any actions were discarded."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "task_id": "0721508e750245ebb97d556f8bfffbff",
+   "kind": "reading_qa",
+   "status": "failed",
+   "issue": "PROCESS_INTERRUPTED",
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T12:55:32.445863+00:00",
+   "elapsed_seconds": 80.9,
+   "request": {
+    "question": "3"
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {},
+   "steps": [
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "7 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). limitations of interpretability probing classifiers"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). convolution operation word embeddings NLP tasks"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "9 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). results precision recall evaluation route instructions"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "8 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). evaluate robot simulator users rate performance results"
+    }
+   ],
+   "answer": []
+  },
+  {
+   "task_id": "d16e88311b9040b69c2c73802d1809c6",
+   "kind": "citation_audit",
+   "status": "partial",
+   "issue": "CITATIONS_UNRESOLVED",
+   "model": null,
+   "endpoint": null,
+   "started_at": "2026-11-24T13:03:56.721737+00:00",
+   "elapsed_seconds": 0.1,
+   "request": {},
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {},
+   "steps": [],
+   "answer": []
+  },
+  {
+   "task_id": "4d094158b0454d97a3f1b7988446a02f",
+   "kind": "citation_audit",
+   "status": "completed",
+   "issue": null,
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T15:37:22.728192+00:00",
+   "elapsed_seconds": 2.8,
+   "request": {
+    "question": "你是什么功能的助手？"
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {},
+   "steps": [],
+   "answer": []
+  },
+  {
+   "task_id": "43a148a67262498eb8a18ababdd03a52",
+   "kind": "citation_audit",
+   "status": "completed",
+   "issue": null,
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-24T15:39:06.587134+00:00",
+   "elapsed_seconds": 5.4,
+   "request": {
+    "question": "你好"
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP",
+    "Learning to Parse Natural Language Commands to a Robot Control System",
+    "7979-Article Text-11507-1-2-20201228",
+    "7974-13-11502-1-2-20201228"
+   ],
+   "read_scopes": {},
+   "steps": [],
+   "answer": []
+  },
+  {
+   "task_id": "483e9a0bd3fb44c399c42564aa330a72",
+   "kind": "discovery",
+   "status": "completed",
+   "issue": null,
+   "model": null,
+   "endpoint": null,
+   "started_at": "2026-11-25T04:30:37.249966+00:00",
+   "elapsed_seconds": 2.3,
+   "request": {
+    "query": "ROS"
+   },
+   "papers": [],
+   "read_scopes": {},
+   "steps": [
+    {
+     "kind": "tool",
+     "title": "Search OpenAlex",
+     "detail": "20 candidates available."
+    }
+   ],
+   "answer": []
+  },
+  {
+   "task_id": "aaf4e8b376514c73b43b73589aa8fdfe",
+   "kind": "paper_comparison",
+   "status": "partial",
+   "issue": "EVIDENCE_INCOMPLETE",
+   "model": "deepseek-flash",
+   "endpoint": "https://api.deepseek.com",
+   "started_at": "2026-11-25T06:07:31.545726+00:00",
+   "elapsed_seconds": 38.3,
+   "request": {
+    "question": "这两篇论文有哪些异同？",
+    "dimensions": [
+     "方法",
+     "数据划分",
+     "指标",
+     "基线",
+     "实验条件"
+    ]
+   },
+   "papers": [
+    "Interpretability and Analysis in Neural NLP",
+    "Deep Learning applied to NLP"
+   ],
+   "read_scopes": {},
+   "steps": [
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). method analysis techniques taxonomy"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). method deep learning architecture"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "8 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "5 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). dataset train test split accuracy F1 results table"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). baseline comparison state-of-the-art experiments"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "9 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "8 result(s). probing classifier methodology experiment setup"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "9 result(s). future work conclusion directions limitations"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "5 result(s)."
+    },
+    {
+     "kind": "tool",
+     "title": "paper_search",
+     "detail": "10 result(s). word embeddings CNN architecture description section"
+    },
+    {
+     "kind": "tool",
+     "title": "paper_read",
+     "detail": "7 result(s)."
+    }
+   ],
+   "answer": [],
+   "comparison_cells": [
+    {
+     "dimension": "方法",
+     "paper": "Interpretability and Analysis in Neural NLP",
+     "status": "evidenced",
+     "text": "这是一篇ACL 2020教程提案，综述神经网络NLP模型可解释性与分析的方法论，核心包括探针分类器(structural analyses)、行为研究与测试集/挑战集、交互式可视化（神经元激活、注意力、显著性）以及生成解释、心理语言学方法、形式语言测试等。",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "The tutorial will cover the main lines of analysis work, such as structural analyses using probing classifiers, behavioral studies and test suites, and interactive visualizations."
+      }
+     ]
+    },
+    {
+     "dimension": "方法",
+     "paper": "Deep Learning applied to NLP",
+     "status": "evidenced",
+     "text": "这是一篇综述/教程式论文，解释卷积神经网络(CNN)的基本原理、变体（如Dynamic CNN、多列CNN等）及其在NLP各任务（情感、关系分类、语音识别、机器翻译、摘要、问答等）中的应用，属于模型技术综述而非分析可解释性方法论。",
+     "evidence": [
+      {
+       "page": 1,
+       "quote": "In this paper, we will try to explain the basics of CNNs, its different variations and how they have been applied to NLP."
+      }
+     ]
+    },
+    {
+     "dimension": "数据划分",
+     "paper": "Interpretability and Analysis in Neural NLP",
+     "status": "missing",
+     "text": "教程提案中仅在行为研究部分列出“探测任务类型”和“实验设计”，但所读段落未给出任何具体数据集的训练/验证/测试划分方案。",
+     "evidence": []
+    },
+    {
+     "dimension": "数据划分",
+     "paper": "Deep Learning applied to NLP",
+     "status": "disputed",
+     "text": "所读段落虽提及若干具体数据集（如基于一千条训练样本的票房预测、SemEval 2010、TAC slot filling等），但未系统性描述这些工作的数据划分方案，仅零散提及训练集规模。",
+     "evidence": [
+      {
+       "page": 2,
+       "quote": "they show that a complex deep convolution network can be trained on about a thousand training examples"
+      }
+     ]
+    },
+    {
+     "dimension": "指标",
+     "paper": "Interpretability and Analysis in Neural NLP",
+     "status": "missing",
+     "text": "所读段落未列出评测指标定义，仅泛泛讨论测试集/挑战集用于细粒度评估，未明确指标名称。",
+     "evidence": []
+    },
+    {
+     "dimension": "指标",
+     "paper": "Deep Learning applied to NLP",
+     "status": "evidenced",
+     "text": "论文在综述各应用时报告了多种指标，如回归的MAE、关系分类/slot filling的F1、问答的P@1/MAP/MRR、机器翻译的BLEU式分数等，因任务而异。",
+     "evidence": [
+      {
+       "page": 2,
+       "quote": "providing a relative error reduction of 40 per cent (MAE) over the best linear model"
+      }
+     ]
+    },
+    {
+     "dimension": "基线",
+     "paper": "Interpretability and Analysis in Neural NLP",
+     "status": "missing",
+     "text": "所读段落未讨论基线模型设置，仅介绍分析方法类别与局限。",
+     "evidence": []
+    },
+    {
+     "dimension": "基线",
+     "paper": "Deep Learning applied to NLP",
+     "status": "evidenced",
+     "text": "综述中多处报告与基线/传统方法的对比，如线性回归、SVM、RNN/MVRNN、朴素贝叶斯、HMM、n-gram等。",
+     "evidence": [
+      {
+       "page": 14,
+       "quote": "Models CNN LSTM Majority class SVM Graphical model Naive Bayes HMM Memory-based Learning Interlabeler agreement"
+      }
+     ]
+    },
+    {
+     "dimension": "实验条件",
+     "paper": "Interpretability and Analysis in Neural NLP",
+     "status": "evidenced",
+     "text": "作为教程提案，其“实验条件”是教学性的：假定听众具备核心语言学概念及机器学习/神经网络基础知识，读材料与参考文献为主，未开展受控实验。",
+     "evidence": [
+      {
+       "page": 2,
+       "quote": "We would assume acquaintance with core linguistic concepts and basic knowledge of machine learning and neural networks, such as covered in most introductory NLP courses."
+      }
+     ]
+    },
+    {
+     "dimension": "实验条件",
+     "paper": "Deep Learning applied to NLP",
+     "status": "evidenced",
+     "text": "实验条件因综述对象而异，差异较大：涉及数据规模（如仅约一千训练样本）、正则化要求、任务与语言（语音、翻译、问答等），作者强调需谨慎模型设计与正则化。",
+     "evidence": [
+      {
+       "page": 2,
+       "quote": "although careful model design and regularisation is paramount"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

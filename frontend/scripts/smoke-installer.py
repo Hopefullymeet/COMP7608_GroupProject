@@ -45,7 +45,7 @@ with tempfile.TemporaryDirectory() as directory:
         (worker,) = (workspace / "runtime").glob("*/papertrace.py")
         tests = workspace / "smoke-tests"
         tests.mkdir()
-        for name in ("test_model_research.py", "test_literature.py", "test_citations.py", "evaluate_synthesis.py"):
+        for name in ("test_model_research.py", "test_literature.py", "test_citations.py", "worker_rpc.py"):
             shutil.copyfile(repo / "backend" / name, tests / name)
         env.update(PAPERTRACE_NODE=str(root / ("node.exe" if windows else "node")), PYTHONNOUSERSITE="1", PYTHONPATH=os.pathsep.join(map(str, (worker.parent, root / "site"))))
         subprocess.run([str(python), "-B", "-m", "unittest",

@@ -1,0 +1,15 @@
+{
+  "history_question": "Identify one motivation the authors give in the introduction. Give one short sentence with a verbatim quote. Skip numerical settings and evaluation results.",
+  "followup": "Resume my previous reading of this paper. Which specific detail did I leave open for the next session? Identify it, check the paper now, and give the answer with a short quotation. If you do not have my earlier note, say so rather than guessing.",
+  "cases": {
+    "dpr": ["Which token position did the authors use as the output of the BERT encoder, and what is the dimensionality?", "CLS token; 768 dimensions"],
+    "drqa": ["Which hash function is named for mapping bigrams to bins?", "unsigned murmur3 hash"],
+    "scibert": ["What vocabulary size did the authors choose for SciVocab?", "30K tokens"],
+    "specter": ["What margin hyperparameter did the authors choose in the triplet loss?", "margin m = 1"],
+    "qasper": ["How many workers wrote questions, and how many answered them?", "25 wrote questions; 51 answered"],
+    "scitldr": ["How many scientific papers are in the SciTLDR dataset, to the nearest hundred?", "approximately 3,200 papers"]
+  },
+  "independent_control": "Use the original reading_qa question and gold for the same paper from the submitted pilot.",
+  "protocol": "First run a real reading task. Save an opened, version-checked quotation as a finding and pin the case-specific open question without its answer, then close the worker. Start each trial from a copy of that same saved workspace with a new worker and session. Vary only delivery of topic-Wiki reading context (the paper tools are identical). Two repeats per paper, question type and condition. Counterbalance condition order. Disable optional reviewer. Six shared seed tasks, 48 evaluation tasks. Record actual injected context and check prior content for answer leakage.",
+  "primary_endpoint": "For the history-dependent task, name the saved target, give its correct value(s), and link an in-version verbatim excerpt that directly supports the value(s). Score recall, correctness, evidence, and appropriate clarification separately. Independent questions use core reference coverage, with citation support scored separately. Include every trial; distinguish unreturned user-visible answers. Assistant scoring, no independent human adjudication."
+}

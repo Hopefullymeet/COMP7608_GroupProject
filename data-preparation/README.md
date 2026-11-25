@@ -46,8 +46,6 @@ Citation matching includes supported candidates and unjudged candidates. Unjudge
 
 ## Further Review
 
-Reviewers should independently check the same records and add their identifiers, labels, evidence, and reasons to `annotations`. Resolve disagreements through a third reviewer or discussion, then record the final labels, reasons, and time in `adjudication`. Use `adjudicated` only after that process is complete.
-
 Priorities are as follows.
 
 1. FiD cites a DPR arXiv preprint, while this collection holds the conference version. Check version evidence before relying on version specific claims.

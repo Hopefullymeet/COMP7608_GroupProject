@@ -28,6 +28,5 @@
     "eraser": "1fe914b02b96e035408c4bc4c457bc3b48caf444e244fe8d93b373b4540b1765",
     "fever2": "6d777c1f4e6500a9832c20038674b5f9304a9fb621d2c9ac3c16d271ee01822e"
   },
-  "annotator_kind": "ai_assistant",
-  "human_adjudicated": 0
+  "annotator_kind": "ai_assistant"
 }

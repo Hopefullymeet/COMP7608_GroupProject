@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 from citations import grobid_index, parse_document
-from evaluate_synthesis import call
+from worker_rpc import call
 from literature import init_corpus, poppler
 from papertrace import Worker
 

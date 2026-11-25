@@ -1,9 +1,27 @@
 # 当前进度
 
-## 论文测试与评估（2026-11-25）
+- 最终报告已重新排版。图表不再插在截图所示的段落或列表之间，References 和 Appendix 分别独占第 15、16 页。已重建提交 ZIP 并核对包内两份报告。
 
-- [测试基线](docs/test-baseline.md)覆盖客户端主线、语言与工作区、后端回归及论文集，离线流水线对当前检出的代码执行。
-- [评估报告](docs/paper-evaluation.md)记录 18 篇论文的两轮三组真实模型试验、预测试对照和 21 道桌面 RPC 任务。三道比较复测均返回部分结果，11/18 格带证据；下一步核对缺证据的七格及英文问题的回答语言。
+- 最终提交包命名为 `submission/[Group 52] PaperTrace.zip`。归档根目录与 `PaperTrace/` 各含一份 `[Group 52] PaperTrace Report.pdf`，作者栏按 NeurIPS 模板列出四位成员的姓名、学号和邮箱。更新 `submission/` 下的同名报告后，运行 `python submission/Refresh-ZIP.py` 可同步更新包内两份 PDF。
+
+- 仓库根目录和提交包共用相同的评估目录结构、逐题记录及客户端契约用例。从任一根目录执行 `python -B -X utf8 evaluation/experiments/report_results.py` 即可复算论文。修改评估时同步两份文件并重建 ZIP。
+
+## 引用核查研究引擎复跑（2026-11-25）
+
+- 本地评估已接入 `main` 的引用标签实验，并用提交版 worker 与 DeepSeek Flash 在同一组 39 题上跑完两轮，共 156 次。Agent 正确 36/39、38/39，固定 BM25 正确 36/39、36/39。两组均无误报支持，Agent 有 3 次无效输出。逐题结果与复算命令见[本地评估说明](submission/eval-review-temp/README.md#引用核查的研究引擎对照)。正式报告引用时需区分研究引擎标签成绩和桌面核查的产品成绩。
+
+- 正式评估以最终报告为准，已恢复桌面阅读与引用核查、比较、跨会话 Wiki 和研究引擎标签对照。提交包附原始运行与评分，可按[评估说明](submission/PaperTrace/evaluation/experiments/README.md)离线复算。
+
+## 报告评估复核（2026-11-25）
+
+- 根目录与提交包的 README 已补全离线复算、在线采集及新结果评分步骤。数据校验保留语料完整性与证据定位检查，已移除人工裁决计数及对应说明。
+
+- 报告 §5.3 明确逐篇 Wiki 成绩按“答对且有引文支持”统计，§5.4 的回放耗时已按提交包三条记录修正为 0.34–0.41 秒。
+
+- 已补齐固定 BM25 RAG 与 no-Wiki 对照，各 114 次真实任务，使用同模型、题目与评分口径。两轮引用核查合计各为 71/78 和 62/78，原产品为 65/78；三组阅读核心覆盖均为 36/36。报告已更新；逐题记录与评分见 [baseline 汇总](submission/eval-review-temp/results/baseline-summary.json)。语义评分待组员抽查。
+
+- 正式报告已删除跨论文提纲及其对照实验，改为说明 App 论文比较的维度表评判口径，并已重新编译 PDF。
+- [临时交接目录](submission/eval-review-temp/README.md) 保存正式比较入口的六次真实运行。48 个单元格中 44 个引文可定位，2 次完成、4 次部分完成。逐格语义初评待组员复核，再决定是否合并数字。原提纲实验不计入产品评估。
 
 ## 论文比较（2026-11-25）
 
@@ -21,12 +39,22 @@
 
 ## 最终报告（2026-11-25）
 
+- AI 使用声明已完成，已删除报告中 AI assistance 段末的待办并更新提交 PDF。
+
+- 已修复图表与正文间被拉大的留白，让图表可随正文分页，并将附录接在参考文献后。报告重新编译为 14 页，已逐页检查排版并核对文字和链接。提交时使用更新后的 `submission/report/report.pdf`。
+
+- 报告已写入固定检索基线和跨会话 Wiki 实验，删除旧 no-Wiki 对照，标注复核改为组员人工核对。基线中固定检索的标签准确率更高（71 对 65/78），速度更快；PaperTrace 已给出判定的准确率更高（65/67 对 71/77，错判 2 对 6），每次成本低 14–25%（缓存命中 61% 对 3%）。带 Wiki 时，新会话 12/12 找回待查问题，6/12 答对并附支持引文；不带 Wiki 时为 0。§5.3 与表 7 只保留研究引擎层面的引用核查对照（Agent 74/78，固定检索 72/78；错判 1 对 6），已删除桌面流程的 RAG 对 Agent 结果。第 5 节已精简为 4 个小节、最多两个段落标题，回放、契约测试和使用观察并入「Case types」。已用 pgfplots 加入图 3（引擎层面错判对比、每次核查的耗时与 token）和图 4（跨会话续读），配色与架构图一致，源文件在 `submission/report/figures/fig-*.tex` 和 `engine-*.dat`。报告现为 15 页，仅剩 AI 使用声明一处 TODO。评估脚本与结果仍在 `submission/eval-review-temp`，尚未放入提交 ZIP。
+
+- 已按 `submission/eval-review-temp` 的结果改写评估：新增表 5（两轮结果）、成本表、评估中位时延、用例分类表、两轮差异分析，§5.4 改为「Limitations and next steps」，摘要补入结果。所有数字已与原始结果文件核对。第 1 节改为「Introduction and proposal continuity」，开头新增引言、三条贡献和章节导读，原有小节保留。局限单独成为第 6 节「Limitations and future work」，分评估、证据与判断、检索交互与部署三组；删去了 AI 评判与人工复核的表述；基线相关位置（摘要、表 1、§5.3 新增表 7、§6、§7）均以红色 TODO 标出，待基线跑完后填写。报告现为 14 页。
+- 仍缺：AI 评判的人工抽查（红色 TODO）、RAG 基线对比（报告中已明确写为未完成）、各成员 AI 使用声明。临时目录里的 `results/replay.json` 显示 3 条全部 `MODEL_UNAVAILABLE`，通过的是 `replay-localhost.json`，引用时请使用后者。
+
 - 英文报告初稿位于 `submission/report/report.tex`，使用 NeurIPS 2026 模板，已编译为 9 页的 `report.pdf`。报告覆盖范围与 Proposal 对照、设计与任务轨迹、可靠性、非功能需求、评估、贡献与致谢，示例使用完整 PDF 的任务。
 - 已根据成员分工及 GitHub 分支提交记录补齐四名成员的贡献，明确记录 Gong Xiangwei 执行了系统测试。附录新增总标题，报告已重新编译并检查第 7 至 9 页排版。
 - 桌面便携工作区中的 28 条真实任务已导出至 `submission/PaperTrace/evaluation/live_traces.json`，含比较修复后的一次重跑及其十个单元格，`Refresh-ZIP.py` 已将该文件纳入 ZIP（尚未重打包）。本轮重跑了回放评估，3 条用例全部通过。
 - 报告已按比较修复改写：表 1 比较项改为 Done；第 3 节写明两次失败的原因、修复内容和重跑结果（12 次工具调用、38.3 秒、7 格附引文、3 格缺失，`EVIDENCE_INCOMPLETE`）；同步更新了表 3、表 4、使用观察、局限和代码行号。现为 10 页。
 - 已移除第 6 节前的强制分页并重新编译。第 6 节从第 8 页接续第 5 节，AI 使用声明与参考文献同在第 9 页。已检查第 8 至 10 页排版。
-- 报告中红色 TODO 待补：真实模型评估结果（表 5）、单题 token 与成本、各成员的 AI 使用声明。补齐后重新编译 PDF，再运行 `python submission/Refresh-ZIP.py`。
+- 报告新增摘要、TikZ 架构图（`submission/report/figures/architecture.tex`）和第 2 节「Confirmation and clarification」。文献发现统一表述为：再次检索时沿用用户的加入、暂存和排除选择，删除了 Agent 自行改写检索的说法。现为 11 页。
+- 报告中红色 TODO 待补：摘要中的评估结论、真实模型评估结果（表 5）、单题 token 与成本、各成员的 AI 使用声明。补齐后重新编译 PDF，再运行 `python submission/Refresh-ZIP.py`。
 
 ## 模型设置布局（2026-11-25）
 
@@ -465,3 +493,5 @@ Wiki 助手改为暖色圆角卡片，建议提问移到输入框上方。提问
 ## 11 月 24 日提交包复核
 
 对照 Final Project Student Guideline 复核 submission：ZIP 与目录一致（290 个文件，约 21.8 MB），无密钥泄露，回放 3/3 通过。USER_GUIDE 重排为封面、目录、八章分步操作和故障排查页，共 9 页，ZIP 已重新生成。提交前仍需：补全 AI-use.md 占位内容与全部组员的提示词记录；提交后端未提交改动并在 README 写明对应提交哈希；另交最终报告 PDF。
+
+提交目录新增 evaluation/experiments，包含阅读与引用核查、固定检索及无 Wiki 对照、App 论文比较和跨会话 Wiki 的采集与评分脚本。独立副本已通过缺全文检查，并从历史轨迹复算三组汇总。脚本已加入 ZIP 打包清单，实验结果仍在 submission/eval-review-temp；最终打包时需刷新 ZIP。

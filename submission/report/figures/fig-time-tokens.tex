@@ -1,0 +1,22 @@
+% Figure B: time against tokens for each citation check at the research-engine level.
+\begin{tikzpicture}
+\begin{axis}[
+    width=\linewidth, height=5.2cm,
+    xmin=0, xmax=32, ymin=0, ymax=75,
+    xtick={0,5,10,15,20,25,30}, ytick={0,20,40,60},
+    axis x line*=bottom, axis y line*=left,
+    major tick length=2pt,
+    tick label style={font=\footnotesize},
+    xlabel={Time per check (s)}, ylabel={Tokens (thousands)},
+    label style={font=\footnotesize},
+    grid=major, grid style={ptGrid},
+    legend style={font=\scriptsize, draw=none, fill=white, fill opacity=0.85, text opacity=1,
+                  at={(0.03,0.97)}, anchor=north west},
+  ]
+  \addplot[only marks, mark=diamond*, mark size=2.1pt, color=ptOrange, fill opacity=0.65, draw opacity=0.65]
+    table[x=seconds, y=ktokens] {figures/engine-fixed.dat};
+  \addplot[only marks, mark=*, mark size=1.7pt, color=ptBlue, fill opacity=0.65, draw opacity=0.65]
+    table[x=seconds, y=ktokens] {figures/engine-agent.dat};
+  \legend{Fixed RAG (median 3.2\,s{,} 10.8k), PaperTrace (median 8.4\,s{,} 10.2k)}
+\end{axis}
+\end{tikzpicture}

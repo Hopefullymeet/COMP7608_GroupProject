@@ -1,0 +1,340 @@
+{
+  "judge": "Codex assistant",
+  "human_checked": 0,
+  "core_rule": "Credit when all reference answer elements are conveyed. Additional prose is outside this narrow metric.",
+  "evidence_rule": "First cited sentence in round 1 per paper. Each material qualifier must be supported by the combined quoted excerpts.",
+  "anchor_checks": {
+    "sentences": 270,
+    "cited": 245,
+    "all_anchors_valid": 245
+  },
+  "rows": [
+    {
+      "case_id": "fid_qa_001",
+      "repeat": 2,
+      "task_id": "f7cfee0cf70e43aba02ddc5682b8f607",
+      "core_reference_covered": true
+    },
+    {
+      "case_id": "fid_qa_001",
+      "repeat": 1,
+      "task_id": "5ff7f3f2046d449e90d6a554848cc7f7",
+      "core_reference_covered": true,
+      "sampled_sentence": "在编码器端，每个检索到的段落先与其标题一起与问题拼接，并加入 question:、title:、context: 等特殊标记，然后由编码器独立于其他段落分别编码。",
+      "quotes": [
+        "More precisely, each retrieved passage and its title are concatenated with the question, and processed independently from other passages by the encoder. We add special tokens question:,",
+        "title: and context: before the question, title and text of each passage."
+      ],
+      "full_sentence_supported": true,
+      "rationale": "Core factual details are present in the linked quotations."
+    },
+    {
+      "case_id": "specter_qa_001",
+      "repeat": 2,
+      "task_id": "95c93dcc03e042b7a5c562d88cc97ee8",
+      "core_reference_covered": true
+    },
+    {
+      "case_id": "orqa_qa_001",
+      "repeat": 2,
+      "task_id": "daee1613fef14ca4a0ceab4748f50292",
+      "core_reference_covered": true
+    },
+    {
+      "case_id": "scicite_qa_001",
+      "repeat": 2,
+      "task_id": "c54750080ba2480283fb2dee87dcca00",
+      "core_reference_covered": true
+    },
+    {
+      "case_id": "eraser_qa_001",
+      "repeat": 2,
+      "task_id": "4e5d584c2d2b4f1895173ee06c22456b",
+      "core_reference_covered": true
+    },
+    {
+      "case_id": "fever_qa_001",
+      "repeat": 2,
+      "task_id": "19a97001ca1d42bb85229e3e0f9888dc",
+      "core_reference_covered": true
+    },
+    {
+      "case_id": "qasper_qa_001",
+      "repeat": 1,
+      "task_id": "1d97ecba87404dd09ca26cc6274e7007",
+      "core_reference_covered": true,
+      "sampled_sentence": "QASPER 的提问阶段与回答阶段是“解耦”设计的，以保证问题贴近真实阅读需求。",
+      "quotes": [
+        "To ensure that our questions are realistic, we decoupled the question-writing and question-answering phases."
+      ],
+      "full_sentence_supported": true,
+      "rationale": "Core factual details are present in the linked quotations."
+    },
+    {
+      "case_id": "rarr_qa_001",
+      "repeat": 1,
+      "task_id": "48ca36ba08834d3ca8ff8faa7a848ba6",
+      "core_reference_covered": true,
+      "sampled_sentence": "RARR 的核心思路是：在语言模型生成文本之后，先做检索研究（research），再修订文本，使其与检索到的证据一致，同时尽量保留原文的风格、结构等属性。",
+      "quotes": [
+        "after generating text with the LM, RARR does research to retrieve relevant evidence, and then revises the text to make it consistent with the evidence while preserving qualities like",
+        "style or structure, enabling the revised text to be seamlessly used in place of the original."
+      ],
+      "full_sentence_supported": true,
+      "rationale": "Core factual details are present in the linked quotations."
+    },
+    {
+      "case_id": "scibert_qa_001",
+      "repeat": 2,
+      "task_id": "86b94419b071439589aeac2a610df84d",
+      "core_reference_covered": true
+    },
+    {
+      "case_id": "alce_qa_001",
+      "repeat": 2,
+      "task_id": "15b9673453204581805633967b428426",
+      "core_reference_covered": true
+    },
+    {
+      "case_id": "s2orc_qa_001",
+      "repeat": 1,
+      "task_id": "3ce47e40357046118797719260a0cd2d",
+      "core_reference_covered": true,
+      "sampled_sentence": "其中，被识别为开放获取状态的810万篇论文提供了从PDF提取的结构化、机器可读全文。",
+      "quotes": [
+        "we release structured, machinereadable full text extracted from PDFs for 8.1M papers which we’ve identified as having open access status"
+      ],
+      "full_sentence_supported": true,
+      "rationale": "Core factual details are present in the linked quotations."
+    },
+    {
+      "case_id": "alce_qa_001",
+      "repeat": 1,
+      "task_id": "88d53e271fdc4da1847da323dde690db",
+      "core_reference_covered": true,
+      "sampled_sentence": "ALCE's automatic metrics evaluate generation along three dimensions: fluency, correctness, and citation quality.",
+      "quotes": [
+        "We design automatic evaluation methods in three dimensions: fluency, correctness, and citation quality."
+      ],
+      "full_sentence_supported": true,
+      "rationale": "Core factual details are present in the linked quotations."
+    },
+    {
+      "case_id": "drqa_qa_001",
+      "repeat": 1,
+      "task_id": "6aec86aff9d14c488cb5e0757756776b",
+      "core_reference_covered": true,
+      "sampled_sentence": "DrQA 由两个组件构成：用于检索相关文章的 Document Retriever 模块，以及用于从单篇文档或少量文档中抽取答案的机器阅读理解模型 Document Reader。",
+      "quotes": [
+        "In the following we describe our system DrQA for MRS which consists of two components: (1) the Document Retriever module for finding relevant articles and (2) a machine comprehension model, Document Reader, for extracting answers from a single document or a small collection of documents."
+      ],
+      "full_sentence_supported": true,
+      "rationale": "Core factual details are present in the linked quotations."
+    },
+    {
+      "case_id": "scitldr_qa_001",
+      "repeat": 2,
+      "task_id": "7cf2d10d96df4eea9d4906b43efe538c",
+      "core_reference_covered": true
+    },
+    {
+      "case_id": "vitaminc_qa_001",
+      "repeat": 1,
+      "task_id": "f01300a3ecab4b3c9f17b522d93e1c58",
+      "core_reference_covered": true,
+      "sampled_sentence": "这种 contrastive pair 是通过成对呈献同一句子修订前（s^{t-1}）与修订后（s^t）两个版本构造的，即形成 claim 与两版 evidence 组成的对比三元组。",
+      "quotes": [
+        "In our setting, we have claims paired with revisions such that rel(ci , st−1 ) 6= rel(ci , st ), creating contrastive triplets.",
+        "V ITAMIN C matches it with two different contexts (before and after the presented revision), that can either support or refute that claim."
+      ],
+      "full_sentence_supported": true,
+      "rationale": "Core factual details are present in the linked quotations."
+    },
+    {
+      "case_id": "s2orc_qa_001",
+      "repeat": 2,
+      "task_id": "535a659375fb44cc861424eb45b30601",
+      "core_reference_covered": true
+    },
+    {
+      "case_id": "scibert_qa_001",
+      "repeat": 1,
+      "task_id": "5c6950675d474099ba9d90e23f535682",
+      "core_reference_covered": true,
+      "sampled_sentence": "SciBERT 的模型架构与 BERT 完全相同，区别只在于预训练所用的文本来自科学文献。",
+      "quotes": [
+        "S CI B ERT follows the same architecture as B ERT but is instead pretrained on scientific text."
+      ],
+      "full_sentence_supported": true,
+      "rationale": "Core factual details are present in the linked quotations."
+    },
+    {
+      "case_id": "fever2_qa_001",
+      "repeat": 2,
+      "task_id": "3a0d334415e74d6b8820da1b11d42b1a",
+      "core_reference_covered": true
+    },
+    {
+      "case_id": "scitldr_qa_001",
+      "repeat": 1,
+      "task_id": "caebfb64fa9545849caa2704def20d34",
+      "core_reference_covered": true,
+      "sampled_sentence": null,
+      "quotes": [],
+      "full_sentence_supported": null,
+      "rationale": "No cited sentence available."
+    },
+    {
+      "case_id": "dpr_qa_001",
+      "repeat": 1,
+      "task_id": "cd8461e53967428ba1d734be93b846c2",
+      "core_reference_covered": true,
+      "sampled_sentence": "DPR 采用双编码器（dual-encoder）框架：分别用独立的编码器 EP(·) 和 EQ(·) 处理段落与问题，二者的输出用于计算相似度。",
+      "quotes": [
+        "Our dense passage retriever (DPR) uses a dense encoder EP (·) which maps any text passage to a ddimensional real-valued vectors and builds an index for all the M passages that we will use for retrieval.",
+        "At run-time, DPR applies a different encoder EQ (·) that maps the input question to a d-dimensional vector, and retrieves k passages of which vectors are the closest to the question vector."
+      ],
+      "full_sentence_supported": true,
+      "rationale": "Core factual details are present in the linked quotations."
+    },
+    {
+      "case_id": "scicite_qa_001",
+      "repeat": 1,
+      "task_id": "53a152de50b94b6cbd11ed302f687903",
+      "core_reference_covered": true,
+      "sampled_sentence": "论文提出两个结构支架（structural scaffolds），即两个辅助任务：预测引用所在章节的标题（section title），以及预测一个句子是否需要引用（citation worthiness）。",
+      "quotes": [
+        "we propose two auxiliary tasks as structural scaffolds to improve citation intent prediction:1 (1) predicting the section title in which the citation occurs and (2) predicting whether a sentence needs a citation."
+      ],
+      "full_sentence_supported": true,
+      "rationale": "Core factual details are present in the linked quotations."
+    },
+    {
+      "case_id": "qasper_qa_001",
+      "repeat": 2,
+      "task_id": "7cabb244b83342019e2f9cdd3b16da56",
+      "core_reference_covered": true
+    },
+    {
+      "case_id": "orqa_qa_001",
+      "repeat": 1,
+      "task_id": "ab5fc615033544e8bd2db31baf126223",
+      "core_reference_covered": true,
+      "sampled_sentence": "ORQA 的检索器使用逆完形填空任务（Inverse Cloze Task，ICT）进行无监督预训练。",
+      "quotes": [
+        "we propose to pre-train our retrieval module with an Inverse Cloze Task"
+      ],
+      "full_sentence_supported": false,
+      "rationale": "The quoted passage establishes ICT pretraining, but does not describe it as unsupervised."
+    },
+    {
+      "case_id": "scifact_qa_001",
+      "repeat": 1,
+      "task_id": "e3810a843c5241e1bd4d465686415aeb",
+      "core_reference_covered": true,
+      "sampled_sentence": "SciFact 中与专家撰写的科学论断配对的材料是摘要，而不是整篇文章：数据集包含 1,409 条科学论断，并对照由 5,183 篇摘要组成的语料进行验证。",
+      "quotes": [
+        "The S CI FACT dataset consists of 1,409 scientific claims3 verified against a corpus of 5,183 abstracts."
+      ],
+      "full_sentence_supported": false,
+      "rationale": "The quote establishes the counts and abstract unit, but does not establish expert authorship."
+    },
+    {
+      "case_id": "rarr_qa_001",
+      "repeat": 2,
+      "task_id": "ac82d43b508248bbbdeebd946f43f633",
+      "core_reference_covered": true
+    },
+    {
+      "case_id": "vitaminc_qa_001",
+      "repeat": 2,
+      "task_id": "339d63696cb5409aa6705eb5ca93b18e",
+      "core_reference_covered": true
+    },
+    {
+      "case_id": "dpr_qa_001",
+      "repeat": 2,
+      "task_id": "64ee60a1d76049e4a78920f462096390",
+      "core_reference_covered": true
+    },
+    {
+      "case_id": "eraser_qa_001",
+      "repeat": 1,
+      "task_id": "9b988d18de164a68a0638ae4731556ac",
+      "core_reference_covered": true,
+      "sampled_sentence": "是的，ERASER 明确区分两类评估：与人类标注 rationale 的一致性（agreement），以及对模型预测的忠实性（faithfulness）。",
+      "quotes": [
+        "Broadly, this includes measures of agreement with human-provided rationales, and assessments of faithfulness. The latter aim to capture the extent to which rationales provided by a model in fact informed its predictions."
+      ],
+      "full_sentence_supported": true,
+      "rationale": "Core factual details are present in the linked quotations."
+    },
+    {
+      "case_id": "fever_qa_001",
+      "repeat": 1,
+      "task_id": "81d57f58f4604320a4b1a79dd04fe8f3",
+      "core_reference_covered": true,
+      "sampled_sentence": "The sentence pool came from the June 2017 Wikipedia dump: about 5,000 'most accessed pages' plus the pages hyperlinked from them were used.",
+      "quotes": [
+        "These consisted of 5,000 from a Wikipedia ‘most accessed pages’ list and the pages hyperlinked from them."
+      ],
+      "full_sentence_supported": false,
+      "rationale": "The quote establishes the sample of pages and links but omits the June 2017 dump date."
+    },
+    {
+      "case_id": "multifc_qa_001",
+      "repeat": 1,
+      "task_id": "473ae7f8518b4d3fb0d6db93f8eb55d1",
+      "core_reference_covered": true,
+      "sampled_sentence": "MultiFC的声明采集自26个英文事实核查网站。",
+      "quotes": [
+        "It is collected from 26 fact checking websites in English, paired with textual sources and rich metadata, and labelled for veracity by human expert journalists."
+      ],
+      "full_sentence_supported": true,
+      "rationale": "Core factual details are present in the linked quotations."
+    },
+    {
+      "case_id": "drqa_qa_001",
+      "repeat": 2,
+      "task_id": "0415eadfd5df4aefa9835d91b8a45a86",
+      "core_reference_covered": true
+    },
+    {
+      "case_id": "fever2_qa_001",
+      "repeat": 1,
+      "task_id": "e98ab0bc38804ab89e4227020d6f81e9",
+      "core_reference_covered": true,
+      "sampled_sentence": "FEVER2.0 共享任务分为三个阶段：构建（Build-It）、攻击（Break-It）和修复（Fix-It）。",
+      "quotes": [
+        "In what follows we describe the three phases of FEVER2.0 in more detail:"
+      ],
+      "full_sentence_supported": false,
+      "rationale": "The quote mentions three phases but does not identify their names."
+    },
+    {
+      "case_id": "scifact_qa_001",
+      "repeat": 2,
+      "task_id": "1686df3f5a504c429435e62e25c6445b",
+      "core_reference_covered": true
+    },
+    {
+      "case_id": "specter_qa_001",
+      "repeat": 1,
+      "task_id": "9cdad2dd70ce4e2a8274aee19877bfad",
+      "core_reference_covered": true,
+      "sampled_sentence": "No. SPECTER does not require citation information when embedding a paper at inference time.",
+      "quotes": [
+        "We note that for inference, S PECTER requires only the title and abstract of the given input paper; the model does not need any citation information about the input paper.",
+        "Unlike many prior works, at inference time, our model does not require any citation information."
+      ],
+      "full_sentence_supported": true,
+      "rationale": "Core factual details are present in the linked quotations."
+    },
+    {
+      "case_id": "multifc_qa_001",
+      "repeat": 2,
+      "task_id": "b12405f4b5d64a50ac6651293788a626",
+      "core_reference_covered": true
+    }
+  ]
+}

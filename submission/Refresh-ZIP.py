@@ -1,4 +1,4 @@
-"""Rebuild PaperTrace.zip from the curated submission folder. Run with Python 3."""
+"""Rebuild [Group 52] PaperTrace.zip from the curated submission folder."""
 from pathlib import Path
 import stat
 import subprocess
@@ -7,7 +7,8 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 HERE = Path(__file__).resolve().parent
 SOURCE = HERE / "PaperTrace"
-ZIP = HERE / "PaperTrace.zip"
+ZIP = HERE / "[Group 52] PaperTrace.zip"
+REPORT = HERE / "[Group 52] PaperTrace Report.pdf"
 REVISION = "f84aee37d85428f79a55146f000284a73c6d4d27"
 LIMIT = 90_000_000
 
@@ -24,6 +25,12 @@ def files():
     names.update(("README.md", "AI-use.md", "Build-Windows.cmd", "Prepare-Windows.ps1", "Build-macOS.command", "build.py",
                   "evaluation/run.py", "evaluation/cases.json", "evaluation/results.json",
                   "evaluation/live_traces.json"))
+    names.discard("backend/evaluate_synthesis.py")
+    names.add("backend/worker_rpc.py")
+    experiments = SOURCE / "evaluation/experiments"
+    for pattern in ("*.py", "README.md", "warm-wiki/*.py", "warm-wiki/design.json",
+                    "recorded/*.jsonl", "recorded/*.csv", "recorded/*.json", "recorded/wiki/*.jsonl"):
+        names.update(p.relative_to(SOURCE).as_posix() for p in experiments.glob(pattern))
     names.update(("USER_GUIDE.pdf", "docs/user-guide/USER_GUIDE.tex"))
     names.update(p.relative_to(SOURCE).as_posix() for p in (SOURCE / "docs/user-guide/figures").glob("*.png"))
     names.update(p.relative_to(SOURCE).as_posix() for p in (SOURCE / "prompts").rglob("*")
@@ -32,17 +39,19 @@ def files():
 
 
 def main():
-    names = files()
-    size = sum((SOURCE / name).stat().st_size for name in names)
+    entries = {f"PaperTrace/{name}": SOURCE / name for name in files()}
+    entries[f"PaperTrace/{REPORT.name}"] = REPORT
+    entries[REPORT.name] = REPORT
+    size = sum(path.stat().st_size for path in entries.values())
     if size > LIMIT:
         raise ValueError(f"Source files exceed the 90 MB limit: {size:,} bytes")
     with NamedTemporaryFile(dir=HERE, suffix=".zip.tmp", delete=False) as temp:
         candidate = Path(temp.name)
     try:
         with ZipFile(candidate, "w", compression=ZIP_DEFLATED, compresslevel=9) as archive:
-            for name in names:
-                data = (SOURCE / name).read_bytes()
-                info = ZipInfo("PaperTrace/" + name)
+            for name, path in entries.items():
+                data = path.read_bytes()
+                info = ZipInfo(name)
                 info.create_system = 3
                 mode = 0o755 if name.endswith((".command", ".sh")) else 0o644
                 info.external_attr = (stat.S_IFREG | mode) << 16
@@ -55,7 +64,7 @@ def main():
         candidate.replace(ZIP)
     finally:
         candidate.unlink(missing_ok=True)
-    print(f"{ZIP.name} | {len(names)} files | {ZIP.stat().st_size:,} bytes | source {size:,} bytes")
+    print(f"{ZIP.name} | {len(entries)} files | {ZIP.stat().st_size:,} bytes | uncompressed {size:,} bytes")
 
 
 if __name__ == "__main__":

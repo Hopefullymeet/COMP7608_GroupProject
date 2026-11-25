@@ -14,6 +14,5 @@
     "comparison": {"left": {"paper_id": null, "task": null, "dataset_split": null, "metric": null, "settings": null, "evidence_ids": []}, "right": {"paper_id": null, "task": null, "dataset_split": null, "metric": null, "settings": null, "evidence_ids": []}, "directly_comparable": null, "reason": null}
   },
   "review_status": "template",
-  "annotations": [],
-  "adjudication": null
+  "annotations": []
 }

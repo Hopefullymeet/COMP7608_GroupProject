@@ -5,6 +5,7 @@ PaperTrace 是面向论文阅读、证据追踪和写作的 Agent 平台，内�
 - [桌面启动与服务配置](backend/README.md)
 - [前端联调交接](docs/product-plan/Backend_Settings_Handoff_ZH.md)
 - [第三方来源与课程交付范围](docs/third-party/README.md)
+- [最终报告评估与复算](evaluation/experiments/README.md)
 - [项目进展](PROGRESS.md)
 
 HKU COMP7608B，Group 52。

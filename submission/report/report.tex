@@ -13,18 +13,34 @@
 \newcolumntype{Y}{>{\raggedright\arraybackslash}X}
 \newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
 \usepackage{graphicx}
+\usepackage{float}
 \usepackage{amsfonts}
 \usepackage{microtype}
 \usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{fit,arrows.meta,positioning,backgrounds}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+% Data-figure palette, matching the architecture diagram.
+\definecolor{ptBlue}{HTML}{3B6EA5}
+\definecolor{ptPale}{HTML}{AEB8C6}
+\definecolor{ptRose}{HTML}{B5525A}
+\definecolor{ptOrange}{HTML}{C8742F}
+\definecolor{ptGrid}{HTML}{E4E4E0}
 \usepackage{enumitem}
 \usepackage[strings,nohyphen]{underscore}
 \setcitestyle{numbers,square,comma}
 \setlist{nosep,leftmargin=*}
 \hypersetup{hidelinks}
-\renewcommand{\arraystretch}{1.25}
+\renewcommand{\arraystretch}{1.20}
 
-% Red markers for material the group still has to supply. Search for "TODO" before submitting.
-\newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
+% Keep page-height adjustments from stretching the gaps around figures and tables.
+\raggedbottom
+\setlength{\textfloatsep}{10pt plus 2pt minus 2pt}
+\setlength{\intextsep}{8pt plus 2pt minus 2pt}
+\setlength{\floatsep}{8pt plus 2pt minus 2pt}
+% Place floats between paragraphs or at page bottoms so continuations stay at the top.
+
 % Code names never break with a hyphen.
 \newcommand{\code}[1]{{\ttfamily\small\hyphenchar\font=-1\relax #1}}
 % Issue codes inside tables.
@@ -37,9 +53,21 @@
 \title{PaperTrace: A Research Assistant Agent}
 
 \author{
-  Group 52\\
-  Gong Xiangwei (3036791411) \quad Hou Jiachen (3036808044)\\
-  Ning Ziyang (3036790431) \quad Wang Yao (3036806785)
+  Gong Xiangwei\\
+  Student ID 3036791411\\
+  \texttt{u3679141@connect.hku.hk}
+  \And
+  Hou Jiachen\\
+  Student ID 3036808044\\
+  \texttt{u3680804@connect.hku.hk}
+  \AND
+  Ning Ziyang\\
+  Student ID 3036790431\\
+  \texttt{u3679043@connect.hku.hk}
+  \And
+  Wang Yao\\
+  Student ID 3036806785\\
+  \texttt{u3680678@connect.hku.hk}
 }
 
 \begin{document}
@@ -47,8 +75,53 @@
 \maketitle
 \nolinenumbers
 
-\section{Users, scope and what changed since the proposal}
+\begin{abstract}
+PaperTrace is a desktop research assistant for students and researchers who work with a small set of
+papers they have chosen. A tool-calling agent searches and reads the user's PDFs within a confirmed
+scope and a fixed budget, and every sentence it writes either links to a verbatim passage it has read
+or states that the evidence is missing. The same loop supports question answering, paper comparison
+and checking the citations in the user's own manuscript. We describe the workflow, the agent's
+decisions and stopping rules, and how failures are detected and reported, using 28 tasks from our own
+use of the Windows build with \texttt{deepseek-flash}. In these runs, cited answers to full-text
+questions took 12--38\,s, and the comparison of two papers filled all ten cells in 38\,s after a fix
+described in Section~\ref{sec:reliability}. We also built a test collection of 18 papers and 84
+annotated tasks and ran it twice through the desktop worker. Answers covered the reference in 36 of
+36 reading attempts, all 245 cited sentences resolved to verbatim quotes, citation labels matched the
+reference in 31 and 34 of 39 checks, and no contradicted claim was judged supported. A typical
+reading question cost about \$0.004. Against a fixed-retrieval RAG baseline with the same prompt, the
+agent matched more citation labels (74 vs 72 of 78) and gave one wrong verdict against six, but took
+more than twice as long. With a Wiki saved in an earlier session,
+PaperTrace recovered the open question in 12 of 12 new sessions and answered it with a supporting
+quote in 6; without the Wiki it could not recover it at all.
+\end{abstract}
+
+\section{Introduction and proposal continuity}
 \label{sec:scope}
+
+Language models can summarise a paper in seconds, but their citations are often wrong: an answer may
+cite a source that does not support it, or support only part of it \citep{alce}. For a student writing
+a related-work section, an unsupported citation costs more time than no answer, because every claim
+has to be checked by hand. PaperTrace is an agent that answers questions about papers the user has
+chosen, compares them and checks the citations in the user's own manuscript. It decides what to
+search and read, in the plan--act--observe style of ReAct \citep{react}, but it may only cite text it
+has actually read, and it reports a gap when the evidence is missing.
+
+\begin{samepage}
+This report makes three contributions.
+\begin{itemize}
+  \item A desktop agent whose answers are checked before they are shown: every quote must occur
+  verbatim in a passage read during the task, within a scope and budget the user confirmed
+  (Section~\ref{sec:design}).
+  \item An account of how the agent behaves on real tasks, including nine failure situations seen in
+  our own use or injected in a replay, and how each is detected and reported (Section~\ref{sec:reliability}).
+  \item A test collection of 18 papers and 84 annotated tasks, with two live runs, a comparison against
+  a fixed-retrieval RAG baseline, a cross-session test of the Wiki, and cost and latency measurements
+  (Sections~\ref{sec:nfr} and~\ref{sec:evaluation}).
+\end{itemize}
+\end{samepage}
+The rest of this section describes the users, the requirements we kept from the proposal and what
+changed. Section~\ref{sec:limits} discusses limitations and future work, and
+Section~\ref{sec:contrib} lists each member's contribution and the code and data we reused.
 
 \paragraph{Users and needs.}
 PaperTrace is for students and researchers who work from a small set of papers they have chosen
@@ -72,12 +145,15 @@ The submission is a desktop application (Windows and macOS, Tauri + React) with 
 and a Node agent loop. Users create a topic, import PDFs or find papers through OpenAlex, then work in
 five views: \emph{Read \& Ask} (cited question answering with a PDF reader), \emph{Compare}, a
 per-topic \emph{Wiki}, \emph{Citation check} for their own manuscript PDF, and \emph{Library}.
+In discovery, the user marks each OpenAlex candidate as \emph{add}, \emph{hold} or \emph{exclude};
+refining the search runs it again and applies these choices, so excluded papers stay out of the
+candidate list, held papers stay held and papers already in the topic are marked as added.
 Figure~\ref{fig:reader} shows Read \& Ask with a full paper open. The submitted source is commit
 \code{f84aee37} plus the comparison fix of 25 November described in Section~\ref{sec:reliability}.
 
-\begin{figure}[t]
+\begin{figure}[H]
   \centering
-  \includegraphics[width=\linewidth]{figures/reader.png}
+  \includegraphics[width=0.95\linewidth]{figures/reader.png}
   \caption{Read \& Ask in the Windows client. The full 12-page QASPER paper \citep{qasper} is open in
   the reader on the right; numbered sources in an answer open the cited sentence on its page.}
   \label{fig:reader}
@@ -88,7 +164,7 @@ Table~\ref{tab:continuity} compares the proposal with the submission. The object
 Most changes narrowed the scope so that the reading and citation workflows could be finished and tested
 in the desktop client.
 
-\begin{table}[t]
+\begin{table}[!hbp]
   \caption{Proposal versus submission. Details of the partial items are in
   Sections~\ref{sec:reliability} and~\ref{sec:evaluation}.}
   \label{tab:continuity}
@@ -97,7 +173,7 @@ in the desktop client.
     \toprule
     Area & Proposed & Delivered & Status \\
     \midrule
-    Discovery & Scholar search; agent revises queries & One OpenAlex search; agent helps user find better results & Done \\ \addlinespace[4pt]
+    Discovery & Scholar search; agent revises queries & OpenAlex search; refinement follows the user's add, hold and exclude choices & Done (changed) \\ \addlinespace[4pt]
     Evidence Q\&A & Plan--act--observe loop over passages & Tool-calling loop with verified quotes & Done \\ \addlinespace[4pt]
     Retrieval & Keyword and embedding search & BM25 for text; embeddings for figures only & Done (changed) \\ \addlinespace[4pt]
     Comparison & Methods, data, metrics, settings & Dimension table; each cell cites its own paper & Done \\ \addlinespace[4pt]
@@ -105,7 +181,7 @@ in the desktop client.
     Citation audit & Five labels, separate judging call & Four labels plus ``could not check'' & Done \\ \addlinespace[4pt]
     Independent judge & Jev as optional provider & Optional reviewer endpoint, off by default & Done (changed) \\ \addlinespace[4pt]
     Wiki & Paper cards & Topic Wiki used as task memory & Done (changed) \\ \addlinespace[4pt]
-    Evaluation & RAG baseline, two ablations, human labels & Conditions built; live run and human check pending \todo{update row after the live run} & Partial \\
+    Evaluation & RAG baseline, two ablations, human labels & RAG baseline and cross-session Wiki test; no ablation of the independent checker & Partial \\
     \bottomrule
   \end{tabularx}
 \end{table}
@@ -114,9 +190,11 @@ in the desktop client.
 \label{sec:design}
 
 \subsection{Task lifecycle}
-Every model-backed action is a \emph{task} with a kind (\code{reading\_qa}, \code{paper\_comparison},
-\code{citation\_audit}, \code{citation\_suggest}, \code{discovery}, \ldots). A task goes through four
-stages, all handled by the worker in \code{backend/papertrace.py}:
+Figure~\ref{fig:architecture} shows the main components. Every model-backed action is a \emph{task}
+with a kind (\code{reading\_qa}, \code{paper\_comparison}, \code{citation\_audit},
+\code{citation\_suggest}, \code{discovery}, \ldots). A task goes through four stages, all handled by
+the worker in \code{backend/papertrace.py}:
+
 \begin{enumerate}
   \item \textbf{Prepare.} \code{task.prepare} resolves the selected papers and their source versions and
   returns a confirmation record that lists what will be sent and to which endpoint (``transfers'').
@@ -131,12 +209,24 @@ stages, all handled by the worker in \code{backend/papertrace.py}:
   that point to a passage ID, page and quote.
 \end{enumerate}
 
+\begin{figure}[H]
+  \centering
+  \input{figures/architecture.tex}
+  \caption{PaperTrace architecture. The client sends a request; the worker prepares it and waits for
+  the user to approve what will be sent. During \emph{Run}, the Node agent loop proposes actions and the
+  Python \code{ModelAgent} executes them: model steps go to the provider, tool calls read the local
+  passage index, and every answer passes the checks before its anchors are saved. Discovery calls
+  OpenAlex directly, without the agent loop.}
+  \label{fig:architecture}
+\end{figure}
+
 \subsection{The agent loop and its decisions}
 The loop is a trimmed build of the DeepSeek Harness \code{AgentLoop} \citep{dsh}, bundled as
 \code{backend/engine/core.mjs} and driven from Python over standard input and output
 (\code{agent\_host.py}). Python keeps control of tools, credentials and budgets: the Node side proposes
 a model step or a tool call, and \code{ModelAgent.run} (\code{model\_agent.py:661}) executes it.
 
+\begin{samepage}
 For a full-text question, \code{run\_research} (line 580) first reads a deterministic set of passages
 that match the question (\code{ResearchTools.initial\_readings}) and puts them in the prompt. The model
 then decides, step by step:
@@ -147,13 +237,14 @@ then decides, step by step:
   (\code{wiki\_search});
   \item when to stop reading and answer, and which claims to leave with an empty evidence list.
 \end{itemize}
+\end{samepage}
 The loop follows the ReAct pattern \citep{react}. What the model cannot decide is the scope: tools only
 return passages from the confirmed source versions, and any other ID is rejected as ``outside the
 confirmed scope'' (line 859).
 
 \paragraph{Stopping rules.}
 A task stops when the model returns a final JSON answer or when one of these limits is hit:
-a step limit (4 for abstract-only answers, 12 for comparison and synthesis, 16 for full-text reading);
+a step limit (4 for abstract-only answers, 12 for comparison, 16 for full-text reading);
 a tool-call limit (18, or 32--48 for full-text reading, growing with the number of papers);
 a passage budget (36, or 72--144 for full-text reading); and a wall-clock deadline (90, 180 or
 240\,s). In full-text reading and comparison, when the passage or tool budget is reached, the loop
@@ -162,6 +253,21 @@ from passages already read. The task then ends as \code{partial} with \code{TASK
 so the user can see that the answer may be incomplete. A port of the upstream repeat-tool guard (line 231) warns the model after
 3, 5 and 8 identical calls in a row.
 
+\begin{samepage}
+\paragraph{Confirmation and clarification.}
+The agent does not ask the user questions in the middle of a task. Instead, the user is involved at
+three fixed points. Before a task starts, the confirmation shows which papers will be used, whether
+abstract or full text will be sent, and to which endpoint; the user can change the selection or
+cancel. During a conversation, the user can narrow or change the request (``now use only Beta''), and
+the next task runs on the new scope. After a task, every gap is reported rather than filled: claims
+without evidence keep an empty evidence list and are shown as not established, the answer may list
+open follow-up questions (\code{follow\_up} in \code{ANSWER\_LAYOUT}), which the Wiki keeps as open
+questions, and a partial or failed task carries a next action such as \code{attach\_full\_text},
+\code{adjust\_budget} or \code{configure\_service}. One gap remains: an unclear question is answered
+as asked, not sent back for clarification (Section~\ref{sec:limits}).\par
+\end{samepage}
+
+\begin{samepage}
 \paragraph{Grounding check.}
 The model returns sentences with \code{\{id, quote\}} evidence pairs. \code{verified\_reference}
 (line 71) keeps a pair only if the passage was actually read in this task and the quote occurs in its
@@ -170,7 +276,8 @@ citations. If an answer has no valid citation at all, one extra call asks the mo
 the passages already read (\code{resolve\_answer}, line 300). When the optional reviewer is on, claims
 it does not judge \emph{supported} get one bounded reread and rewrite; claims that still fail are
 prefixed with ``The available evidence does not establish this claim'' and lose their citations
-(\code{review\_answer}, line 332).
+(\code{review\_answer}, line 332).\par
+\end{samepage}
 
 \subsection{Model, prompts, data and state}
 \paragraph{Model.} The default provider is DeepSeek's OpenAI-compatible API (\code{deepseek-flash} at
@@ -201,7 +308,7 @@ papers in the topic mention converting natural language into robot commands. Sev
 selected; five had full text, including the robot command-parsing papers by Matuszek et al., Tellex et
 al.\ and Chen and Mooney.
 
-\begin{table}[t]
+\begin{table}[!hbp]
   \caption{Trace of task \code{9103ec8e} (37.1\,s, \code{deepseek-flash}), taken from the stored
   tool log. All search queries were written by the model.}
   \label{tab:trace}
@@ -230,13 +337,15 @@ later step is a call that \code{execute\_tool} runs on the model's behalf. At st
 \code{ResearchTools.read} returned \code{limit\_reached}, so the loop switched to
 \code{final\_answer} and the task ended with \code{TASK\_BUDGET\_EXHAUSTED}.
 
+\begin{samepage}
 The answer had six sentences, each with at least one verified anchor. It said yes, then summarised the
 three robot papers: Matuszek et al.\ parse commands into a robot control language and run the parsed
 commands on a simulated robot; Tellex et al.'s G3 model maps commands to executable plans; Chen and
 Mooney translate navigation instructions into formal plans. The last sentence stated that
 \emph{Deep Learning applied to NLP} only lists NLP tasks on page~1 and does not discuss robot
 commands. The search terms show the model moving from the method (steps 2--5) to the reported results
-(steps 9--11) before the budget closed retrieval.
+(steps 9--11) before the budget closed retrieval.\par
+\end{samepage}
 
 \subsection{Design choices and trade-offs}
 \begin{itemize}
@@ -260,7 +369,7 @@ malformed model output into the real worker, and the failures that occurred duri
 desktop build. Table~\ref{tab:failures} lists the situations, with counts from the 28 tasks recorded
 in one portable workspace on 24--25 November.
 
-\begin{table}[t]
+\begin{table}[!hbp]
   \caption{Failure situations. Counts $n$ are from \code{live\_traces.json} (28 tasks); ``+1'' is the
   replay case. The issue code shown to the client is given under each situation.}
   \label{tab:failures}
@@ -295,12 +404,9 @@ succeeded, giving a \emph{partial} answer with six cited sentences in 38.1\,s. T
 Both searched for methods, data splits, metrics and baselines, called \code{paper\_refs} (no citation
 link between the two papers) and \code{wiki\_search} (empty), then failed at the final output. The
 stored table had every cell set to ``No source passage was established''. Two causes were visible in
-the code: the comparison prompt asked for a full related-work outline \emph{and} the dimension cells in
-one large JSON object, and the tool-free recovery turn existed only for reading tasks, so an invalid
-comparison answer had no second chance.
+the code: the comparison prompt required excessive structured output, and a malformed final answer ended the task without recovery.
 
-The fix (\code{synthesize} and \code{run} in \code{model\_agent.py}) gives comparisons their own
-prompt that asks only for cells, one per paper and dimension. Each returned cell is checked: the
+The fix gives comparison tasks a dedicated prompt that asks only for cells, one per paper and dimension. Each returned cell is checked: the
 dimension and paper must be among those requested, and every quote must come from a passage of
 \emph{that} paper that was read in the task, 12 to 700 characters long. Cells that fail are dropped;
 a cell may stay without evidence only if its status is \emph{missing}. Invalid or truncated output, or a
@@ -333,10 +439,13 @@ dispatch error, is in the submitted version.
 \label{sec:nfr}
 \paragraph{Latency.} Our target was that a cited answer to a single question arrives within one minute
 on a normal connection, and that progress is visible while the agent works. Table~\ref{tab:latency}
-gives the observed wall-clock times. These are from manual use, not a controlled benchmark.
+gives wall-clock times from two sources: our manual use, and the medians of the pilot evaluation
+(Section~\ref{sec:evaluation}), where four workers ran in parallel against the same provider.
 
-\begin{table}[h]
-  \caption{Observed task times (seconds) from \code{live\_traces.json}.}
+\begin{table}[!hbp]
+  \caption{Observed task times in seconds. Upper block: individual tasks from manual use
+  (\code{live\_traces.json}). Lower block: medians from the pilot evaluation runs. Times start after
+  confirmation and exclude PDF import.}
   \label{tab:latency}
   \small
   \centering
@@ -350,6 +459,10 @@ gives the observed wall-clock times. These are from manual use, not a controlled
     Comparison before the fix, 13--14 steps (failed at final output) & 2 & 42.2, 48.8 \\
     Comparison after the fix, 12 steps, ten cells filled & 1 & 38.3 \\
     Follow-up question on a citation report & 2 & 2.8, 5.4 \\
+    \midrule
+    Pilot reading Q\&A, median & 36 & 14.9 \\
+    Pilot citation check, median & 78 & 9.5 \\
+    Pilot paper comparison, median & 6 & 28.0 \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -359,10 +472,35 @@ bound the worst case; the three interrupted tasks ran for 81--448\,s only becaus
 closed and the tasks were not reclaimed until the next start. Answers stream into the conversation, and
 the ``research activity'' card shows each search query and the passages read.
 
-\paragraph{Cost.} The loop counts model steps, tool calls and input and output tokens for every run
-(\code{usage} in \code{ModelAgent.run}), but the worker does not store these counts with the task.
-We therefore cannot report measured token use or cost. \todo{Record tokens per task during the live
-evaluation (provider console or by persisting \code{usage}) and fill in cost per question.}
+\paragraph{Cost.} The desktop task history does not keep token counts, so we measured cost in the
+pilot evaluation. The evaluation wrapper recorded the provider-reported usage of every primary-model
+request, including retries and requests made in partial tasks; no request lacked usage data.
+Table~\ref{tab:cost} gives the mean per attempt. Prices are the published peak rates for
+\code{deepseek-flash} on 25 November 2026: \$0.006, \$0.30 and \$1.20 per million tokens for
+cache-hit input, cache-miss input and output.\footnote{\url{https://api-docs.deepseek.com/quick_start/pricing/}.
+Off-peak prices are half. The estimates are not reconciled against an invoice and exclude hardware and
+human time.} Between 61\% and 74\% of input tokens were cache hits, which keeps the cost low even
+though each comparison sends over 70{,}000 input tokens.
+
+\begin{table}[!hbp]
+  \caption{Mean tokens and estimated cost per attempt in the pilot evaluation (peak prices).}
+  \label{tab:cost}
+  \small
+  \centering
+  \begin{tabular}{@{}lrrrr@{}}
+    \toprule
+    Task & Attempts & Input tokens & Output tokens & Cost (USD) \\
+    \midrule
+    Reading Q\&A & 36 & 15{,}899 & 1{,}677 & 0.0039 \\
+    Citation check & 78 & 12{,}471 & 828 & 0.0025 \\
+    Paper comparison & 6 & 73{,}744 & 2{,}846 & 0.0094 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+We did not set a cost target in advance. At these prices a reading question or citation check costs
+well under one US cent, and a two-paper comparison just under one cent. Comparison is the most
+expensive task because it reads both papers on every dimension.
 
 \paragraph{Privacy.} The workspace, PDFs and conversations stay on the user's machine. Before a task
 starts, the confirmation lists which papers and how much of each (abstract or full text) will be sent,
@@ -378,8 +516,14 @@ reopening every PDF.
 
 \section{Evaluation}
 \label{sec:evaluation}
+We first describe the test collection and how we ran and scored it (Section~\ref{sec:eval-setup}),
+then report PaperTrace's results (Section~\ref{sec:eval-results}), compare it with a
+fixed-retrieval baseline and test the Wiki across sessions (Section~\ref{sec:eval-baselines}), and
+finally group the cases by type (Section~\ref{sec:eval-cases}).
 
-\subsection{Test collection and judging rules}
+\subsection{Test collection and protocol}
+\label{sec:eval-setup}
+\begin{samepage}
 We built a test collection of 18 public papers (249 PDF pages) in three topics: retrieval and QA with
 citations (DrQA, ORQA, DPR, FiD, ALCE \citep{alce}, RARR), scientific paper reading (S2ORC, QASPER
 \citep{qasper}, SciCite \citep{scicite}, SciBERT, SPECTER, SciTLDR) and fact checking (FEVER, SciFact,
@@ -387,85 +531,286 @@ VitaminC, MultiFC, ERASER, FEVER~2.0). It contains 84 tasks: 18 reading question
 tasks, 42 citation-check items (18 supported, 18 contradicted, 3 not established, 3 with full text
 withheld), 3 discovery requests and 3 comparisons, plus 14 citation relations between the papers.
 Each task has a reference answer and evidence location; 152 evidence spans were checked word for word
-against the PDFs (\code{data-preparation/validate\_data.py}).
+against the PDFs. Judging rules follow
+\code{data-preparation/review/REVIEW\_RESULTS.md}: support and contradiction need source evidence,
+absence of a mention is not contradiction, and reference answers are kept out of the system's index
+and Wiki. Supported and contradicted variants often share one fact, so the 84 tasks are not 84
+independent examples, and 18 citation-matching tasks still have unjudged candidates.\par
+\end{samepage}
 
-Judging rules follow \code{data-preparation/review/REVIEW\_RESULTS.md}: support and contradiction need
-source evidence; absence of a mention is not contradiction; unjudged candidates are not negatives; and
-reference answers are kept out of the system's index and Wiki. Supported and contradicted variants
-often share one fact, so the 84 tasks are not 84 independent examples. All tasks were source-checked
-with AI assistance; none has been adjudicated by a second human yet, and 18 citation-matching tasks
-still have unjudged candidates.
+We ran the submitted worker with \code{deepseek-flash} on 25 November 2026, default sampling and the
+optional reviewer disabled. The 18 reading questions, the 39 citation checks with a semantic label
+and the 3 comparisons were each run twice in a fresh workspace, through the same \code{task.prepare},
+\code{task.start} and \code{evidence.open} calls that the desktop client uses. The model saw only the
+permitted papers and the task input; the scorer loaded the reference answers separately. A
+comparison request had two papers, three dimensions from the task and a fourth asking whether the
+papers' scores can be compared directly. We score: \emph{core coverage}, whether a reading answer
+conveys every fact in the reference; \emph{citation validity}, whether every cited quote occurs
+verbatim in the selected source version; \emph{evidence support}, whether the quotes behind a
+sentence cover all its qualifiers, judged on the first cited sentence of each paper in run~1;
+\emph{exact label accuracy} for citation checks, with false \emph{supported} labels and the
+\emph{accuracy of given verdicts} (correct labels among checks that were not blocked) reported
+separately; the core content and quote support of each comparison cell; and time and tokens.
+Citation validity and labels are computed by script, the other measures against written criteria.
+Partial and blocked outputs stay in the denominators.
 
-\subsection{Metrics and conditions}
-For each task we score:
-(1) answer correctness against the reference;
-(2) evidence validity: the quote is verbatim, from the selected source version, and supports the claim;
-(3) for citation checks, label accuracy, with the rate of weak or contradicted citations judged
-\emph{supported} reported separately because that error matters most to our users;
-(4) time, tool calls and tokens.
-We compare three conditions that use the same model, papers and prompts and differ only in retrieval
-(\code{mode} in \code{ModelAgent.synthesize}): \textbf{PaperTrace} (agent loop with Wiki leads),
-\textbf{no Wiki} (agent loop, Wiki disabled), and a \textbf{fixed-retrieval RAG baseline} (top 36
-BM25 passages for the question terms, no tool calls; \code{fixed\_search}).
-\code{backend/evaluate\_synthesis.py} already runs the three conditions on a six-paper synthesis set
-(ASQA, ALCE, RARR, Self-RAG \citep{selfrag}, AIS, FActScore); the live run applies the same conditions
-to the test collection. Because we do not fix the sampling temperature, each condition is to be run at
-least twice.
+\subsection{Results on the test collection}
+\label{sec:eval-results}
 
-\subsection{Results}
-\paragraph{Deterministic checks.} The replay in \code{evaluation/run.py} drives the production worker,
-SQLite store and Node loop against a scripted local model. All three cases passed when we reran them on
-25 November: an ordinary question (citation resolves to the matching quote on page~1), a changed request
-restricted to another paper in the same session, and injected malformed output (task stops with
-\code{MODEL\_OUTPUT\_INVALID}, no answer saved). Each case took 0.34--0.47\,s. The corpus validator
-passes on all 18 PDFs, 84 tasks, 14 relations and 152 evidence spans. The eight client contract
-scenarios in \code{tests/baseline} passed against the client mock on \code{main}.
-
-\paragraph{Live-model results.}
-\todo{Fill Table~\ref{tab:results} from the live run: model and date, number of runs, mean and spread.
-Include a human check of at least a sample of the model-judged items and state who checked them.}
-
-\begin{table}[h]
-  \caption{Live-model results on the test collection (\code{deepseek-flash}).}
+\begin{table}[!hbp]
+  \caption{Live results of PaperTrace on the pilot tasks, two runs each. Partial and blocked outputs
+  stay in the denominators.}
   \label{tab:results}
   \small
   \centering
-  \begin{tabular}{@{}lccc@{}}
+  \begin{tabular}{@{}lrr@{}}
     \toprule
-    Metric & PaperTrace & No Wiki & Fixed RAG \\
+    Metric & Run 1 & Run 2 \\
     \midrule
-    Reading Q\&A correctness (18) & \todo{} & \todo{} & \todo{} \\
-    Valid evidence per cited sentence & \todo{} & \todo{} & \todo{} \\
-    Citation-check label accuracy (39) & \todo{} & \todo{} & \todo{} \\
-    Weak citation judged supported & \todo{} & \todo{} & \todo{} \\
-    Median time / tool calls / tokens & \todo{} & \todo{} & \todo{} \\
+    Reading answers covering the core reference & 18/18 & 18/18 \\
+    Citation checks with the exact reference label & 31/39 & 34/39 \\
+    \quad Supported claims labelled \emph{supported} & 16/18 & 18/18 \\
+    \quad Contradicted claims labelled \emph{conflict} & 13/18 & 14/18 \\
+    \quad Not-established claims labelled as such & 2/3 & 2/3 \\
+    Contradicted claims labelled \emph{supported} & 0/18 & 0/18 \\
+    Not-established claims labelled \emph{supported} & 0/3 & 0/3 \\
+    Citation checks that could not run (\emph{blocked}) & 6/39 & 5/39 \\
+    \midrule
+    Comparison cells with a verified source link & 21/24 & 23/24 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\paragraph{Observations from live use.}
-The 28 recorded tasks were exploratory, so we do not score them, but they show where the system is
-weak. Of 19 reading tasks, 3 completed, 4 ended partial, 11 failed and 1 was cancelled. Ten of the
-11 failures came in the first two hours of use; of the last six reading tasks, five returned cited
-answers and one was interrupted by closing the application. When full text was not read, the answer
-sentences were shown as ``evidence not established'' rather than as supported. Both comparisons before
-the fix failed at the final output; the one run after the fix filled all ten cells and cited a quote
-in seven of them. Some answers to very short inputs (the user typed ``1'' and ``2'') still produced
-cited summaries, which suggests the agent does not ask for clarification when a question is unclear.
+\paragraph{Reading and citation checks.} Table~\ref{tab:results} summarises the results. All 36
+reading answers covered the core reference; this is a narrow test that does not score extra detail.
+Of 270 answer sentences, 245 carried citations, and every cited quote resolved verbatim. In the
+evidence-support sample, 13 of 17 cited sentences had quotes that covered every qualifier; the four
+misses each dropped a detail, such as a FEVER quote that supported the sample of pages but not the
+June 2017 dump date. No contradicted or not-established claim was labelled \emph{supported}. Most
+citation-check errors were refusals: 11 of 78 checks were blocked and got no credit, and the only
+wrong verdicts (one \emph{conflict}, one \emph{partial}) were in run~1. The three withheld-source
+fixtures were all blocked without any model request. The two runs differ mainly in how often a check
+is blocked, which moved exact labels from 31 to 34; core coverage and the absence of false
+\emph{supported} labels did not change. Two runs per item show the size of this variation but do not
+support a significance test.
 
-\subsection{Limitations}
+\paragraph{Paper comparison.} The three pairs (DrQA--DPR, SciBERT--SPECTER, FEVER--SciFact) gave 48
+cells over two runs. Run~1 linked a verified source for 21 of 24 cells and run~2 for 23 of 24, and
+every linked quote opened in the correct paper; two tasks completed and four ended \emph{partial}.
+The core content was correct in 41 cells, partly correct in 3 and missing in 4, but the quote
+directly supported the point in only 25; for example, a DrQA cell named a recurrent reader but cited
+only the span-selection rule. Both SciBERT--SPECTER tables warned against comparing headline scores,
+as the reference does, but missed that SPECTER's Table~1 compares the two models on the same
+SciDocs tasks. Median time was 28.0\,s.
+
+\subsection{Comparison with fixed retrieval and the Wiki}
+\label{sec:eval-baselines}
+
+\paragraph{Fixed retrieval.} The baseline answers in one model call with tools disabled. It retrieves
+up to 36 passages from the permitted source with the same FTS5/BM25 index, using the first 12
+distinct words of the question or claim as the query. PaperTrace's research engine and the
+baseline answered the 39 labelled citation checks twice with the same prompt and label set, following
+the protocol of \code{tests/baseline/paper\_eval.py}. Checks defined on a single passage gave both the
+same passage with full-text tools off, and a missing label counts as wrong. Table~\ref{tab:baseline}
+gives the results.
+
+PaperTrace was more accurate and, above all, made far fewer wrong judgments
+(Figure~\ref{fig:engine}a). It matched 74 of 78 labels against 72 and gave one wrong verdict against
+six; its other three misses were invalid outputs that returned no label rather than a wrong one.
+All six errors of fixed retrieval were \emph{not established} for a claim the paper does settle:
+reading only the top BM25 passages, it missed the sentence that decides the claim, which the agent
+found by searching again and rereading. The verdicts PaperTrace gave were right in 74 of 75 cases,
+against 72 of 78. This matters for our users: a missing label asks for a manual look, whereas a wrong
+verdict can go unnoticed in a manuscript. Neither method labelled a contradicted or not-established
+claim as \emph{supported}. Across runs PaperTrace went from 36 to 38 correct, while fixed retrieval
+scored 36 both times.
+
+The extra work cost time rather than tokens (Figure~\ref{fig:engine}b). For most checks PaperTrace
+used about as many tokens as fixed retrieval (median 10.2k against 10.8k) and spent about five more
+seconds on 3.4 model calls instead of one; only a few hard checks, where it kept searching, took
+15--30\,s. With one paper per task, 36 BM25 passages already cover most of what is relevant, so these
+tasks favour fixed retrieval; the agent's advantage should grow on larger topics, which remain
+untested (Section~\ref{sec:limits}).
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}[b]{0.47\linewidth}
+    \centering
+    \input{figures/fig-citation.tex}\\[-2pt]
+    {\small (a) Outcome of each check}
+  \end{minipage}\hfill
+  \begin{minipage}[b]{0.5\linewidth}
+    \centering
+    \input{figures/fig-time-tokens.tex}\\[-2pt]
+    {\small (b) Time and tokens per check}
+  \end{minipage}
+  \caption{PaperTrace's research engine against fixed retrieval on the 39 labelled citation checks,
+  two runs each (78 checks per method). (a) PaperTrace gave one wrong verdict against six. (b) Each
+  point is one check: PaperTrace used a similar number of tokens for most checks and spent the extra
+  time searching and rereading; the points near zero tokens are checks defined on a single passage.}
+  \label{fig:engine}
+\end{figure}
+
+\begin{table}[H]
+  \caption{PaperTrace's research engine and the fixed-retrieval baseline on the 39 labelled citation
+  checks, two runs each. Pairs are run~1 / run~2.}
+  \label{tab:baseline}
+  \small\centering
+  \begin{tabular}{@{}lcc@{}}\toprule
+    Metric & PaperTrace & Fixed RAG \\ \midrule
+    Exact label (of 39) & 36 / 38 & 36 / 36 \\
+    Wrong verdicts (of 78) & 1 & 6 \\
+    No label, invalid output (of 78) & 3 & 0 \\
+    Accuracy of given verdicts & 74/75 (98.7\%) & 72/78 (92.3\%) \\
+    False \emph{supported} labels (of 42) & 0 & 0 \\
+    Median time per check (s) & 8.4 & 3.2 \\
+    Model calls per check & 3.4 & 1 \\
+    Mean input / output tokens & 11{,}562 / 653 & 9{,}500 / 250 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Cross-session Wiki.} The Wiki matters when a user returns to a topic, which a fresh
+single-task workspace cannot show. For six papers (DPR, DrQA, SciBERT, SPECTER, QASPER, SciTLDR), a
+real reading task first saved a cited motivation from the introduction to the Wiki, and the
+evaluation script pinned one open question without its answer, for example ``What margin
+hyperparameter did the authors choose in the triplet loss?'' for SPECTER. Each trial copied this
+saved workspace into a new session and changed only whether the Wiki was given to the model. Each
+paper got a \emph{follow-up} question (``Resume my previous reading of this paper. Which specific
+detail did I leave open for the next session? Identify it, check the paper now, and give the answer
+with a short quotation. If you do not have my earlier note, say so rather than guessing.'') and its
+original reading question as an \emph{independent} control. Every combination ran twice in alternating
+order (48 trials), answers were scored with the condition hidden, and no saved Wiki text contained an
+answer value.
+
+With the Wiki, PaperTrace picked up where the user had stopped: it named the open question in all
+12 follow-ups and answered it correctly in 9, six of them with a supporting quote
+(Figure~\ref{fig:wiki} and Table~\ref{tab:wiki}). Without it, it said in all 12 trials that it had
+no earlier note, as asked. SciBERT and SPECTER had correct answers with supporting quotes in both trials, DrQA and SciTLDR
+in one, and DPR and QASPER in neither. On independent questions the Wiki did not change accuracy and
+was slightly cheaper and faster. Fixed retrieval keeps no state between sessions, so it is in the
+Wiki-off position by design. Because the open question was pinned by the script, the test shows that
+a saved question is carried into a new session, not that the agent chooses good questions to save.
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}{0.62\linewidth}
+    \centering
+    \input{figures/fig-wiki.tex}
+  \end{minipage}
+  \caption{Follow-up questions in a new session, 12 trials per condition. With the topic Wiki,
+  PaperTrace found the open question every time and answered 9 of 12 correctly; without it, no
+  session could recover the question. Fixed retrieval keeps no memory, so it matches the Wiki-off
+  bars by design.}
+  \label{fig:wiki}
+\end{figure}
+
+\begin{table}[H]
+  \caption{Cross-session Wiki test: six papers, two trials per paper and condition (12 per cell).
+  Cost is the mean per trial at peak prices; time is the median.}
+  \label{tab:wiki}
+  \small\centering
+  \begin{tabular}{@{}llcc@{}}\toprule
+    Question & Measure & Wiki on & Wiki off \\ \midrule
+    Follow-up & Names the open question & 12 & 0 \\
+     & Answers it correctly & 9 & 0 \\
+     & Correct, with a supporting quote & 6 & 0 \\
+     & Says the earlier note is missing & 0 & 12 \\
+     & Cost (USD) / time (s) & 0.0016 / 7.7 & 0.0009 / 4.6 \\ \midrule
+    Independent & Core answer correct & 12 & 12 \\
+     & Correct, with a supporting quote & 11 & 10 \\
+     & Cost (USD) / time (s) & 0.0034 / 13.4 & 0.0039 / 15.4 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Case types}
+\label{sec:eval-cases}
+Table~\ref{tab:cases} groups the tested cases by the role they play. Two sources complement the runs
+above. The replay in \code{evaluation/run.py} drives the production worker against a scripted local
+model; its three cases (an ordinary question, a changed request in the same session and injected
+malformed output) passed on 25 November in 0.34--0.41\,s, and the eight client contract scenarios in
+\code{tests/baseline} passed against the client mock. The 28 tasks from our own use
+(Section~\ref{sec:reliability}) are not scored, but they show one gap the test collection misses:
+very short inputs such as ``1'' still produced cited summaries instead of a clarifying question.
+
+\begin{table}[H]
+  \caption{Representative, changed, challenging and failure cases.}
+  \label{tab:cases}
+  \small
+  \begin{tabularx}{\linewidth}{@{}P{2.1cm}YYY@{}}
+    \toprule
+    Type & Cases & What is checked & Outcome \\
+    \midrule
+    Representative & 18 reading questions on methods, data and evaluation, run twice & Core facts and verbatim citations & 36/36 covered; 245/245 cited quotes verbatim \\ \addlinespace[4pt]
+    Changed request & Replay: same session, ``now use only Beta''; a new session that resumes earlier reading & The answer moves to the new scope; the saved open question is found & Replay passed; open question named in 12/12 with the Wiki \\ \addlinespace[4pt]
+    Challenging & 18 contradicted and 3 not-established claims, run twice; comparisons whose scores are not directly comparable & No false \emph{supported}; comparability stated & 0/42 judged supported; both SciBERT--SPECTER tables flagged the scores \\ \addlinespace[4pt]
+    Failure & 3 withheld-source fixtures; injected malformed output; live failures in Table~\ref{tab:failures} & Safe stop and a clear issue code & Blocked with no model request; \code{MODEL\_OUTPUT\_INVALID} with no answer saved \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{Limitations and future work}
+\label{sec:limits}
+The evaluation and our own use point to limitations in three areas: what the evaluation can show, how
+well the evidence supports each claim, and how the agent retrieves and interacts. Each item gives what
+we observed and what we would change.
+
+\subsection{Evaluation}
 \begin{itemize}
-  \item No live-model scores or human adjudication yet; our claims about answer quality rest on
-  examples, not measurements.
-  \item Comparison has one successful live run after the fix, on two papers that share no
-  experiments; we have not yet tested it on papers with directly comparable results.
-  \item Exact quote matching drops valid paraphrased or translated evidence.
-  \item Retrieval is keyword-based; cross-language questions depend on the model choosing the paper's
-  terms.
-  \item Discovery is a single search; the agent does not yet revise queries on its own.
-  \item Token use is not stored, so cost is unmeasured.
-  \item The macOS build of the submitted snapshot and a first install on a clean Windows machine have
-  not been verified.
+  \item \textbf{Small, overlapping test set.} Supported and contradicted variants share facts, and
+  there are only three comparison pairs, so the scores in Table~\ref{tab:results} come from few
+  independent items. \emph{Future work:} add new papers and split development and test cases by paper
+  family, so that prompts are never tuned on the test papers.
+  \item \textbf{Two runs per item.} Two runs show that the results vary (31 and 34 exact citation
+  labels) but are too few to estimate the spread. \emph{Future work:} run five or more repetitions and
+  report means with intervals.
+  \item \textbf{Single-paper tasks favour fixed retrieval.} With one paper per task, 36 BM25 passages
+  cover most of the relevant text; the agent's lead at the engine level was only two labels, and fixed
+  retrieval was more than twice as fast.
+  \emph{Future work:} repeat the comparison on topics with ten or more papers, where one fixed
+  retrieval cannot hold all the relevant passages and the agent's search and reading choices matter.
+  \item \textbf{A small, scripted Wiki test.} The cross-session test used six papers and an open
+  question written by the evaluation script, and only 6 of 12 follow-ups ended with a supported
+  answer. \emph{Future work:} test over real multi-session use, where the agent saves its own open
+  questions, and check why DPR and QASPER follow-ups failed.
+  \item \textbf{One ablation not run.} The proposal also planned a version without independent
+  citation checking; the optional reviewer was off in all runs. \emph{Future work:} run the citation
+  checks with the reviewer on and compare wrong verdicts and cost.
+\end{itemize}
+
+\subsection{Evidence and judgment}
+\begin{itemize}
+  \item \textbf{Quotes that miss a qualifier.} Four of 17 sampled sentences, and 19 of 48 comparison
+  cells, cite a passage that supports only part of the claim. \emph{Future work:} check that numbers,
+  dates and named entities in a sentence also appear in its quotes, and ask the model to reread when
+  they do not.
+  \item \textbf{Blocked checks and invalid outputs.} In the desktop workflow 11 of 78 citation checks
+  were blocked (Table~\ref{tab:results}), and three of the research engine's four misses against the
+  baseline were invalid outputs. \emph{Future work:} record why each check was blocked, and when the
+  agent ends without a valid label, fall back to a fixed retrieval over the cited paper before giving
+  up.
+  \item \textbf{Strict quote matching.} Exact matching drops valid paraphrased or translated evidence.
+  \emph{Future work:} normalise Unicode and hyphenation before matching, and show a translation next to
+  the original quote instead of accepting translated quotes.
+  \item \textbf{Comparisons that miss a valid comparison.} Both SciBERT--SPECTER tables treated all
+  scores as incomparable and missed the shared Table~1. \emph{Future work:} before marking scores as
+  incomparable, search both papers for a table that reports the other model on the same task.
+\end{itemize}
+
+\subsection{Retrieval, interaction and deployment}
+\begin{itemize}
+  \item \textbf{Keyword retrieval.} Cross-language questions depend on the model choosing the paper's
+  terms. \emph{Future work:} add embedding search next to BM25 for text passages, as planned in the
+  proposal.
+  \item \textbf{No clarification for unclear questions.} Very short inputs such as ``1'' are answered
+  as asked. \emph{Future work:} ask one clarifying question when no passage matches the question well.
+  \item \textbf{Cost not visible in the app.} The desktop task history omits token counts.
+  \emph{Future work:} store the \code{usage} that \code{ModelAgent.run} already counts and show it in
+  the trace, so users see the cost of each task.
+  \item \textbf{Untested platforms.} The macOS build of the submitted snapshot and a first install on
+  a clean Windows machine have not been verified. \emph{Future work:} test both on clean machines
+  before the demo.
 \end{itemize}
 
 \section{Contributions and attribution}
@@ -509,17 +854,18 @@ reviewed.
 
 \paragraph{Mocked or unfinished functionality.}
 The browser demo (\code{?mode=contract}) and the client contract tests use fixtures, not a model. The
-replay evaluation uses a scripted local model. The RAG baseline and no-Wiki conditions are implemented
-but have not been run with a live model. The optional reviewer endpoint has not been evaluated.
-Agent-driven discovery query revision and embedding-based text retrieval from the proposal were not
-built.
+replay evaluation uses a scripted local model. The fixed-retrieval baseline and the cross-session Wiki
+test ran with the live model through an evaluation wrapper around the submitted worker; the open
+questions in the Wiki test were written by the evaluation script. The ablation without independent
+citation checking was not run, and the optional reviewer endpoint has not been evaluated.
+Embedding-based text retrieval from the proposal was not built.
 
 \paragraph{AI assistance.}
 We used AI coding assistants for parts of the code, the submission README and user guide, and this
 report (OpenAI Codex; Anthropic Claude Opus 5.5 helped draft this report from the repository and our
-task logs). The declaration and project prompts are in \code{AI-use.md}. \todo{Each member adds the AI
-tools and prompts they used, and any missing records.}
+task logs). The declaration and project prompts are in \code{AI-use.md}.
 
+\clearpage
 \begin{thebibliography}{9}
 
 \bibitem{react}
@@ -537,10 +883,7 @@ Pradeep Dasigi, Kyle Lo, Iz Beltagy, Arman Cohan, Noah A. Smith and Matt Gardner
 \newblock A dataset of information-seeking questions and answers anchored in research papers.
 \newblock In \emph{NAACL}, 2021.
 
-\bibitem{selfrag}
-Akari Asai, Zeqiu Wu, Yizhong Wang, Avirup Sil and Hannaneh Hajishirzi.
-\newblock Self-RAG: Learning to retrieve, generate, and critique through self-reflection.
-\newblock In \emph{ICLR}, 2024.
+
 
 \bibitem{scicite}
 Arman Cohan, Waleed Ammar, Madeleine van Zuylen and Field Cady.
@@ -569,7 +912,7 @@ The settings below apply to all live runs, including the traced tasks.
     \midrule
     Model and endpoint & \code{deepseek-flash}, \code{https://api.deepseek.com}, thinking disabled, provider-default temperature \\
     Output tokens per step & 800 (abstract answers), 5400 (agent steps and final answer), 2400--3200 (repair and review calls) \\
-    Step limit & 4 / 12 / 16 (abstract / comparison and synthesis / full-text reading) \\
+    Step limit & 4 / 12 / 16 (abstract / comparison / full-text reading) \\
     Tool-call limit & 18; full-text reading $\min(48, \max(32, 24 + 2p))$ for $p$ papers \\
     Passage budget & 36; full-text reading $\min(144, \max(72, 16p))$ plus seeded passages \\
     Deadline & 90 / 180 / 240\,s \\
@@ -582,6 +925,7 @@ The settings below apply to all live runs, including the traced tasks.
 \section{Reproducing the checks}
 From the extracted \code{PaperTrace} folder (see \code{README.md} for setup):
 \begin{verbatim}
+python -B -X utf8 evaluation/experiments/report_results.py
 uv run --no-project --managed-python --python 3.12.13 --with pypdf==6.4.0 \
   -- python -X utf8 -B evaluation/run.py --output replay.json
 uv run --no-project --managed-python --python 3.12.13 \

@@ -47,11 +47,8 @@ def main():
             assert set(a.get('evidence_ids',[])) <= ids
             assert a['semantic_label'] in ['supported','contradicted','not_established',None]
             assert (a['semantic_label'] is None)==(a['execution_status']=='blocked')
-        if c['review_status']=='adjudicated':
-            assert len([x for x in c['annotations'] if x.get('annotator_kind')=='human'])>=2 and c['adjudication']
         if c['review_status']=='assistant_source_checked':
             assert any(x.get('annotator_kind')=='ai_assistant' for x in c['annotations'])
-            assert c['adjudication'] is None
     for r in relations:
         assert r['source_paper_id'] in papers and r['target_paper_id'] in papers
         for e in r['evidence']:
@@ -59,7 +56,6 @@ def main():
     report=dict(papers=len(papers),pdf_pages=sum(x['page_count'] for x in papers.values()),
                 cases=len(cases),relations=len(relations),exact_span_checks=spans,
                 task_types=dict(Counter(c['task_type'] for c in cases)),
-                human_adjudicated=sum(c['review_status']=='adjudicated' for c in cases),
                 assistant_source_checked_cases=sum(c['review_status']=='assistant_source_checked' for c in cases),
                 assistant_source_checked_relations=sum(r['review_status']=='assistant_source_checked' for r in relations),
                 status='passed',scope='Data integrity, not semantic accuracy or model performance')

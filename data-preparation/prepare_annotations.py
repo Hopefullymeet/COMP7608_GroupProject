@@ -130,7 +130,7 @@ SPECS = [
 def base(case_id, topic, task, ids, prompt):
     return dict(case_id=case_id, topic=topic, task_type=task, split='pilot', origin='controlled',
                 input=dict(question_or_draft=prompt, allowed_paper_ids=ids, reading_scope='full_papers'),
-                review_status='assistant_draft', annotations=[], adjudication=None)
+                review_status='assistant_draft', annotations=[])
 
 
 def write_jsonl(path, rows):
@@ -142,7 +142,7 @@ def main():
         existing = ROOT/'review'/filename
         if existing.exists():
             rows = [json.loads(line) for line in existing.read_text().splitlines() if line.strip()]
-            if any(row.get('review_status') != 'assistant_draft' or row.get('annotations') or row.get('adjudication') for row in rows):
+            if any(row.get('review_status') != 'assistant_draft' or row.get('annotations') for row in rows):
                 raise SystemExit('Stopped: source or human reviews exist. Do not overwrite reviewed records with generated drafts.')
     cases, evidence_by_paper = [], {}
     for paper, page, section, start, end, question, positive, negative in SPECS:
@@ -217,7 +217,7 @@ def main():
             record = dict(relation_id=f'{source}_cites_{target}', source_paper_id=source, target_paper_id=target,
                 relation_type='cites', citation_confirmed=True, intent_labels=intents,
                 version_status=version_status, evidence=[e] + ([bibliography] if bibliography else []),
-                note=note, review_status='assistant_draft', annotations=[], adjudication=None,
+                note=note, review_status='assistant_draft', annotations=[],
                 verification_basis='Body context and bibliography' if bibliography else 'Body context only; bibliography confirmation pending')
             relations.append(record)
         except ValueError as exc:
@@ -266,7 +266,7 @@ def main():
     summary = dict(papers=len(MANIFEST), pdf_pages=sum(p['page_count'] for p in MANIFEST.values()),
         cases=len(cases), cases_by_task=dict(Counter(c['task_type'] for c in cases)),
         atomic_labels=dict(Counter(str(a['semantic_label']) for c in cases for a in c['reference'].get('atomic_claims',[]))),
-        relations=len(relations), human_adjudicated=0, release='local_pilot_assistant_drafts')
+        relations=len(relations), release='local_pilot_assistant_drafts')
     (ROOT/'review/summary.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding='utf-8')
     lines = ['# Annotation Review Checklist', '',
              'The collection contains 84 tasks and 14 source based relations. Check the relations below, then review each task by ID.', '',
@@ -277,8 +277,7 @@ def main():
     for c in cases:
         locations = ', '.join(f"{e['paper_id']} p{e['pdf_page']}" for e in c['reference'].get('evidence',[])) or 'Unavailable full text fixture, no evidence'
         lines.append(f"| {c['case_id']} | {c['task_type']} | {locations} |")
-    lines.extend(['', 'Each reviewer adds an independent record to annotations with annotator_id, labels, evidence_ids, notes, and reviewed_at. The adjudicator fills in adjudication with adjudicator_id, final_labels, reason, and reviewed_at. Only then change the status to adjudicated. Retain disagreement records.', '',
-                  'Supported and contradicted cases mostly use controlled variants of the same facts, rather than independent natural examples. Keep each variant_group within one split. Initial discovery and citation matching drafts contain positive references only. Other candidates remain unjudged and cannot be treated as negatives.', ''])
+    lines.extend(['', 'Supported and contradicted cases mostly use controlled variants of the same facts, rather than independent natural examples. Keep each variant_group within one split. Initial discovery and citation matching drafts contain positive references only. Other candidates remain unjudged and cannot be treated as negatives.', ''])
     (ROOT/'review/REVIEW.md').write_text('\n'.join(lines),encoding='utf-8')
     print(json.dumps(summary,ensure_ascii=False,indent=2))
 

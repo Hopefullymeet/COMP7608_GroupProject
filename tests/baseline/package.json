@@ -1,15 +1,11 @@
 {
   "name": "papertrace-baseline",
   "scripts": {
-    "test": "bash run.sh"
+    "test": "node --import tsx --test mainline.test.mjs"
   },
   "type": "module",
   "private": true,
   "devDependencies": {
-    "esbuild": "0.25.12",
-    "jsdom": "26.1.0",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
     "tsx": "4.20.6"
   }
 }
