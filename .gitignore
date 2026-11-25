@@ -1,5 +1,6 @@
 .idea/
 /release/
+/submission/
 /backend/__pycache__/
 /frontend/src-tauri/.cargo/config.toml
 

@@ -232,6 +232,9 @@ class TestCitationWorkflow(unittest.TestCase):
         worker.topic_wiki.model = lambda: {"model": "fixture"}
         def reply(model, system, data, parse):
             if "records" in data:
+                self.assertIn("current question", system)
+                self.assertNotIn("in Simplified Chinese", system)
+                self.assertNotIn("in English", system)
                 return parse({"text": "The survey cites a prior study.", "anchor_ids": [
                     data["records"][0]["evidence"][0]["id"], "invented"]})
             return parse({"summary": "One original source is missing."})
@@ -249,9 +252,11 @@ class TestCitationWorkflow(unittest.TestCase):
         self.assertEqual(chain[2]["link"], "https://doi.org/10.1234/missing")
         self.assertEqual(chain[1]["parent"], 0)
         self.assertTrue(chain[1]["anchor_ids"])
-        _, task = self.start(draft, whole_document=True, source_versions=versions,
-                             question="Which source was missing?", report_id=report()["report_id"])
-        self.assertEqual(task["status"], "completed", task)
+        for question, language in [("Which source was missing?", "zh-CN"), ("缺失的是哪篇文献？", "en")]:
+            _, task = self.start(draft, whole_document=True, source_versions=versions, language=language,
+                                 question=question, report_id=report()["report_id"])
+            self.assertEqual(task["status"], "completed", task)
+            self.assertEqual(report()["discussion"][-1]["question"], question)
         self.assertEqual(len(report()["discussion"][0]["anchor_ids"]), 1)
         added = self.import_pdf("Missing", "A study outside the available corpus", "Sam Smith",
                                 "Persistent ID doi:10.1234/missing", "Replication used the same evidence labels.")

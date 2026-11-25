@@ -271,10 +271,12 @@ class ReaderTest(unittest.TestCase):
                      content=self.pdf("Figure 1: Overview of the experiment.", True))
         version = paper["source_version_id"]
         reader = self.worker.reader
-        reader.vision_model = "fixture"
+        reader.vision_model = "qwen3-vl-fixture"
         attempts = []
 
         def describe(image, prompt):
+            self.assertTrue(prompt.isascii())
+            self.assertIn("one short sentence", prompt)
             attempts.append(image)
             if len(attempts) == 1:
                 raise LiteratureError("VISION_UNAVAILABLE", "No answer")
