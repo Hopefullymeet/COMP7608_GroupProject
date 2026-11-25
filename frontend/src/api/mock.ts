@@ -572,6 +572,8 @@ export function createMock(): Client {
       ok: true,
       message: 'Configuration for ' + id + ' passed fixture validation. Network connectivity is untested.',
     }),
+    'services.connections': () => { throw new Error('Connect a desktop host to manage connections.') },
+    'services.credential_library': () => { throw new Error('Connect a desktop host to manage system credentials.') },
     'services.credentials': () => {
       throw new Error('Connect a desktop host to manage system credentials.')
     },

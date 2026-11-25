@@ -1,5 +1,7 @@
-"""Store the DeepSeek API key in the current user's system credential store."""
+"""Store model API keys in the current user's system credential store."""
 
+from contextlib import closing, contextmanager
+import sqlite3
 import ctypes as c
 from functools import lru_cache
 import os
@@ -240,13 +242,67 @@ def store(platform, account=ACCOUNT):
     return None
 
 
+def catalog_path():
+    directory = (Path(os.getenv("LOCALAPPDATA") or Path.home() / "AppData/Local")
+                 if sys.platform == "win32" else Path.home() / "Library/Application Support")
+    device = directory / "PaperTrace" / "credentials.sqlite3"
+    portable = os.getenv("PAPERTRACE_CREDENTIAL_INDEX")
+    if portable and not device.exists():
+        return Path(portable)
+    return device
+
+
+@contextmanager
+def catalog():
+    path = catalog_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(path)
+    try:
+        with db:
+            db.execute("PRAGMA temp_store=MEMORY")
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("CREATE TABLE IF NOT EXISTS entries (id TEXT PRIMARY KEY, name TEXT NOT NULL, preview TEXT NOT NULL)")
+            db.execute("CREATE TABLE IF NOT EXISTS bindings (target TEXT PRIMARY KEY, entry TEXT NOT NULL)")
+            db.execute("CREATE TABLE IF NOT EXISTS connections (entry TEXT, role TEXT, endpoint TEXT, model TEXT, PRIMARY KEY(entry,role))")
+            yield db
+    finally:
+        db.close()
+
+
+def selected_account(target, db=None):
+    if db is None:
+        if sys.platform not in ("win32", "darwin") or not catalog_path().exists():
+            return target
+        with closing(sqlite3.connect(catalog_path())) as connection:
+            return selected_account(target, connection)
+    row = db.execute("SELECT entry FROM bindings WHERE target=?", (target,)).fetchone()
+    return row[0] if row else target
+
+
+def active_connection(target, role):
+    if sys.platform not in ("win32", "darwin") or not catalog_path().exists():
+        return None
+    with catalog() as db:
+        entry = selected_account(target, db)
+        row = db.execute("SELECT e.name,c.endpoint,c.model FROM connections c JOIN entries e ON e.id=c.entry "
+                         "WHERE c.entry=? AND c.role=?", (entry, role)).fetchone()
+    return dict(name=row[0], endpoint=row[1], model=row[2], entry=entry) if row else None
+
+
 def system_key():
     try:
-        vault = store(sys.platform)
+        account = selected_account(ACCOUNT)
+        vault = store(sys.platform, account) if account else None
         return vault.read() if vault else None
-    except (OSError, UnicodeError):
+    except (OSError, UnicodeError, sqlite3.Error):
         return None
 
 
-def deepseek_api_key():
+def deepseek_api_key(endpoint=None):
+    connection = active_connection(ACCOUNT, "model")
+    if connection:
+        if endpoint is not None and endpoint != connection["endpoint"]:
+            return None
+        vault = store(sys.platform, connection["entry"])
+        return vault.read() if vault else None
     return system_key() or os.getenv("DEEPSEEK_API_KEY")

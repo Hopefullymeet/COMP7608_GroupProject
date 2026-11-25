@@ -55,7 +55,26 @@ export type Activity = {
 export type Watch = { topic_id: string; search_id: string; interval_days: number }
 export type ResumeTask = { kind: 'resume'; topic_id: string; input: { checkpoint_id: string } }
 type Inspection = { preview_id: string; valid: boolean; summary: string; issues: string[] }
+export type CredentialEntry = { id: string; name: string; preview: string }
+export type CredentialLibrary = { entries: CredentialEntry[]; selected: string | null }
+export type CredentialAction = { action: 'list' } | { action: 'add'; name: string; api_key: string }
+  | { action: 'select' | 'remove'; credential_id: string }
+
+export type Connection = CredentialEntry & { endpoint: string; model: string }
+export function providerName(connection: Connection): string {
+  if (connection.id !== 'DeepSeek' || connection.name !== 'Saved model key' || !connection.endpoint) {
+    return connection.name
+  }
+  const host = new URL(connection.endpoint).hostname
+  return host === 'api.deepseek.com' ? 'DeepSeek' : host
+}
+export type ConnectionList = { entries: Connection[]; selected: string | null }
+export type ConnectionAction = { action: 'list' } | { action: 'select' | 'remove'; entry: string }
+  | { action: 'add' | 'edit'; entry?: string; name: string; url: string; model: string; api_key: string }
+
 export type ServiceMethods = {
+  'services.connections': [{ role: 'model' | 'reviewer' } & ConnectionAction, ConnectionList]
+  'services.credential_library': [{ id: string; endpoint?: string } & CredentialAction, CredentialLibrary]
   'preset.get': [Record<string,never>, {mode: 'fixed' | 'agent' | 'wiki'}]
   'preset.save': [Write & {mode: 'fixed' | 'agent' | 'wiki'}, {mode: 'fixed' | 'agent' | 'wiki'}]
   'profile.get': [Record<string,never>,PersonalProfile]

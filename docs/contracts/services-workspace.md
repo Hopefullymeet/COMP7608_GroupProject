@@ -7,6 +7,8 @@
 | services.get | {} | Config；返回配置、提供者列表、筛选能力及解析器状态 |
 | services.save | W,base_revision,model_id,models:Model[],services:Service[],budget:Budget,ask_before_overage:boolean | Config；只更新可编辑字段。过期版本报 STALE_REVISION，影响后续任务 |
 | services.test | W,id:Id | {ok:boolean,message:string}；测试已保存模型、来源或解析器。认证、网络或配额问题分别显示 |
+| services.connections | role 为 model 或 reviewer；action 为 list、add、edit、select 或 remove。新增及编辑传 name、url、model、api_key；编辑、选用和删除传 entry | {entries:[{id,name,endpoint,model,preview}],selected}。选用后整体切换端点、模型及系统密钥。编辑时空密钥沿用已有值，复核服务允许无密钥。旧条目缺少端点时须先编辑。无效端点报 INVALID_PARAMS，条目已删除报 NOT_FOUND。 |
+| services.credential_library | id、复核服务已保存的 endpoint、action。list 列举；add 带 name、api_key；select/remove 带 credential_id | {entries:[{id,name,preview}],selected:Id或null}。新增首个可用凭据时选用；删除解除所有引用。端点未保存报 INVALID_PARAMS，凭据已删除报 NOT_FOUND，系统存取失败报 CREDENTIAL_STORE_FAILED。 |
 | services.credentials | {id:Id,action:'save',api_key:string} 或 {id:Id,action:'delete'} | {configured:boolean,stored:boolean}；更新系统凭据库，响应只含状态 |
 | access.list | {} | {offers:Offer[],grants:Grant[]}；offer 绑定在途 task、目的地、用途与已授权版本 |
 | access.grant | W,offer_id | Grant；确认展示材料清单后派发只读材料包，过期报 GRANT_EXPIRED |

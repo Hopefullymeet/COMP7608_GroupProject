@@ -39,7 +39,7 @@ export function PersonalSettings() {
     settingsKey: ['Open settings','Ctrl / ⌘ + ,','Ctrl / ⌘ + .'],
     links: ['External paper links','Open directly','Confirm before opening','In sidebar'],
   }
-  return <section className="set-section general-settings"><h2>{tr('General settings')}</h2>
+  return <section className="set-section general-settings">
     <div className="preference-list">
       <label className="preference-row">{tr('New reading sessions')}<select disabled={!profile || busy} value={profile?.session_access ?? 'edit'}
         onChange={e=>profile && void write('profile.save',{...profile,session_access:e.target.value as 'read'|'edit'}).catch(report)}>
@@ -84,12 +84,12 @@ export function PersonalSettings() {
     <small className="fine">PaperTrace · {version}</small></section>
 }
 
-export function RoleSettings({onSaved}:{onSaved?:()=>void}) {
+export function RoleSettings({onSaved, showTitle = false}:{onSaved?:()=>void; showTitle?:boolean}) {
   const profile = useRead('profile.get', {})
-  return profile && <ProfileForm profile={profile} onSaved={onSaved}/>
+  return profile && <ProfileForm profile={profile} onSaved={onSaved} showTitle={showTitle}/>
 }
 
-function ProfileForm({profile,onSaved}:{profile:PersonalProfile;onSaved?:()=>void}) {
+function ProfileForm({profile,onSaved,showTitle}:{profile:PersonalProfile;onSaved?:()=>void; showTitle:boolean}) {
   const {language,tr}=useLanguage()
   const t=(zh:string,en:string)=>language==='zh-CN'?zh:en
   const {write,busy}=useWorkspace()
@@ -109,7 +109,7 @@ function ProfileForm({profile,onSaved}:{profile:PersonalProfile;onSaved?:()=>voi
     {key:'wiki_enabled', label:t('Wiki 对话','Wiki chat'), checked:value.wiki_enabled ?? profile.enabled},
   ] as const
   return <section className="role-form">
-    <header><h2>{t('自定义角色','Customize roles')}</h2>
+    <header>{showTitle && <h2>{tr('Customize roles')}</h2>}
       <p>{t('选择在哪些对话中使用你的角色和记忆。','Choose where to use your profile and memories.')}</p>
       <div className="role-columns">{contexts.map(({key,label,checked})=>
         <button type="button" key={key} role="switch" aria-checked={checked} className="role-toggle"

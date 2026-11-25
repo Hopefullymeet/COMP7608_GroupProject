@@ -1,95 +1,51 @@
 import { PersonalSettings, RoleSettings } from './PersonalSettings'
 import { useLanguage, type Message } from '../i18n'
 import { useEffect, useState } from 'react'
+import { CredentialDialog } from './CredentialDialog'
 import { Dialog } from '../components/PageHead'
 import { Icon } from '../components/Icon'
 import { useRead, useWorkspace } from '../data/WorkspaceProvider'
 import { errorText } from '../api/contract'
-import { defaultConfig, unlimitedBudget } from '../api/services'
-import type { Config, Model, Offer, ServiceMethods } from '../api/services'
-
-function CredentialDialog({ model, onClose, onSaved }: { model: Model; onClose: () => void; onSaved: () => void }) {
-  const { tr } = useLanguage()
-  const { api } = useWorkspace()
-  const [key, setKey] = useState('')
-  const [pending, setPending] = useState(false)
-  const [failed, setFailed] = useState(false)
-  const [confirmRemoval, setConfirmRemoval] = useState(false)
-  const validKey = /^[!-~]{1,512}$/.test(key.trim())
-
-  async function update(action: 'save' | 'delete') {
-    setPending(true)
-    setFailed(false)
-    try {
-      const target = model.id === 'reviewer' ? { id: model.id, endpoint: model.endpoint } : { id: model.id }
-      const result = await api.call('services.credentials', action === 'save'
-        ? { ...target, action, api_key: key.trim() }
-        : { ...target, action })
-      if (result.stored !== (action === 'save')) {
-        setFailed(true)
-        return
-      }
-      setKey('')
-      onSaved()
-    } catch {
-      setFailed(true)
-    } finally {
-      setPending(false)
-    }
-  }
-
-  return (
-    <Dialog title={tr('Manage system credentials')} onClose={() => { if (!pending) onClose() }}>
-      <form onSubmit={(event) => {
-        event.preventDefault()
-        if (!pending && (confirmRemoval || validKey)) void update(confirmRemoval ? 'delete' : 'save')
-      }}>
-        {confirmRemoval ? <p>{tr('Remove the API key from this device’s credential store?')}</p> : (
-          <>
-            <p>{tr('Your API key is protected by this device’s operating system.')}</p>
-            {model.credential_stored && <p>{tr('Saved API key {0}', model.credential_preview ?? '••••')}</p>}
-            {model.credential_configured && !model.credential_stored &&
-              <p>{tr('The API key currently comes from the launch environment.')}</p>}
-            <label className="set-field">
-              {tr(model.credential_stored ? 'Replacement API key' : 'API key')}
-              <input className="text-field" type="password" autoComplete="off" spellCheck={false}
-                disabled={pending} value={key} onChange={(event) => setKey(event.target.value)} />
-            </label>
-          </>
-        )}
-        {failed && <p className="set-error" role="alert">{tr('The system credential store could not complete the request.')}</p>}
-        <div className="dialog-actions">
-          {!confirmRemoval && model.credential_stored && (
-            <button type="button" className="ghost-btn" disabled={pending}
-              onClick={() => { setFailed(false); setConfirmRemoval(true) }}>{tr('Remove API key')}</button>
-          )}
-          <button type="button" className="ghost-btn" disabled={pending} onClick={onClose}>{tr(model.credential_stored && !confirmRemoval ? 'Keep saved key' : 'Cancel')}</button>
-          <button className={confirmRemoval ? 'danger' : 'primary'} disabled={pending || (!confirmRemoval && !validKey)}>
-            {tr(confirmRemoval ? 'Remove API key' : 'Save API key')}
-          </button>
-        </div>
-      </form>
-    </Dialog>
-  )
-}
+import { defaultConfig, providerName, unlimitedBudget } from '../api/services'
+import type { Config, ConnectionList, Offer, ServiceMethods } from '../api/services'
 
 function SettingsForm({ config, modelPage = false }: { config: Config; modelPage?: boolean }) {
   const { tr } = useLanguage()
-  const { write, busy, report, demo, refresh } = useWorkspace()
+  const { api, write, busy, report, demo, refresh } = useWorkspace()
   const [saveResult, setSaveResult] = useState<{ base: string; config: Config }>(),
     [saveError, setSaveError] = useState(''),
     [edits, set] = useState<Config>(),
     [saving, setSaving] = useState(false),
     [test, setTest] = useState<{ id: string; result: Message }>(),
-    [managingCredentials, setManagingCredentials] = useState(false)
+    [providerDialog, setProviderDialog] = useState<'add' | 'manage'>()
   const saved = saveResult?.base === config.revision ? saveResult.config : config
   const draft = edits ?? saved
   const [reviewKeyOpen, setReviewKeyOpen] = useState(false)
   const reviewer = draft.reviewer ?? { enabled: false, model: '', endpoint: '' }
   const selected = draft.models.find((m) => m.id === draft.model_id) ?? draft.models[0]
   const credentials = config.models.find((m) => m.id === selected?.id)
+  const desktopProviders = !!credentials?.credential_store
+  const fetchedProviders = useRead('services.connections', { role: 'model', action: 'list' }, desktopProviders)
+  const [updatedProviders, setUpdatedProviders] = useState<{ base?: ConnectionList; value: ConnectionList }>()
+  const providers = updatedProviders && updatedProviders.base === fetchedProviders ? updatedProviders.value : fetchedProviders
+  const currentProvider = providers?.entries.find(entry => entry.id === providers.selected)
+  const [switching, setSwitching] = useState(false)
+  async function selectProvider(entry: string) {
+    setSwitching(true)
+    setTest(undefined)
+    try {
+      const value = await api.call('services.connections', { role: 'model', action: 'select', entry })
+      setUpdatedProviders({ base: fetchedProviders, value })
+      refresh()
+    } catch (error) {
+      report(error)
+    } finally {
+      setSwitching(false)
+    }
+  }
   function closeCredentials() {
-    setManagingCredentials(false)
+    setProviderDialog(undefined)
+    setReviewKeyOpen(false)
     refresh()
   }
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved)
@@ -145,7 +101,6 @@ function SettingsForm({ config, modelPage = false }: { config: Config; modelPage
   function restoreDefaults() {
     const defaults = demo ? defaultConfig() : {
       ...saved,
-      models: saved.models.map(model => ({ ...model, model: model.id, endpoint: 'https://api.deepseek.com' })),
       budget: { ...unlimitedBudget },
       ask_before_overage: true,
     }
@@ -166,33 +121,35 @@ function SettingsForm({ config, modelPage = false }: { config: Config; modelPage
     <>
       <div className={modelPage ? 'settings-content scroll' : undefined}>
       <section className="set-section">
-        <div className="set-intro">
+        {!modelPage && <div className="set-intro">
           <h2>{tr('Model')}</h2>
           <p>{tr('Choose the model and destination for new tasks.')}</p>
-        </div>
+        </div>}
         <div className="set-body">
-          <div className="model-list" role="radiogroup" aria-label={tr('Model provider')}>
-            {draft.models.map((m) => (
-              <label key={m.id} className={'model-card' + (selected?.id === m.id ? ' on' : '')}>
-                <input
-                  type="radio"
-                  name="model-provider"
-                  checked={selected?.id === m.id}
-                  disabled={saving}
-                  onChange={() => {
-                    set({ ...draft, model_id: m.id })
-                    setTest(undefined)
-                  }}
-                />
-                <span className="radio" aria-hidden="true" />
-                <span className="grow"><strong>{tr(m.label)}</strong><small>{m.model} · {m.endpoint}</small></span>
-                <span className="tag">{m.local ? tr('Local') : tr('Remote')}</span>
-              </label>
-            ))}
+          <div className="provider-picker">
+            <label className="set-field">{tr('Model provider')}
+              {desktopProviders ? <select className="text-field" value={providers?.selected ?? ''}
+                disabled={!providers?.entries.length || dirty || busy || switching}
+                onChange={e => void selectProvider(e.target.value)}>
+                {!providers?.selected && <option value="" disabled>
+                  {tr(!providers ? 'Loading…' : credentials.credential_configured ? 'Launch environment' : 'Choose a provider')}
+                </option>}
+                {providers?.entries.map(entry => <option key={entry.id} value={entry.id} disabled={!entry.endpoint}>
+                  {entry.id === 'DeepSeek' ? tr(providerName(entry)) : entry.name}
+                </option>)}
+              </select> : <select className="text-field" value={selected?.id ?? ''} disabled={saving}
+                onChange={e => { set({ ...draft, model_id: e.target.value }); setTest(undefined) }}>
+                {draft.models.map(m => <option key={m.id} value={m.id}>{tr(m.label)}</option>)}
+              </select>}
+            </label>
+            {desktopProviders && selected && <button className="ghost-btn" disabled={dirty || busy || switching ||
+              !providers || (!currentProvider && !credentials.credential_configured)}
+              onClick={() => tryService(selected.id)}>{tr('Test selected provider')}</button>}
           </div>
+          {desktopProviders && selected && testStatus(selected.id)}
           {selected && (
             <>
-              <div className="form-grid">
+              {!credentials?.credential_store && <div className="form-grid">
                 {(['endpoint', 'model'] as const).map((k) => (
                   <label className="set-field" key={k}>
                     {k === 'model' ? tr('Model ID') : tr('Endpoint base URL')}
@@ -217,71 +174,40 @@ function SettingsForm({ config, modelPage = false }: { config: Config; modelPage
                     />
                   </label>
                 ))}
-              </div>
-              {!demo && <p className="fine">{tr('Use an OpenAI-compatible base URL. The connection test uses the saved URL, model ID and API key.')}</p>}
+              </div>}
+              {!demo && !credentials?.credential_store && <p className="fine">{tr('Use an OpenAI-compatible base URL. The connection test uses the saved URL, model ID and API key.')}</p>}
               <div className="set-controls">
-                <button
+                {!desktopProviders && <button
                   className="ghost-btn"
                   disabled={dirty || busy}
                   onClick={() => tryService(selected.id)}
                 >
                   {tr('Test connection')}
-                </button>
+                </button>}
                 {credentials?.credential_store && (
-                  <button
-                    className="ghost-btn"
-                    disabled={busy}
-                    onClick={() => setManagingCredentials(true)}
-                  >
-                    {tr('Manage system credentials')}
-                  </button>
+                  <>
+                    <button className="primary" disabled={busy || dirty || switching}
+                      onClick={() => setProviderDialog('add')}>{tr('Add model provider')}</button>
+                    {!!providers?.entries.length && <button className="ghost-btn" disabled={busy || dirty || switching}
+                      onClick={() => setProviderDialog('manage')}>{tr('Manage providers')}</button>}
+                  </>
                 )}
               </div>
             </>
           )}
-          <p className="fine" role="status">
+          {!desktopProviders && <p className="fine" role="status">
             {demo
               ? tr('The fixture tests configuration locally.')
               : credentials?.credential_stored ? tr('Saved API key {0}', credentials.credential_preview ?? '••••')
               : tr(credentials?.credential_configured ? 'The API key currently comes from the launch environment.'
-                : 'DeepSeek API key not configured.')}
-          </p>
-          {selected && testStatus(selected.id)}
-          {managingCredentials && credentials?.credential_store && (
-            <CredentialDialog model={credentials} onClose={closeCredentials}
-              onSaved={() => { setTest(undefined); closeCredentials() }} />
+                : 'No API key configured.')}
+          </p>}
+          {!desktopProviders && selected && testStatus(selected.id)}
+          {providerDialog && credentials?.credential_store && (
+            <CredentialDialog directAdd={providerDialog === 'add'} role="model" endpoint={credentials.endpoint} model={credentials.model} onClose={closeCredentials} onChanged={() => setTest(undefined)} />
           )}
         </div>
       </section>
-      {!demo && <section className="set-section">
-        <div className="set-intro">
-          <h2>{tr('Evidence reviewer')}</h2>
-          <p>{tr('Send selected excerpts and candidate figures to this model for review. Results appear in the agent trace.')}</p>
-        </div>
-        <div className="set-body">
-          <label><input type="checkbox" checked={reviewer.enabled} disabled={saving}
-            onChange={e => set({ ...draft, reviewer: { ...reviewer, enabled: e.target.checked } })} /> {tr('Enable evidence review')}</label>
-          {(reviewer.enabled || reviewer.endpoint) && <>
-            <div className="form-grid">
-              {(['endpoint', 'model'] as const).map(field => <label className="set-field" key={field}>
-                {tr(field === 'endpoint' ? 'System One decision endpoint' : 'Model ID')}
-                <input className="text-field" value={reviewer[field]} autoComplete="off" spellCheck={false} disabled={saving}
-                  onChange={e => set({ ...draft, reviewer: { ...reviewer, [field]: e.target.value } })} />
-              </label>)}
-            </div>
-            <div className="set-controls">
-              <button className="ghost-btn" disabled={dirty || busy || !reviewer.model || !reviewer.endpoint}
-                onClick={() => tryService('reviewer')}>{tr('Test connection')}</button>
-              {credentials?.credential_store && <button className="ghost-btn" disabled={dirty || busy || !reviewer.endpoint}
-                onClick={() => setReviewKeyOpen(true)}>{tr('Manage system credentials')}</button>}
-            </div>
-            {testStatus('reviewer')}
-          </>}
-          {reviewKeyOpen && <CredentialDialog model={{ ...reviewer, id: 'reviewer', label: 'Evidence reviewer', local: false,
-            credential_configured: !!config.reviewer_key_stored, credential_stored: !!config.reviewer_key_stored }}
-            onClose={() => setReviewKeyOpen(false)} onSaved={() => { setReviewKeyOpen(false); refresh() }} />}
-        </div>
-      </section>}
       <section className="set-section">
         <div className="set-intro">
           <h2>{tr('Task budget')}</h2>
@@ -318,54 +244,34 @@ function SettingsForm({ config, modelPage = false }: { config: Config; modelPage
           </label>
         </div>
       </section>
-      {(['search', 'parser'] as const).map((kind) => (
-        <section className="set-section" key={kind}>
-          <div className="set-intro">
-            <h2>{kind === 'search' ? tr('Literature search') : tr('PDF tools')}</h2>
-          </div>
-          <div className="set-body">
-            {draft.services
-              .filter((s) => s.kind === kind)
-              .map((s) => (
-                <div className="source-row" key={s.id}>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-label={tr('Use {0}', s.label)}
-                    aria-checked={s.enabled}
-                    disabled={!demo || saving}
-                    className={'switch' + (s.enabled ? ' on' : '')}
-                    onClick={() =>
-                      set({
-                        ...draft,
-                        services: draft.services.map((x) =>
-                          x.id === s.id ? { ...x, enabled: !x.enabled } : x,
-                        ),
-                      })
-                    }
-                  >
-                    <span />
-                  </button>
-                  <div className="grow">
-                    <strong>{s.label}</strong>
-                    <small>{tr(s.status)}</small>
-                    <div className="field-chips">
-                      {s.fields.map((f) => (
-                        <span className="tag" key={f}>
-                          {tr(f)}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <button className="ghost-btn sm" disabled={dirty || busy} onClick={() => tryService(s.id)}>
-                    {tr('Test')}
-                  </button>
-                  {testStatus(s.id)}
-                </div>
-              ))}
-          </div>
-        </section>
-      ))}
+      {!demo && <section className="set-section">
+        <div className="set-intro">
+          <h2>{tr('Evidence reviewer')}</h2>
+          <p>{tr('Send selected excerpts and candidate figures to this model for review. Results appear in the agent trace.')}</p>
+        </div>
+        <div className="set-body">
+          <label><input type="checkbox" checked={reviewer.enabled} disabled={saving || (!!credentials?.credential_store && !reviewer.endpoint)}
+            onChange={e => set({ ...draft, reviewer: { ...reviewer, enabled: e.target.checked } })} /> {tr('Enable evidence review')}</label>
+          {(credentials?.credential_store || reviewer.enabled || reviewer.endpoint) && <>
+            {credentials?.credential_store ? <p className="fine">{[reviewer.model, reviewer.endpoint].filter(Boolean).join(' · ')}</p> : <div className="form-grid">
+              {(['endpoint', 'model'] as const).map(field => <label className="set-field" key={field}>
+                {tr(field === 'endpoint' ? 'System One decision endpoint' : 'Model ID')}
+                <input className="text-field" value={reviewer[field]} autoComplete="off" spellCheck={false} disabled={saving}
+                  onChange={e => set({ ...draft, reviewer: { ...reviewer, [field]: e.target.value } })} />
+              </label>)}
+            </div>}
+            <div className="set-controls">
+              <button className="ghost-btn" disabled={dirty || busy || !reviewer.model || !reviewer.endpoint}
+                onClick={() => tryService('reviewer')}>{tr('Test connection')}</button>
+              {credentials?.credential_store && <button className="ghost-btn" disabled={dirty || busy}
+                onClick={() => setReviewKeyOpen(true)}>{tr('Reviewer connections')}</button>}
+            </div>
+            {testStatus('reviewer')}
+          </>}
+          {reviewKeyOpen && <CredentialDialog role="reviewer" endpoint={reviewer.endpoint} model={reviewer.model}
+            onClose={closeCredentials} onChanged={() => setTest(undefined)} />}
+        </div>
+      </section>}
       {modelPage && demo && <AccessAndBackup/>}
       </div>
       <div className="lib-tools settings-save">
@@ -522,28 +428,34 @@ function AccessAndBackup() {
     </>
   )
 }
+const settingsTabs = [
+  ['general', 'settings', 'General settings'],
+  ['model', 'globe', 'Model'],
+  ['preset', 'trace', 'Customize roles'],
+] as const
+
 export function ServicesPage() {
   const { tr } = useLanguage()
-  const [tab,setTab]=useState('general')
+  const [[tab, , title], setTab] = useState<typeof settingsTabs[number]>(settingsTabs[0])
   const config = useRead('services.get', {})
   const { refresh } = useWorkspace()
   useEffect(() => {
     const id = setInterval(refresh, 8000)
     return () => clearInterval(id)
   }, [refresh])
-  const sections = [
-    ['general', 'settings', 'General settings'],
-    ['model', 'globe', 'Model'],
-    ['preset', 'trace', 'Customize roles'],
-  ] as const
   return <div className="settings-layout">
-    <nav aria-label={tr('Settings')}>{sections.map(([id, icon, label]) =>
-      <button key={id} className={'side-item' + (tab === id ? ' active' : '')}
-        aria-pressed={tab === id} onClick={() => setTab(id)}><Icon name={icon} size={16}/>{tr(label)}</button>)}</nav>
-    <div className={tab === 'model' ? 'settings-model-panel' : 'settings-content scroll'}>
-      {tab === 'general' && <PersonalSettings/>}
-      {tab === 'model' && config && <SettingsForm config={config} modelPage/>}
-      {tab === 'preset' && <RoleSettings/>}
+    <nav aria-label={tr('Settings')}>{settingsTabs.map((item) => {
+      const [id, icon, label] = item
+      return <button key={id} className={'side-item' + (tab === id ? ' active' : '')}
+        aria-pressed={tab === id} onClick={() => setTab(item)}><Icon name={icon} size={16}/>{tr(label)}</button>
+    })}</nav>
+    <div className="settings-tab-panel">
+      <h2>{tr(title)}</h2>
+      <div className={tab === 'model' ? 'settings-model-panel' : 'settings-content scroll'}>
+        {tab === 'general' && <PersonalSettings/>}
+        {tab === 'model' && config && <SettingsForm config={config} modelPage/>}
+        {tab === 'preset' && <RoleSettings/>}
+      </div>
     </div>
   </div>
 }
@@ -561,7 +473,7 @@ export function FirstRunSettings() {
   const ready = config.models.some(m => m.id === config.model_id && (m.local || m.credential_configured))
   if (!ready && stage === 'api-deferred') return null
   return <Dialog title={tr(ready ? 'Set up your research assistant' : 'Connect your model')} onClose={finish} panelClass="first-run-settings">
-    {ready ? <RoleSettings onSaved={finish}/> : <SettingsForm config={config}/>}
+    {ready ? <RoleSettings showTitle onSaved={finish}/> : <SettingsForm config={config}/>}
     <button className="link-btn" onClick={finish}>{tr('Set up later')}</button>
   </Dialog>
 }

@@ -261,7 +261,7 @@ class ModelAgent:
         runtime = copy(self)
         runtime.model = model
         runtime.endpoint = endpoint
-        runtime._key = self.key or ""
+        runtime._key = (deepseek_api_key(endpoint) if self._key is None else self._key) or ""
         return runtime
 
     def check(self):

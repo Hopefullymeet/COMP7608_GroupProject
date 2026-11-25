@@ -18,7 +18,7 @@ from urllib.error import HTTPError
 from uuid import uuid4
 
 from papertrace import Worker
-from credentials import WindowsStore
+from credentials import ACCOUNT, WindowsStore, selected_account
 from model_agent import ModelAgent, ModelFailure, ENDPOINT, read_json_answer
 from bibliography import PublicServiceError, bibliography_records, download_open_pdf, public_pdf_url
 from literature import LiteratureError
@@ -312,7 +312,7 @@ class CredentialTest(unittest.TestCase):
                 messages = []
                 worker = Worker(Path(directory), messages.append)
                 try:
-                    with patch("papertrace.sys.platform", platform):
+                    with patch("papertrace.sys.platform", platform), patch("credentials.catalog_path", return_value=Path(directory) / "catalog.db"):
                         model = worker.services_config()["models"][0]
                         self.assertTrue(model["credential_store"])
                         self.assertTrue(model["credential_configured"])
@@ -344,6 +344,40 @@ class CredentialTest(unittest.TestCase):
                         self.assertEqual(worker.db.execute("SELECT COUNT(*) FROM operations").fetchone()[0], 0)
                 finally:
                     worker.close()
+
+    def test_named_credentials_share_a_library_and_bind_services_independently(self):
+        from unittest.mock import Mock
+        secrets = {ACCOUNT: "legacy-test-secret"}
+        def vault(platform, account=ACCOUNT):
+            return Mock(read=lambda: secrets.get(account), save=lambda key: secrets.update({account: key}),
+                        delete=lambda: secrets.pop(account, None))
+
+        with tempfile.TemporaryDirectory() as directory, patch("papertrace.sys.platform", "win32"), patch(
+            "credentials.catalog_path", return_value=Path(directory) / "catalog.db"
+        ), patch("papertrace.store", side_effect=vault), patch("credentials.store", side_effect=vault):
+            worker = Worker(Path(directory), lambda _: None)
+            try:
+                model = worker.services_config()["model_id"]
+                reviewer = {"id": "reviewer", "endpoint": "https://review.example"}
+                with patch.object(worker, "reviewer_config", return_value={"endpoint": reviewer["endpoint"]}):
+                    def run(action, target=None, **fields):
+                        return worker.credential_library({**(target or {"id": model}), "action": action, **fields})
+                    self.assertEqual(run("list")["selected"], ACCOUNT)
+                    added = run("add", name="Research", api_key="test-secondary-key")
+                    other = added["entries"][-1]["id"]
+                    self.assertEqual(added["selected"], ACCOUNT)
+                    self.assertNotIn("test-secondary-key", json.dumps(added))
+                    self.assertEqual(run("select", reviewer, credential_id=other)["selected"], other)
+                    self.assertEqual(selected_account(ACCOUNT), ACCOUNT)
+                    run("select", credential_id=other)
+                    self.assertEqual(worker.credential_status()["preview"], "••••-key")
+                    run("remove", credential_id=other)
+                    self.assertIsNone(run("list", reviewer)["selected"])
+                    self.assertIsNone(run("list")["selected"])
+                    self.assertNotIn(other, secrets)
+                    self.assertEqual(run("select", credential_id=ACCOUNT)["selected"], ACCOUNT)
+            finally:
+                worker.close()
 
     @unittest.skipUnless(sys.platform == "win32", "Windows DPAPI is required")
     def test_windows_credentials_survive_vault_access_denial_and_restart(self):

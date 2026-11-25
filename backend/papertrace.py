@@ -24,7 +24,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
 
 import decision
-from credentials import deepseek_api_key, system_key, store
+from credentials import ACCOUNT, active_connection, catalog, selected_account, deepseek_api_key, system_key, store
 from model_agent import AGENT_POLICY, ANSWER_LAYOUT, TITLE_INSTRUCTION, ModelAgent, ModelFailure, ENDPOINT, MODEL, read_json_answer
 from literature import LiteratureError, MAX_VERSIONS, body_passage_starts, digest, init_corpus
 from workbench import Workbench
@@ -76,6 +76,10 @@ class RpcError(Exception):
             self.issue["details"] = details
 
 
+def mask_key(key):
+    return "••••" + (key[-4:] if len(key) >= 8 else "")
+
+
 def invalid(message):
     return RpcError(-32602, "INVALID_PARAMS", "correct_request", message)
 
@@ -111,7 +115,7 @@ class NoServiceRedirect(HTTPRedirectHandler):
 
 def probe_model(endpoint, model, key):
     if not key:
-        return {"ok": False, "message": "Save a DeepSeek API key before testing the connection."}
+        return {"ok": False, "message": "Save an API key before testing the connection."}
     request = Request(endpoint + "/chat/completions", data=encode({
         "model": model, "messages": [{"role": "user", "content": "Reply with OK."}],
         "max_tokens": 16, "stream": False,
@@ -407,7 +411,7 @@ class Worker:
 
     def credential_status(self):
         key = system_key()
-        preview = ("••••" + key[-4:] if len(key) >= 8 else "••••") if key else None
+        preview = mask_key(key) if key else None
         return {"configured": bool(key or os.getenv("DEEPSEEK_API_KEY")), "stored": bool(key), "preview": preview}
 
     def update_credential(self, params):
@@ -425,26 +429,183 @@ class Worker:
             if not re.fullmatch(r"[!-~]{1,512}", key):
                 raise invalid("Enter an API key without spaces.")
         try:
-            vault = store(sys.platform, decision.slot(params["endpoint"])) if reviewing else store(sys.platform)
-            if vault is None:
+            if sys.platform not in ("win32", "darwin"):
                 raise RpcError(-32015, "CREDENTIALS_HOST_REQUIRED", "configure_service",
-                               "Configure the DeepSeek API key in the desktop launch environment.")
-            if action == "save":
-                vault.save(key)
-            else:
-                vault.delete()
-            stored_key = vault.read()
-            if stored_key != (key if action == "save" else None):
-                raise OSError("Credential readback did not match the requested change.")
-        except (OSError, UnicodeError):
+                               "Configure the model API key in the desktop launch environment.")
+            target = decision.slot(params["endpoint"]) if reviewing else ACCOUNT
+            with catalog() as db:
+                account = selected_account(target, db) or target
+                vault = store(sys.platform) if account == ACCOUNT else store(sys.platform, account)
+                if action == "save":
+                    vault.save(key)
+                else:
+                    vault.delete()
+                stored_key = vault.read()
+                if stored_key != (key if action == "save" else None):
+                    raise OSError("Credential readback did not match the requested change.")
+                if stored_key:
+                    name = "Saved reviewer key" if reviewing else "Saved model key"
+                    db.execute("INSERT INTO entries VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET preview=excluded.preview",
+                               (account, name, mask_key(key)))
+                    db.execute("INSERT OR REPLACE INTO bindings VALUES (?,?)", (target, account))
+                else:
+                    db.execute("DELETE FROM entries WHERE id=?", (account,))
+                    db.execute("UPDATE bindings SET entry='' WHERE entry=?", (account,))
+        except (OSError, UnicodeError, sqlite3.Error):
             raise RpcError(-32015, "CREDENTIAL_STORE_FAILED", "configure_service",
                            "The system credential store could not complete the request.") from None
         return {"configured": bool(stored_key or (not reviewing and os.getenv("DEEPSEEK_API_KEY"))),
                 "stored": bool(stored_key)}
 
+    def credential_library(self, params):
+        if sys.platform not in ("win32", "darwin"):
+            raise invalid("Connect a desktop host to manage system credentials.")
+        endpoint = self.reviewer_config()["endpoint"]
+        targets = {MODEL: ACCOUNT}
+        if endpoint:
+            targets["reviewer"] = decision.slot(endpoint)
+        service = required(params, "id")
+        if service not in targets or (service == "reviewer" and endpoint != params.get("endpoint")):
+            raise invalid("Save the service endpoint before choosing a credential.")
+        target = targets[service]
+        action = params.get("action")
+        with catalog() as db:
+            # Register older single-key slots without copying the secret.
+            for role, account in targets.items():
+                if not db.execute("SELECT 1 FROM entries WHERE id=?", (account,)).fetchone():
+                    try:
+                        old = store(sys.platform, account).read()
+                    except (OSError, UnicodeError):
+                        # An inaccessible legacy key can be imported on a later visit.
+                        continue
+                    if old:
+                        name = "Saved model key" if role == MODEL else "Saved reviewer key"
+                        db.execute("INSERT INTO entries VALUES (?,?,?)", (account, name, mask_key(old)))
+
+            entry = params.get("credential_id")
+            if action == "add":
+                name = required(params, "name").strip()
+                key = required(params, "api_key").strip()
+                if not name or len(name) > 80 or not re.fullmatch(r"[!-~]{1,512}", key):
+                    raise invalid("Enter a credential name and a valid API key.")
+                entry = "Key-" + identifier()
+                vault = store(sys.platform, entry)
+                vault.save(key)
+                if vault.read() != key:
+                    raise OSError("Credential save failed.")
+                db.execute("INSERT INTO entries VALUES (?,?,?)", (entry, name, mask_key(key)))
+                if not db.execute("SELECT 1 FROM entries WHERE id=?", (selected_account(target, db),)).fetchone():
+                    db.execute("INSERT OR REPLACE INTO bindings VALUES (?,?)", (target, entry))
+            elif action in ("select", "remove"):
+                if not isinstance(entry, str) or not db.execute("SELECT 1 FROM entries WHERE id=?", (entry,)).fetchone():
+                    raise missing("This credential was not found.")
+                if action == "select":
+                    db.execute("INSERT OR REPLACE INTO bindings VALUES (?,?)", (target, entry))
+                else:
+                    vault = store(sys.platform, entry)
+                    vault.delete()
+                    if vault.read():
+                        raise OSError("Credential removal failed.")
+                    db.execute("DELETE FROM entries WHERE id=?", (entry,))
+                    db.execute("UPDATE bindings SET entry='' WHERE entry=?", (entry,))
+            elif action != "list":
+                raise invalid("Unknown credential action.")
+            active = selected_account(target, db)
+            entries = [dict(id=i, name=n, preview=p) for i, n, p in db.execute("SELECT id,name,preview FROM entries ORDER BY rowid")]
+            return {"entries": entries, "selected": active if any(e["id"] == active for e in entries) else None}
+
+    def connections(self, params):
+        role = required(params, "role")
+        if role not in ("model", "reviewer"):
+            raise invalid("Unknown connection role.")
+        action = required(params, "action")
+        # Import single-key installations before assigning connection metadata.
+        self.credential_library({"id": MODEL, "action": "list"})
+        settings = self.service_settings()
+        current = settings if role == "model" else settings.get("reviewer", decision.DEFAULT)
+        target = ACCOUNT if role == "model" else "reviewer-active"
+        with catalog() as db:
+            active = selected_account(target, db)
+            if role == "reviewer" and active == target and current["endpoint"]:
+                active = selected_account(decision.slot(current["endpoint"]), db)
+            if current["endpoint"] and current["model"] and db.execute("SELECT 1 FROM entries WHERE id=?", (active,)).fetchone():
+                db.execute("INSERT OR IGNORE INTO connections VALUES (?,?,?,?)",
+                           (active, role, current["endpoint"], current["model"]))
+            query = ("SELECT e.id,e.name,e.preview,c.endpoint,c.model FROM entries e LEFT JOIN connections c "
+                     "ON c.entry=e.id AND c.role=? WHERE c.entry IS NOT NULL OR NOT EXISTS "
+                     "(SELECT 1 FROM connections other WHERE other.entry=e.id) ORDER BY e.rowid")
+            def entries():
+                return {i: dict(id=i, name=n, preview=p, endpoint=url or "", model=m or "")
+                        for i,n,p,url,m in db.execute(query, (role,))}
+            items = entries()
+            entry = params.get("entry")
+            if action in ("edit", "select", "remove") and (not isinstance(entry, str) or entry not in items):
+                raise missing("Connection not found.")
+            if action in ("add", "edit"):
+                url = model_endpoint(required(params, "url"))
+                model = required(params, "model").strip()
+                name = required(params, "name").strip()
+                key = params.get("api_key", "")
+                if (len(name) > 80 or not re.fullmatch(r"[!-~]{1,160}", model)
+                        or (role == "model" and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", model))
+                        or not isinstance(key, str) or not re.fullmatch(r"[!-~]{0,512}", key)
+                        or (action == "add" and role == "model" and not key)):
+                    raise invalid("Check the connection name, model ID and API key.")
+                if role == "reviewer" and urlsplit(url).scheme == "http" and urlsplit(url).hostname not in ("localhost","127.0.0.1","::1"):
+                    raise invalid("Use HTTPS for a remote reviewer.")
+                if action == "add":
+                    entry = "Key-" + identifier()
+                preview = items[entry]["preview"] if action == "edit" else ""
+                if key:
+                    vault = store(sys.platform, entry)
+                    vault.save(key)
+                    if vault.read() != key:
+                        raise OSError("Credential save failed.")
+                    preview = mask_key(key)
+                db.execute("INSERT OR REPLACE INTO entries VALUES (?,?,?)", (entry,name,preview))
+                db.execute("INSERT OR REPLACE INTO connections VALUES (?,?,?,?)", (entry,role,url,model))
+                if action == "edit" and role == "reviewer" and items[entry]["endpoint"] != url:
+                    db.execute("UPDATE bindings SET entry='' WHERE target=? AND entry=?",
+                               (decision.slot(items[entry]["endpoint"]), entry))
+                if (action == "add" and active not in items) or active == entry:
+                    action = "select"
+            if action == "select":
+                profile = entries()[entry]
+                if not profile["endpoint"]:
+                    raise invalid("Set the endpoint and model ID first.")
+                db.execute("INSERT OR REPLACE INTO bindings VALUES (?,?)", (target,entry))
+                if role == "reviewer":
+                    db.execute("INSERT OR REPLACE INTO bindings VALUES (?,?)", (decision.slot(profile["endpoint"]),entry))
+                active = entry
+            elif action == "remove":
+                if items[entry]["preview"]:
+                    store(sys.platform,entry).delete()
+                db.execute("DELETE FROM entries WHERE id=?", (entry,))
+                db.execute("DELETE FROM connections WHERE entry=?", (entry,))
+                db.execute("UPDATE bindings SET entry='' WHERE entry=?", (entry,))
+            elif action not in ("add", "edit", "list"):
+                raise invalid("Unknown connection action.")
+            items = entries()
+            return {"entries": list(items.values()), "selected": active if active in items else None}
+
     def service_settings(self):
         stored = self.rows("service_config")
-        return {"revision": "local-contract", "model": MODEL, "endpoint": ENDPOINT, **(stored[0] if stored else {})}
+        settings = {"revision": "local-contract", "model": MODEL, "endpoint": ENDPOINT, **(stored[0] if stored else {})}
+        profiles = []
+        for role, target in (("model", ACCOUNT), ("reviewer", "reviewer-active")):
+            profile = active_connection(target, role)
+            if profile:
+                profiles.append(profile)
+                destination = settings if role == "model" else settings.setdefault("reviewer", decision.DEFAULT.copy())
+                destination.update(endpoint=profile["endpoint"], model=profile["model"])
+                if role == "model":
+                    settings["connection_name"] = profile["name"]
+        if profiles:
+            settings["revision"] = digest(encode([settings["revision"], profiles]).encode())
+        reviewer = settings.get("reviewer")
+        if reviewer and not reviewer.get("endpoint"):
+            reviewer["enabled"] = False
+        return settings
 
     def reviewer_config(self):
         return self.service_settings().get("reviewer", decision.DEFAULT.copy())
@@ -468,13 +629,14 @@ class Worker:
         settings = self.service_settings()
         credential = self.credential_status()
         endpoint = self.reviewer_config()["endpoint"]
-        vault = store(sys.platform, decision.slot(endpoint)) if endpoint else None
+        account = selected_account(decision.slot(endpoint)) if endpoint else None
+        vault = store(sys.platform, account) if account else None
         try:
             reviewer_key_stored = bool(vault and vault.read())
         except OSError:
             reviewer_key_stored = False
         return {"reviewer_key_stored": reviewer_key_stored, "revision": settings["revision"], "reviewer": self.reviewer_config(), "model_id": MODEL, "models": [{
-            "id": MODEL, "label": "DeepSeek", "model": settings["model"], "endpoint": settings["endpoint"],
+            "id": MODEL, "label": settings.get("connection_name", "OpenAI-compatible endpoint"), "model": settings["model"], "endpoint": settings["endpoint"],
             "local": False, "credential_configured": credential["configured"],
             "credential_stored": credential["stored"], "credential_preview": credential["preview"],
             "credential_store": sys.platform in ("win32", "darwin"),
@@ -506,7 +668,7 @@ class Worker:
         models = params.get("models")
         if (params.get("model_id") != MODEL or not isinstance(models, list) or len(models) != 1
                 or not isinstance(models[0], dict) or models[0].get("id") != MODEL):
-            raise invalid("Select the DeepSeek provider.")
+            raise invalid("Select the configured model service.")
         model = required(models[0], "model").strip()
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", model):
             raise invalid("Use a model ID with up to 128 letters, digits, dots, underscores, or hyphens.")
@@ -528,6 +690,11 @@ class Worker:
         if (reviewer != config["reviewer"] or model != config["models"][0]["model"] or endpoint != config["models"][0]["endpoint"]
                 or budget != config["budget"]
                 or ask != config["ask_before_overage"]):
+            original = next(iter(self.rows("service_config")), {})
+            if active_connection(ACCOUNT, "model"):
+                model, endpoint = original.get("model", MODEL), original.get("endpoint", ENDPOINT)
+            if active_connection("reviewer-active", "reviewer"):
+                reviewer = {**original.get("reviewer", decision.DEFAULT), "enabled": reviewer["enabled"]}
             self.put("service_config", "active", {"revision": identifier(), "model": model, "endpoint": endpoint,
                                                   "budget": budget, "ask_before_overage": ask, "reviewer": reviewer})
             config = self.services_config()
@@ -552,7 +719,7 @@ class Worker:
                 if service_id not in (MODEL, "reviewer"):
                     raise missing("This service was not found.")
                 provider = self.service_settings()
-                key = deepseek_api_key() if service_id == MODEL else None
+                key = deepseek_api_key(provider["endpoint"]) if service_id == MODEL else None
                 reviewer = self.reviewer_config()
             if service_id == "reviewer":
                 try:
@@ -945,6 +1112,12 @@ class Worker:
             return self.services_config()
         if method == "services.save":
             return self.save_services(params)
+        if method in ("services.connections", "services.credential_library"):
+            try:
+                return self.connections(params) if method == "services.connections" else self.credential_library(params)
+            except (OSError, UnicodeError, sqlite3.Error):
+                raise RpcError(-32015, "CREDENTIAL_STORE_FAILED", "configure_service",
+                               "The system credential store could not complete the request.") from None
         if method == "services.credentials":
             return self.update_credential(params)
         if method == "workspace.activity":
@@ -2190,7 +2363,7 @@ class Worker:
             else:
                 claims, seen = self.answer_with_model_endpoint(
                     endpoint, task.get("model_id", MODEL),
-                    deepseek_api_key(), question, sources, signal,
+                    deepseek_api_key(endpoint), question, sources, signal,
                     lambda sentence: preview(("\n\n" if streamed else "") + sentence), memory, name_session,
                 )
             with self.lock:

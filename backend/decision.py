@@ -6,7 +6,7 @@ import sys
 from http.client import HTTPException
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from credentials import store
+from credentials import selected_account, store
 
 
 LABELS = {
@@ -28,7 +28,8 @@ def slot(endpoint):
 
 
 def request(config, state, questions, image=None):
-    vault = store(sys.platform, slot(config["endpoint"]))
+    account = selected_account(slot(config["endpoint"]))
+    vault = store(sys.platform, account) if account else None
     key = vault.read() if vault else None
     payload = {"model": config["model"], "state": state, "questions": questions}
     if image:

@@ -236,10 +236,10 @@ class TopicWiki:
         host = self.worker
         if host.discovery_fixture:
             return None
-        key = deepseek_api_key()
+        settings = host.service_settings()
+        key = deepseek_api_key(settings["endpoint"])
         if not key:
             return None
-        settings = host.service_settings()
         return {"endpoint": settings["endpoint"], "model": settings["model"], "key": key}
 
     def entry(self, kind, text, anchor_ids, origin, pinned=False):

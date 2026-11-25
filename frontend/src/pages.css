@@ -489,10 +489,11 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
   border-inline-end: 1px solid var(--line);
 }
 .settings-content { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 8px 18px 0; }
+.settings-tab-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; min-width: 0; }
+.settings-tab-panel > h2 { margin: 0; padding-top: 8px; color: var(--ink); font: 600 16px/1.3 var(--serif); }
 .settings-model-panel { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; min-width: 0; }
 .settings-model-panel > .settings-save { margin: 0; padding-top: 10px; border-top: 1px solid var(--line); background: var(--surface); gap: 8px; }
 .settings-content .set-section { grid-template-columns: minmax(0, 1fr); padding: 10px 0 20px; gap: 16px; }
-.general-settings h2 { color: var(--ink); }
 .preference-list {
   padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r);
   background: color-mix(in srgb, var(--sunk) 35%, var(--surface));
@@ -603,3 +604,23 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
   .topic-chooser-body .illustrated-chooser { grid-template-columns: minmax(0, 1fr); }
   .topic-chooser-body .chooser-otter { display: none; }
 }
+
+.credential-list, .credential-form { display: grid; gap: 10px; }
+.credential-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 42dvh;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-3) transparent;
+}
+.credential-list:empty { display: none; }
+.credential-list .source-row { align-items: center; }
+.credential-list .grow { min-width: 0; overflow-wrap: anywhere; }
+
+.provider-picker { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.provider-picker .set-field { flex: 1 1 230px; min-width: 0; }
+.provider-picker select { width: 100%; min-width: 0; text-overflow: ellipsis; }
+.provider-picker select:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; box-shadow: none; }

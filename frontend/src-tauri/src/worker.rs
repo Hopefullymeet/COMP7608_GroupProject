@@ -114,6 +114,8 @@ impl Worker {
                 .map_err(|err| err.to_string())?;
             let python = if cfg!(windows) { "python/python.exe" } else { "python/bin/python3.12" };
             let mut command = Command::new(root.join(python));
+            #[cfg(windows)]
+            command.env("PAPERTRACE_CREDENTIAL_INDEX", directory.join("credentials.sqlite3"));
             command.env_remove("PYTHONHOME")
                 .env("PAPERTRACE_NODE", root.join(if cfg!(windows) { "node.exe" } else { "node" }))
                 .env("PYTHONNOUSERSITE", "1")
