@@ -1,5 +1,7 @@
 # PaperTrace 论文评估
 
+[查看 84 道测试题、参考答案与证据位置](test-case-catalog.md)
+
 2026-11-25，应用提交 `7320a1a4`，`data-preparation` 数据树 `00001d67`。18 篇论文共 249 页、84 道题、14 条论文关系。真实服务为软件已配置的 `deepseek-flash`。输入与参考材料的隔离、用例和指标定义见[测试基线](test-baseline.md)。
 
 ## 同版本的独立应用试评估
