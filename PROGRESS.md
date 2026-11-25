@@ -1,5 +1,7 @@
 # 当前进度
 
+- Added [the full HTML test catalog](docs/TEST_CASE_CATALOG.html) and [the detailed pilot evaluation report](docs/EVALUATION_RESULTS.md), preserving the supplied local documents.
+
 ## 论文测试与评估（2026-11-25）
 
 - 两份评估报告已接入同一份[测试用例目录](docs/test-case-catalog.md)，可按题查看参考答案、证据位置和待复核标签。
