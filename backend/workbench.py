@@ -298,6 +298,12 @@ class Workbench:
                 current = host.get("task", task_id)
                 if current["status"] != "running":
                     return
+                current["steps"] = trace + [s for s in current["steps"] if s.get("title") == "Evidence review"]
+                if dimensions and not raw.get("cells") and issue:
+                    with host.db:
+                        event = host.finish(current, "failed", issue=issue)
+                    host.send_events([event])
+                    return
                 versions = {s["source_version_id"]: s for s in sources}
                 for pid in list(seen):
                     passage = seen[pid]
@@ -337,7 +343,7 @@ class Workbench:
                         }
                         result["gaps"].append(messages.get(issue["reason"], "The task ended before verification was complete."))
                     read_anchors = [host.store_anchor(task, record_id, p, p["text"][:200])
-                                    for p in list(seen.values())[:12]] if not result["points"] else []
+                                    for p in list(seen.values())[:12]] if not dimensions and not result["points"] else []
                     record = {**result, "record_id": record_id, "topic_id": task["topic_id"],
                               "question": task["input"]["question"], "mode": mode, "reads": reads,
                               "read_anchor_ids": read_anchors, "usage": usage, "trace": trace,
@@ -352,7 +358,6 @@ class Workbench:
                         result["gaps"] = [cell["text"] for cell in result["cells"] if cell["status"] == "missing"]
                     else:
                         host.put("synthesis", record_id, record)
-                    current["steps"] = trace + [s for s in current["steps"] if s.get("title") == "Evidence review"]
                     partial = issue or ({"reason": "EVIDENCE_INCOMPLETE", "retryable": False, "next_action": "review_gaps"}
                                         if result["gaps"] else None)
                     summary = {"record_id": record_id}

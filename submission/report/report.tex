@@ -72,8 +72,8 @@ The submission is a desktop application (Windows and macOS, Tauri + React) with 
 and a Node agent loop. Users create a topic, import PDFs or find papers through OpenAlex, then work in
 five views: \emph{Read \& Ask} (cited question answering with a PDF reader), \emph{Compare}, a
 per-topic \emph{Wiki}, \emph{Citation check} for their own manuscript PDF, and \emph{Library}.
-Figure~\ref{fig:reader} shows Read \& Ask with a full paper open. The submitted source version is
-commit \code{f84aee37}.
+Figure~\ref{fig:reader} shows Read \& Ask with a full paper open. The submitted source is commit
+\code{f84aee37} plus the comparison fix of 25 November described in Section~\ref{sec:reliability}.
 
 \begin{figure}[t]
   \centering
@@ -100,7 +100,7 @@ in the desktop client.
     Discovery & Scholar search; agent revises queries & One OpenAlex search; agent helps user find better results & Done \\ \addlinespace[4pt]
     Evidence Q\&A & Plan--act--observe loop over passages & Tool-calling loop with verified quotes & Done \\ \addlinespace[4pt]
     Retrieval & Keyword and embedding search & BM25 for text; embeddings for figures only & Done (changed) \\ \addlinespace[4pt]
-    Comparison & Methods, data, metrics, settings & Dimension table; live runs failed at the last step & Partial \\ \addlinespace[4pt]
+    Comparison & Methods, data, metrics, settings & Dimension table; each cell cites its own paper & Done \\ \addlinespace[4pt]
     Citation suggestions & References and passages for a draft & Inside Citation check & Done \\ \addlinespace[4pt]
     Citation audit & Five labels, separate judging call & Four labels plus ``could not check'' & Done \\ \addlinespace[4pt]
     Independent judge & Jev as optional provider & Optional reviewer endpoint, off by default & Done (changed) \\ \addlinespace[4pt]
@@ -135,9 +135,9 @@ stages, all handled by the worker in \code{backend/papertrace.py}:
 The loop is a trimmed build of the DeepSeek Harness \code{AgentLoop} \citep{dsh}, bundled as
 \code{backend/engine/core.mjs} and driven from Python over standard input and output
 (\code{agent\_host.py}). Python keeps control of tools, credentials and budgets: the Node side proposes
-a model step or a tool call, and \code{ModelAgent.run} (\code{model\_agent.py:651}) executes it.
+a model step or a tool call, and \code{ModelAgent.run} (\code{model\_agent.py:661}) executes it.
 
-For a full-text question, \code{run\_research} (line 572) first reads a deterministic set of passages
+For a full-text question, \code{run\_research} (line 580) first reads a deterministic set of passages
 that match the question (\code{ResearchTools.initial\_readings}) and puts them in the prompt. The model
 then decides, step by step:
 \begin{itemize}
@@ -149,17 +149,17 @@ then decides, step by step:
 \end{itemize}
 The loop follows the ReAct pattern \citep{react}. What the model cannot decide is the scope: tools only
 return passages from the confirmed source versions, and any other ID is rejected as ``outside the
-confirmed scope'' (line 813).
+confirmed scope'' (line 859).
 
 \paragraph{Stopping rules.}
 A task stops when the model returns a final JSON answer or when one of these limits is hit:
 a step limit (4 for abstract-only answers, 12 for comparison and synthesis, 16 for full-text reading);
 a tool-call limit (18, or 32--48 for full-text reading, growing with the number of papers);
 a passage budget (36, or 72--144 for full-text reading); and a wall-clock deadline (90, 180 or
-240\,s). When the passage or tool budget is reached, the loop stops issuing tool calls and runs a
-separate tool-free turn (\code{final\_answer}, line 696) that answers only from passages already read.
-The task then ends as \code{partial} with \code{TASK\_BUDGET\_EXHAUSTED}, so the user can see that the
-answer may be incomplete. A port of the upstream repeat-tool guard (line 231) warns the model after
+240\,s). In full-text reading and comparison, when the passage or tool budget is reached, the loop
+stops issuing tool calls and runs a separate tool-free turn (\code{final\_answer}) that answers only
+from passages already read. The task then ends as \code{partial} with \code{TASK\_BUDGET\_EXHAUSTED},
+so the user can see that the answer may be incomplete. A port of the upstream repeat-tool guard (line 231) warns the model after
 3, 5 and 8 identical calls in a row.
 
 \paragraph{Grounding check.}
@@ -257,11 +257,11 @@ commands. The search terms show the model moving from the method (steps 2--5) to
 \label{sec:reliability}
 We tested failure handling in two ways: a scripted replay (\code{evaluation/run.py}) that injects
 malformed model output into the real worker, and the failures that occurred during our own use of the
-desktop build. Table~\ref{tab:failures} lists the situations, with counts from the 27 tasks recorded
+desktop build. Table~\ref{tab:failures} lists the situations, with counts from the 28 tasks recorded
 in one portable workspace on 24--25 November.
 
 \begin{table}[t]
-  \caption{Failure situations. Counts $n$ are from \code{live\_traces.json} (27 tasks); ``+1'' is the
+  \caption{Failure situations. Counts $n$ are from \code{live\_traces.json} (28 tasks); ``+1'' is the
   replay case. The issue code shown to the client is given under each situation.}
   \label{tab:failures}
   \small
@@ -270,7 +270,8 @@ in one portable workspace on 24--25 November.
     Situation & $n$ & Detection & Outcome for the user \\
     \midrule
     Evidence budget reached \newline \issue{TASK_BUDGET_EXHAUSTED} & 2 & Passage or tool limit hit & Answer from passages already read; \emph{partial}, six cited sentences each \\ \addlinespace[4pt]
-    Malformed final output \newline \issue{MODEL_OUTPUT_INVALID} & 4+1 & Schema check fails twice & Q\&A \emph{failed} with no answer saved; comparison \emph{partial} with empty cells \\ \addlinespace[4pt]
+    Malformed final output \newline \issue{MODEL_OUTPUT_INVALID} & 4+1 & Schema check fails twice & Q\&A \emph{failed} with no answer saved; comparison (before the fix) \emph{partial} with empty cells \\ \addlinespace[4pt]
+    Comparison cells without evidence \newline \issue{EVIDENCE_INCOMPLETE} & 1 & A cell has status \emph{missing} & \emph{partial}; each gap is stated in its cell \\ \addlinespace[4pt]
     Full text not read \newline \issue{FULL_TEXT_REQUIRED} & 2 & Requested full text was never read & \emph{partial}; unsupported sentences marked ``not established'' \\ \addlinespace[4pt]
     Provider error \newline \issue{MODEL_UNAVAILABLE} & 4 & HTTP or network error & Two retries for 5xx, 429 and timeouts; auth and quota errors stop at once \\ \addlinespace[4pt]
     App closed mid-task \newline \issue{PROCESS_INTERRUPTED} & 3 & Running tasks found at start-up & \emph{failed}, marked retryable \\ \addlinespace[4pt]
@@ -289,11 +290,31 @@ question again (task \code{a5827abf}), the run reached the budget after 13 steps
 succeeded, giving a \emph{partial} answer with six cited sentences in 38.1\,s. The replay case
 \code{invalid-model-output} reproduces the first path deterministically.
 
-\emph{Comparison that could not finish.} Both comparison tasks (\code{f3439f91}, \code{d4920e68})
-searched for methods, data splits, metrics and baselines, called \code{paper\_refs} (no citation link
-between the two papers) and \code{wiki\_search} (empty), then failed at the final output. The stored
-comparison has every cell set to ``No source passage was established''. The result is honest but not
-useful, and it is the main weakness we found.
+\emph{Comparison: failure, fix and rerun.} The first two comparison tasks (\code{f3439f91},
+\code{d4920e68}) compared an interpretability tutorial with a CNN-for-NLP survey on five dimensions.
+Both searched for methods, data splits, metrics and baselines, called \code{paper\_refs} (no citation
+link between the two papers) and \code{wiki\_search} (empty), then failed at the final output. The
+stored table had every cell set to ``No source passage was established''. Two causes were visible in
+the code: the comparison prompt asked for a full related-work outline \emph{and} the dimension cells in
+one large JSON object, and the tool-free recovery turn existed only for reading tasks, so an invalid
+comparison answer had no second chance.
+
+The fix (\code{synthesize} and \code{run} in \code{model\_agent.py}) gives comparisons their own
+prompt that asks only for cells, one per paper and dimension. Each returned cell is checked: the
+dimension and paper must be among those requested, and every quote must come from a passage of
+\emph{that} paper that was read in the task, 12 to 700 characters long. Cells that fail are dropped;
+a cell may stay without evidence only if its status is \emph{missing}. Invalid or truncated output, or a
+reached budget, now leads to the same tool-free turn as in reading. If that turn still yields no valid
+cell, the task ends \emph{failed} instead of saving an empty table (\code{workbench.py}).
+
+We reran the Chinese comparison after the fix (task \code{aaf4e8b3}). The model made 12 tool calls in
+38.3\,s and filled all ten cells. Six were \emph{evidenced} with a verified quote, for example the
+survey's metrics (MAE, F1, P@1, MAP, MRR, BLEU-style scores) and baselines (SVM, naive Bayes, HMM,
+n-gram models). One cell was \emph{disputed}: the survey names datasets but does not describe their
+splits. Three cells were \emph{missing}: data split, metrics and baselines of the tutorial, which runs no
+experiments. Because of these gaps the task ended \emph{partial} with \code{EVIDENCE\_INCOMPLETE}, which
+we consider the correct outcome for these two papers. This is a single run; no automated regression
+test covers the new comparison path yet.
 
 \paragraph{Repeated external actions.}
 Only model steps are retried; completed tool calls and text already streamed to the user are never
@@ -326,7 +347,8 @@ gives the observed wall-clock times. These are from manual use, not a controlled
     OpenAlex discovery & 2 & 2.3, 2.6 \\
     Full-text Q\&A, answered from seeded passages (1 step) & 3 & 12.1, 13.1, 25.2 \\
     Full-text Q\&A, 13 steps, budget reached & 2 & 37.1, 38.1 \\
-    Comparison, 13--14 steps (failed at final output) & 2 & 42.2, 48.8 \\
+    Comparison before the fix, 13--14 steps (failed at final output) & 2 & 42.2, 48.8 \\
+    Comparison after the fix, 12 steps, ten cells filled & 1 & 38.3 \\
     Follow-up question on a citation report & 2 & 2.8, 5.4 \\
     \bottomrule
   \end{tabular}
@@ -422,19 +444,21 @@ Include a human check of at least a sample of the model-judged items and state w
 \end{table}
 
 \paragraph{Observations from live use.}
-The 27 recorded tasks were exploratory, so we do not score them, but they show where the system is
+The 28 recorded tasks were exploratory, so we do not score them, but they show where the system is
 weak. Of 19 reading tasks, 3 completed, 4 ended partial, 11 failed and 1 was cancelled. Ten of the
 11 failures came in the first two hours of use; of the last six reading tasks, five returned cited
 answers and one was interrupted by closing the application. When full text was not read, the answer
-sentences were shown as ``evidence not established'' rather than as supported. Comparisons failed in
-both attempts. Some answers to very short inputs (the user typed ``1'' and ``2'') still produced
+sentences were shown as ``evidence not established'' rather than as supported. Both comparisons before
+the fix failed at the final output; the one run after the fix filled all ten cells and cited a quote
+in seven of them. Some answers to very short inputs (the user typed ``1'' and ``2'') still produced
 cited summaries, which suggests the agent does not ask for clarification when a question is unclear.
 
 \subsection{Limitations}
 \begin{itemize}
   \item No live-model scores or human adjudication yet; our claims about answer quality rest on
   examples, not measurements.
-  \item Comparison output is unreliable: the final structured answer is large and often invalid.
+  \item Comparison has one successful live run after the fix, on two papers that share no
+  experiments; we have not yet tested it on papers with directly comparable results.
   \item Exact quote matching drops valid paraphrased or translated evidence.
   \item Retrieval is keyword-based; cross-language questions depend on the model choosing the paper's
   terms.
@@ -444,7 +468,6 @@ cited summaries, which suggests the agent does not ask for clarification when a 
   not been verified.
 \end{itemize}
 
-\clearpage
 \section{Contributions and attribution}
 \label{sec:contrib}
 
@@ -564,7 +587,8 @@ uv run --no-project --managed-python --python 3.12.13 --with pypdf==6.4.0 \
 uv run --no-project --managed-python --python 3.12.13 \
   -- python -X utf8 -B data-preparation/validate_data.py
 \end{verbatim}
-\code{evaluation/live\_traces.json} contains the 27 live tasks used in Sections~\ref{sec:design}--\ref{sec:evaluation},
-with requests, tool steps, outcomes, times and cited quotes. The questions were asked in Chinese.
+\code{evaluation/live\_traces.json} contains the 28 live tasks used in Sections~\ref{sec:design}--\ref{sec:evaluation},
+with requests, tool steps, outcomes, times, cited quotes and comparison cells. Most questions were
+asked in Chinese.
 
 \end{document}
