@@ -1,5 +1,9 @@
 # 当前进度
 
+- 已重建课程提交 ZIP，包内 README 的预览版下载链接已更新至 `v0.1.0-preview.3`。已通过归档完整性检查并逐项核对 319 个文件。
+
+- Preview 3 的 Windows x64 和 macOS Apple Silicon 安装包及 `SHA256SUMS.txt` 已准备在 `release/preview3/`。本地标签 `v0.1.0-preview.3` 指向打包提交 `5930822`。下一步推送标签，在 GitHub 上传三个附件并发布预览版。
+
 - 跨会话 Wiki 实验已完成人工抽查。组员独立复核了 48 次试验中的 6 次（4 条续读、2 条独立对照），20 项适用判断均与 Codex 原评分一致。[逐条复核记录](evaluation/experiments/recorded/wiki/judgments.jsonl)、报告第 5.3 节和 AI 使用声明已同步到提交包。
 
 - 根目录及提交包的 [AI 使用声明](AI-use.md)已补充 Codex 在阅读问答和跨会话 Wiki 实验中的评分用途、现存评分标准及原始评分提示词缺失范围，并重新生成提交 ZIP。
