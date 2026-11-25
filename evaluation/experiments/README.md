@@ -14,6 +14,12 @@ Codex assigned the two binary reading QA scores. Core coverage requires the full
 
 A group member independently applied the same criteria with the Codex scores hidden. The targeted sample included nine answers from run 1 and three from run 2. In run 1, it covered all four sentences initially marked as having insufficient evidence, the answer with no citations, and four randomly selected answers with supported sentences. The three run 2 answers were randomly selected from questions absent from the run 1 sample. The human judgments agreed on all 12 core-coverage scores and all eight evidence-support scores. `recorded/qa-assessment.json` stores the per-answer judgments and notes under `human_review`. `human_checked` counts reviewed answers.
 
+## Cross-session Wiki judging and human check
+
+Codex scored the 48 trials with the Wiki condition hidden. A group member independently rescored six selected trials with the Codex scores hidden. The sample covered four follow-ups and two independent controls. All 20 applicable judgments agreed: four identifications of the previous question, six checks of answer correctness, six checks of citation support, and four checks of whether the response acknowledged missing history. The sample was selected to cover different outcomes.
+
+`recorded/wiki/judgments.jsonl` retains the Codex scores and stores the group member's scores and reasons under `human_review`. Question identification and missing-history acknowledgment are `null` in the human review for independent controls.
+
 ## Collect fresh model responses
 
 Run from the repository root or extracted PaperTrace folder. Use Python 3.12.13 with `pypdf==6.4.0` installed in the same environment (`python -m pip install pypdf==6.4.0`). Put Node 24 on PATH or set `PAPERTRACE_NODE` to its executable. Configure `deepseek-flash` at `https://api.deepseek.com`, disable the optional reviewer, and make the API key available to the worker via the selected desktop provider or the shell's `DEEPSEEK_API_KEY` when no saved provider is selected. Live requests consume provider quota. Use a fresh extraction for a new experiment because runners can reuse earlier results.

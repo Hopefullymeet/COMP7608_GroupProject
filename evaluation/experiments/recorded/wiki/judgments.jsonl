@@ -1,11 +1,11 @@
-{"id": "0e082ea866", "identified": 0, "correct": 0, "supported": 0, "acknowledged_missing": 1, "judge": "Codex"}
+{"id": "0e082ea866", "identified": 0, "correct": 0, "supported": 0, "acknowledged_missing": 1, "judge": "Codex", "human_review": {"review_id": "W2", "identified": 0, "correct": 0, "supported": 0, "acknowledged_missing": 1, "notes": "明说无法取得笔记、无法确定待办，也没有把微调结果猜成待办。所引第 8 页只谈微调；待查的 margin 为 m = 1，见第 3 页公式 (2) 后，原回答未给出该值。"}}
 {"id": "2976f1ac12", "identified": 0, "correct": 0, "supported": 0, "acknowledged_missing": 1, "judge": "Codex"}
 {"id": "2ef719dacc", "identified": 0, "correct": 0, "supported": 0, "acknowledged_missing": 1, "judge": "Codex"}
 {"id": "304ef9837b", "identified": 0, "correct": 0, "supported": 0, "acknowledged_missing": 1, "judge": "Codex"}
 {"id": "2a30c9147b", "identified": 1, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex"}
 {"id": "50e4e898b5", "identified": 1, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex"}
 {"id": "4668bbe590", "identified": 0, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex"}
-{"id": "6d0032d453", "identified": 0, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex"}
+{"id": "6d0032d453", "identified": 0, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex", "human_review": {"review_id": "W6", "identified": null, "correct": 1, "supported": 1, "acknowledged_missing": null, "notes": "正文答全两个组件及其方法。自带引文〔2〕来自第 1 页摘要，一句就覆盖了 bigram hashing、TF-IDF 匹配和用于检测答案的多层 RNN。"}}
 {"id": "10f8a3d4ba", "identified": 0, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex"}
 {"id": "6f5cd0dcd9", "identified": 0, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex"}
 {"id": "795b0a5d02", "identified": 0, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex"}
@@ -23,18 +23,18 @@
 {"id": "84eef1a04d", "identified": 0, "correct": 0, "supported": 0, "acknowledged_missing": 1, "judge": "Codex"}
 {"id": "d140f5d87b", "identified": 1, "correct": 0, "supported": 0, "acknowledged_missing": 0, "judge": "Codex"}
 {"id": "06bd9829ee", "identified": 0, "correct": 1, "supported": 0, "acknowledged_missing": 0, "judge": "Codex"}
-{"id": "d1f46f9200", "identified": 0, "correct": 1, "supported": 0, "acknowledged_missing": 0, "judge": "Codex"}
+{"id": "d1f46f9200", "identified": 0, "correct": 1, "supported": 0, "acknowledged_missing": 0, "judge": "Codex", "human_review": {"review_id": "W3", "identified": null, "correct": 1, "supported": 0, "acknowledged_missing": null, "notes": "正文答全了 bigram hashing、TF-IDF 和用于抽取答案的多层 RNN。引文〔1〕只确认两个组件的职责，〔2〕截在 “we use an”，两条合起来仍缺少对检索方法和 RNN 架构的支持。"}}
 {"id": "387b434621", "identified": 1, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex"}
 {"id": "e060a0d905", "identified": 1, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex"}
 {"id": "61f3551b5a", "identified": 0, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex"}
 {"id": "ded597d04e", "identified": 0, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex"}
-{"id": "856918ab07", "identified": 1, "correct": 0, "supported": 0, "acknowledged_missing": 0, "judge": "Codex"}
+{"id": "856918ab07", "identified": 1, "correct": 0, "supported": 0, "acknowledged_missing": 0, "judge": "Codex", "human_review": {"review_id": "W4", "identified": 1, "correct": 0, "supported": 0, "acknowledged_missing": 0, "notes": "准确复述了要查的两类人数，但回答停在“以核实这两个数字”，未给出数字或引文。论文第 2 页 §2.2 给出 25 人写问题，51 人回答问题。"}}
 {"id": "d46c98a477", "identified": 0, "correct": 0, "supported": 0, "acknowledged_missing": 1, "judge": "Codex"}
 {"id": "1173c13a17", "identified": 0, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex"}
 {"id": "80d2ca13ed", "identified": 0, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex"}
 {"id": "c030cccb2e", "identified": 0, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex"}
 {"id": "67a4211792", "identified": 0, "correct": 1, "supported": 0, "acknowledged_missing": 0, "judge": "Codex"}
-{"id": "e23b9ecb78", "identified": 1, "correct": 1, "supported": 0, "acknowledged_missing": 0, "judge": "Codex"}
+{"id": "e23b9ecb78", "identified": 1, "correct": 1, "supported": 0, "acknowledged_missing": 0, "judge": "Codex", "human_review": {"review_id": "W1", "identified": 1, "correct": 1, "supported": 0, "acknowledged_missing": 0, "notes": "准确复述了 token 位置和输出维度两个待查点，也答对了 [CLS] 和 768 维。DPR 第 3 页 §3.1 确认两项，原回答未附引文。"}}
 {"id": "f2395c14a6", "identified": 1, "correct": 0, "supported": 0, "acknowledged_missing": 0, "judge": "Codex"}
 {"id": "7064b7dc20", "identified": 0, "correct": 0, "supported": 0, "acknowledged_missing": 1, "judge": "Codex"}
 {"id": "ae56df7511", "identified": 0, "correct": 0, "supported": 0, "acknowledged_missing": 1, "judge": "Codex"}
@@ -45,4 +45,4 @@
 {"id": "dd252731cf", "identified": 0, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex"}
 {"id": "ef52d46708", "identified": 0, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex"}
 {"id": "fa5dd80d87", "identified": 1, "correct": 1, "supported": 0, "acknowledged_missing": 0, "judge": "Codex"}
-{"id": "fd7e15b586", "identified": 1, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex"}
+{"id": "fd7e15b586", "identified": 1, "correct": 1, "supported": 1, "acknowledged_missing": 0, "judge": "Codex", "human_review": {"review_id": "W5", "identified": 1, "correct": 1, "supported": 1, "acknowledged_missing": 0, "notes": "认出了三元组损失的 margin 待办，答对 m = 1。自带引文〔1〕（第 3 页）和〔2〕（第 5 页）各自都直接给出该值。"}}
