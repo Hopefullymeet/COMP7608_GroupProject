@@ -1,20 +1,48 @@
-# 主线契约测试
+# 测试入口
 
-用例编号对应[测试基线](../../docs/test-baseline.md)。测试直接调用桌面客户端提供的 createMock，每个场景使用独立存储和可控时钟。范围是客户端接口行为；搜索、模型质量及桌面点击仍需真实服务或人工验收。
+[基线用例与判定规则](../../docs/test-baseline.md) · [论文评估结果](../../docs/paper-evaluation.md)
 
-## 本地运行
+## 离线回归
 
-使用 Node.js 22、Bash 和 Git，从仓库根目录运行：
+从仓库根目录运行。需要 Node.js 24、pnpm 11、Python 3.12 或以上、Poppler（pdftotext、pdfinfo、pdftoppm）。CI 使用 Python 3.12。安装依赖后，回归使用当前检出的代码、本地替身和仓内 PDF。
 
 ```sh
+python3 -m venv /tmp/papertrace-test-env
+source /tmp/papertrace-test-env/bin/activate
+python3 -m pip install -r tests/baseline/requirements.txt -r data-preparation/requirements.txt
+pnpm --dir frontend install --frozen-lockfile
 npm ci --prefix tests/baseline
 npm test --prefix tests/baseline
 ```
 
-测试入口优先使用当前仓库的 frontend。测试分支没有该目录时，从本地 Git 对象中提取固定客户端版本到临时目录，测试结束后自动清理。首次运行若本地缺少该提交，会从小组仓库获取，需要网络。可设置 PAPERTRACE_CLIENT_ROOT 指定其他客户端仓库根目录。
+| 入口 | 检查 |
+|---|---|
+| mainline.test.mjs、language.test.mjs | 客户端接口主线、缺全文两种终态、语言切换和重载 |
+| frontend/tests/workspace.test.mjs | 工作区恢复、授权、RPC 通道等前端回归 |
+| backend_cases.py、test_comparison_recovery.py | 按基线编号执行后端测试，任一断言失败或用例跳过均返回非零 |
+| data-preparation/validate_data.py、paper_eval.py、score_papers.py | 检查 PDF 与评审记录完整性、正式导入和检索权限，按题型汇总参考页覆盖率 |
 
-## 增减用例
+## 重算已有成绩
 
-先在基线里约定输入、可观察的预期和编号，再在本目录的 *.test.mjs 中以相同编号命名测试。一个编号可以含多个独立场景。公共的任务启动和读回步骤在 client.mjs；断言放在各自用例中。ASK-01 的关键词检查针对固定英文或中文样例，真实模型的语义评分按基线人工核对。
+以下命令只读仓库内的观测和判分，离线即可执行。
 
-GitHub Actions 在 push 和 PR 时运行 npm ci 与同一测试命令。优先检查当前提交的客户端；分支尚无客户端源码时，测试入口使用 run.sh 中的固定提交。切换参考版本时同步核对基线所引契约。失败日志包含用例编号、实际值和期望值，任何断言失败均使检查失败。
+```sh
+cd tests/baseline
+python3 -B score_papers.py results/retrieval.jsonl.gz
+python3 -B score_papers.py results/predictions.jsonl.gz --grades results/judgments.jsonl.gz
+```
+
+## 真实模型复测
+
+使用桌面已选供应商、模型及系统凭据。工作区为临时目录。每项实验使用独立的输出文件。三组推理比较 81 道可执行语义题、每组两轮；另检查三个缺文件输入。判分阶段可读取参考答案。桌面链路可只重跑某类题。
+
+```sh
+cd tests/baseline
+out=$(mktemp -d)
+python3 -B paper_eval.py --live --output "$out/predictions.jsonl"
+python3 -B score_papers.py "$out/predictions.jsonl" --judge "$out/judgments.jsonl"
+python3 -B desktop_papers.py --output "$out/desktop.jsonl"
+python3 -B desktop_papers.py --task paper_comparison --output "$out/comparisons.jsonl"
+```
+
+这些命令产生实际模型调用和费用。GitHub Actions 只运行离线回归。
